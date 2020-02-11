@@ -3,7 +3,6 @@ import os
 import shutil
 import tarfile
 import yaml
-import filecmp
 
 from capreolus.utils.common import download_file
 from capreolus.utils.trec import load_qrels, load_trec_topics
@@ -80,8 +79,7 @@ class Collection:
         # 2. Move Anserini index to its correct location in the cache
         index_config = self.config["documents"]["index_download"]["index_config_string"]
         index_dir = os.path.join(cachedir, self.name, index_config, "index")
-        if (not os.path.exists(index_dir)) or len(filecmp.dircmp(extracted_dir, index_dir).diff_files) > 0:
-            shutil.move(extracted_dir, index_dir)
+        shutil.move(extracted_dir, index_dir)
 
         # 3. Extract raw documents from the Anserini index to document_dir
         index_to_trec_docs(index_dir, document_dir, self.config["documents"]["index_download"]["expected_document_count"])
@@ -225,7 +223,7 @@ def index_to_trec_docs(index_dir, output_dir, expected_doc_count):
             f"we expected to retrieve {expected_doc_count} documents from the index, but actually found {len(docids)}"
         )
 
-    output_handles = [gzip.open(os.path.join(output_dir, f"{i}.gz"), "wt", encoding="utf-8") for i in range(100, 200)]
+    output_handles = [gzip.open(os.path.join(output_dir, f"{i}.gz"), "wt") for i in range(100, 200)]
     for docidx, docid in enumerate(sorted(docids)):
         txt = to_trectxt(docid, index_utils.getRawDocument(docid))
         handleidx = docidx % len(output_handles)
