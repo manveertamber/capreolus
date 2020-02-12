@@ -66,6 +66,9 @@ class BertText(Extractor):
             logger.debug("missing docid %s and/or %s", posdoc_id, negdoc_id)
             return None
 
+        # TODO: the padding approach seems different with BERT:
+        # say there is a two-pair batch: [(q1, q2, d1, d2), (q1, d1)]
+        # how BERT pad and mask the batch is: [(q1, q2, [seg], d1, d2, [seg]), (q1, [seg], d1, [seg], pad, pad)]
         qtoks, qmask = pad_and_mask(query_toks, self.pipeline_config["maxqlen"])
         qsegs = [0 for _ in qmask]
         doc_features = self.get_doc_features(posdoc_toks, "pos", qtoks, qmask, qsegs)
@@ -89,12 +92,15 @@ class BertText(Extractor):
         dsegs = [1 for _ in dmask]
 
         toks = self.CLSS + qtoks + self.SEPS + dtoks + self.SEPS
-        mask = self.ONES + qmask + self.ONES + dmask + self.ONES
+        mask = self.ONES + qmask + self.ONES + dmask + self.ONES    # so in this way there would be an isolated 1 at the end of mask
         segs = self.NILS + qsegs + self.NILS + dsegs + self.ONES
 
         assert len(toks) <= 512
         assert len(toks) == len(mask)
         assert len(mask) == len(segs)
+
+        # pads = [0 for _ in range(512 - len(toks))]
+
 
         d[prefix + "toks"] = np.array(toks)
         d[prefix + "mask"] = np.array(mask)
@@ -107,6 +113,9 @@ class BertText(Extractor):
 
 def pad_and_mask(s, tolen):
     s = s[:tolen]
+
     padding = [0 for _ in range(tolen - len(s))]
     mask = [1 for _ in s] + [0 for _ in padding]
+    # padding = []
+    # mask = [1 for _ in s]
     return s + padding, mask

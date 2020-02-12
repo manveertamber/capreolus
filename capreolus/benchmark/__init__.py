@@ -39,12 +39,14 @@ class Benchmark:
             self.train_pairs = {}
 
         # predict on only the docs to rerank (not on all judged docs)
-        self.pred_pairs = {}
+        self.pred_pairs = {}    # only the test label (score) of qid-docid pairs would be added here,
+                                # yet since all 5 folds' result are here, the ultimate length of self.pred_pairs
+                                # will still be 250 (or 249)
 
         for name, d in folds.items():
             dev_qids = set(d["train_qids"]) | set(d["predict"]["dev"])
             test_qids = set(d["predict"]["test"])
-            full_search_run = self.search_run.crossvalidated_ranking(dev_qids, test_qids, full_run=True)
+            full_search_run = self.search_run.crossvalidated_ranking(dev_qids, test_qids, full_run=True) # actually when full_run = True, we don't really need test_qid
             self.reranking_runs[name] = full_search_run
             search_run = {qid: docscores for qid, docscores in full_search_run.items() if qid in test_qids}
 
@@ -138,7 +140,6 @@ class Benchmark:
                     if len(batch["qid"]) == self.pipeline_config["batch"]:
                         yield self.prepare_batch(batch)
                         batch = defaultdict(list)
-
         return genf()
 
     def prepare_batch(self, batch):

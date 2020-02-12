@@ -10,7 +10,6 @@ from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
-
 @Tokenizer.register
 class BertPairTokenizer(Tokenizer):
     name = "bertpair"

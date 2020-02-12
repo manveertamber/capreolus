@@ -81,6 +81,9 @@ def get_logger(name=None):
         logger.addHandler(sh)
 
     logger.setLevel(GLOBAL_LOGGING_CONF["level"])
+
+    logging.getLogger("pytorch_transformers.tokenization_utils").setLevel(logging.ERROR)
+
     if name is None:
         return logger
     else:

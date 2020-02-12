@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/home/xinyu1zhang/mpi-spring/capreolus')
+
 import functools
 import os
 import resource
@@ -31,14 +34,13 @@ plt.switch_backend("agg")
 pipeline = Pipeline({module: cli_module_choice(sys.argv, module) for module in modules})
 pipeline.ex.logger = logger
 
-
 @pipeline.ex.main
 def train(_config, _run):
     pipeline.initialize(_config)
     reranker = pipeline.reranker
     benchmark = pipeline.benchmark
     logger.debug("initialized pipeline with results path: %s", pipeline.reranker_path)
-    post_pipeline_init_time = time.time()
+
     run_path = os.path.join(pipeline.reranker_path, pipeline.cfg["fold"])
     logger.info("initialized pipeline with results path: %s", run_path)
     post_pipeline_init_time = time.time()
@@ -90,6 +92,7 @@ def train(_config, _run):
     for pred_fold, pred_qids in fold["predict"].items():
         pred_fold_sizes[pred_fold] = sum(1 for qid in pred_qids for docid in benchmark.pred_pairs[qid])
         pred_folds[pred_fold] = (pred_qids, predict_generator(pipeline.cfg, pred_qids, benchmark))
+        # pred_folds[pred_fold] = (pred_qids, [" " for _ in pred_qids])
 
     metrics = {}
     initial_iter = 0
@@ -98,7 +101,7 @@ def train(_config, _run):
     dev_ndcg_max = -1
     batches_per_epoch = pipeline.cfg["itersize"] // pipeline.cfg["batch"]
     batches_per_step = pipeline.cfg.get("gradacc", 1)
-    pbar_loop = tqdm(desc="loop", total=pipeline.cfg["niters"], initial=initial_iter, position=0, leave=True, smoothing=0.0)
+    # pbar_loop = tqdm(desc="loop", total=pipeline.cfg["niters"], initial=initial_iter, position=0, leave=True, smoothing=0.0)
     pbar_train = tqdm(
         desc="training",
         total=pipeline.cfg["niters"] * pipeline.cfg["itersize"],
@@ -167,12 +170,12 @@ def train(_config, _run):
             for metric, (x, y) in fold_metrics.items():
                 metrics.setdefault(pred_fold, {}).setdefault(metric, []).append((x, y))
 
-        pbar_loop.update(1)
+        # pbar_loop.update(1)
         pbar_info.set_description_str(f"loss: {avg_loss:0.5f}\t{dev_best_info}{'':40s}")
         history.append((niter, avg_loss))
 
     pbar_train.close()
-    pbar_loop.close()
+    # pbar_loop.close()
     pbar_info.close()
 
     logger.info(dev_best_info)
@@ -215,7 +218,7 @@ def predict_and_save_to_file(gen, model, outfn, prepare_batch):
             qid_batch, docid_batch = data["qid"], data["posdocid"]
             data = prepare_batch(data)
 
-            if pipeline.cfg["reranker"].startswith("Cedr"):
+            if pipeline.cfg["reranker"].startswith("CEDR"):
                 scores = model.test(data)
             else:
                 query, query_idf, doc = data["query"], data["query_idf"], data["posdoc"]

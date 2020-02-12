@@ -170,17 +170,18 @@ class Pipeline:
         return self.parameters_to_module, self.parameter_types
 
     def get_module_to_class(self, module_choices):
+        # the "to_class" is not precise since the "collections" is
         # in order of highest to lowest precedence,
         # - determine the class of each module based on explicit (eg CLI param) choices or the default
         # - allow this module to override any module choices that were not explicit (i.e., set by user)
         module2cls = {}
         # collection < index < searcher < benchmark < Reranker
         module_loaders = {
-            "collection": COLLECTIONS,
-            "index": Index.ALL,
-            "searcher": Searcher.ALL,
-            "benchmark": Benchmark.ALL,
-            "reranker": Reranker.ALL,
+            "collection": COLLECTIONS,  # a list of object! (the COLLECTIONS was initialized as objects)
+            "index": Index.ALL,         # a list of class
+            "searcher": Searcher.ALL,   # a list of class
+            "benchmark": Benchmark.ALL, # a list of class
+            "reranker": Reranker.ALL,   # a list of class
         }
 
         default_modules = module_config()

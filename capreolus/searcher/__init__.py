@@ -129,6 +129,9 @@ class Searcher:
         dev_qrels = {qid: labels for qid, labels in self.collection.qrels.items() if qid in dev_qids}
         dev_eval = pytrec_eval.RelevanceEvaluator(dev_qrels, valid_metrics)
         best_metric, best_run_fn = -np.inf, None
+
+        # somewhat there might be lots of runfiles for current searcher setting
+        # so select the best one (with respect to map)
         for search_run_fn in self.search_run_iter(load_run=False):
             run_metrics = self.search_run_metrics(search_run_fn, dev_eval, dev_qids)
             mavgp = avg_metric(run_metrics)
