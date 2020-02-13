@@ -64,3 +64,32 @@ class DemoRobust04Benchmark(Benchmark):
     def build(self):
         self.folds = json.load(open(os.path.join(self.collection.basepath, "rob04_yang19_folds.json"), "rt"))
         self.create_and_store_train_and_pred_pairs(self.folds)
+
+@Benchmark.register
+class CedeRobust04Benchmark(Benchmark):
+    name = "robust04.title.cedr"
+    query_type = "title"
+
+    @staticmethod
+    def config():
+        fold = "s1"
+        # searcher = "cedrsearcher"
+        index = "anserini"
+        searcher = "bm25"
+        collection = "rob04_cedr"
+        rundocsonly = True
+        maxqlen = 4
+        maxdoclen = 800
+
+        batch = 2
+        lr = 0.001
+        bertlr = 2e-5
+        vanillaiters = 10
+        niters = 20
+        softmaxloss = True
+
+        return locals().copy()  # ignored by sacred
+
+    def build(self):
+        self.folds = json.load(open(os.path.join(self.collection.basepath, "rob04_cedr_folds.json"), "rt"))
+        self.create_and_store_train_and_pred_pairs(self.folds)
