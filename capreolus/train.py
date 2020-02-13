@@ -101,7 +101,7 @@ def train(_config, _run):
     dev_ndcg_max = -1
     batches_per_epoch = pipeline.cfg["itersize"] // pipeline.cfg["batch"]
     batches_per_step = pipeline.cfg.get("gradacc", 1)
-    # pbar_loop = tqdm(desc="loop", total=pipeline.cfg["niters"], initial=initial_iter, position=0, leave=True, smoothing=0.0)
+    pbar_loop = tqdm(desc="loop", total=pipeline.cfg["niters"], initial=initial_iter, position=0, leave=True, smoothing=0.0)
     pbar_train = tqdm(
         desc="training",
         total=pipeline.cfg["niters"] * pipeline.cfg["itersize"],
@@ -114,6 +114,8 @@ def train(_config, _run):
     logger.info("It took {0} seconds to reach training loop after pipeline init".format(post_pipeline_init_time - time.time()))
     pbar_info = tqdm(position=2, leave=True, bar_format="{desc}")
     for niter in range(initial_iter, pipeline.cfg["niters"]):
+        print('*'*20, 'niter: %i'%(niter))
+        
         reranker.model.train()
         reranker.next_iteration()
         iter_loss = []
@@ -170,12 +172,12 @@ def train(_config, _run):
             for metric, (x, y) in fold_metrics.items():
                 metrics.setdefault(pred_fold, {}).setdefault(metric, []).append((x, y))
 
-        # pbar_loop.update(1)
+        pbar_loop.update(1)
         pbar_info.set_description_str(f"loss: {avg_loss:0.5f}\t{dev_best_info}{'':40s}")
         history.append((niter, avg_loss))
 
     pbar_train.close()
-    # pbar_loop.close()
+    pbar_loop.close()
     pbar_info.close()
 
     logger.info(dev_best_info)
