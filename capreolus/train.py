@@ -114,7 +114,6 @@ def train(_config, _run):
     logger.info("It took {0} seconds to reach training loop after pipeline init".format(post_pipeline_init_time - time.time()))
     pbar_info = tqdm(position=2, leave=True, bar_format="{desc}")
     for niter in range(initial_iter, pipeline.cfg["niters"]):
-        print('*'*20, 'niter: %i'%(niter))
 
         reranker.model.train()
         reranker.next_iteration()
@@ -152,7 +151,7 @@ def train(_config, _run):
             predfn = os.path.join(predict_path, pred_fold, str(niter))
             os.makedirs(os.path.dirname(predfn), exist_ok=True)
 
-            preds = predict_and_save_to_file(pred_gen, reranker, predfn, prepare_batch)
+            preds = predict_and_save_to_file(pred_gen, reranker, predfn, prepare_batch, n_total=pred_fold_sizes[pred_fold])
             missing_qids = set(qid for qid in pred_qids if qid not in preds or len(preds[qid]) == 0)
             if len(missing_qids) > 0:
                 raise RuntimeError(
@@ -213,10 +212,11 @@ def predict_generator(p, qids, benchmark):
 
 
 # TODO need to randomly switch doc order in case of score ties,
-def predict_and_save_to_file(gen, model, outfn, prepare_batch):
+def predict_and_save_to_file(gen, model, outfn, prepare_batch, n_total=None):
     preds = defaultdict(dict)
+    pbar_eval = tqdm(gen, total=n_total) if n_total else tqdm(gen)
     with torch.autograd.no_grad():
-        for data in tqdm(gen):
+        for data in tqdm(pbar_eval):
             qid_batch, docid_batch = data["qid"], data["posdocid"]
             data = prepare_batch(data)
 
