@@ -115,7 +115,7 @@ def train(_config, _run):
     pbar_info = tqdm(position=2, leave=True, bar_format="{desc}")
     for niter in range(initial_iter, pipeline.cfg["niters"]):
         print('*'*20, 'niter: %i'%(niter))
-        
+
         reranker.model.train()
         reranker.next_iteration()
         iter_loss = []
@@ -176,9 +176,9 @@ def train(_config, _run):
         pbar_info.set_description_str(f"loss: {avg_loss:0.5f}\t{dev_best_info}{'':40s}")
         history.append((niter, avg_loss))
 
-    pbar_train.close()
-    pbar_loop.close()
-    pbar_info.close()
+    pbar_train.close()  # for total iteration tracking
+    pbar_loop.close()   # for epoch tracking
+    pbar_info.close()   # for desc
 
     logger.info(dev_best_info)
     with open(os.path.join(info_path, "loss.txt"), "wt") as outf:
