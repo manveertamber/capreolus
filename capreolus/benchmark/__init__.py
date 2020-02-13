@@ -71,6 +71,12 @@ class Benchmark:
         if self.pipeline_config["sample"] == "simple":
             return self.simple_training_tuples(qids)
 
+        # if self.pipeline_config["deep"] == "deep":
+        #     pass
+        #
+        # if self.pipeline_config["shallow"] == "shallow":
+        #     pass
+
         return None
 
     def simple_pred_tuples(self, pred_pairs):
