@@ -82,10 +82,12 @@ class CedeRobust04Benchmark(Benchmark):
         maxdoclen = 800
 
         batch = 2
+        itersize = 512
+        niters = 20
+        vanillaiters = 10
+
         lr = 0.001
         bertlr = 2e-5
-        vanillaiters = 10
-        niters = 20
         softmaxloss = True
 
         return locals().copy()  # ignored by sacred
