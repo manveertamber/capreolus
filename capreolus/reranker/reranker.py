@@ -2,6 +2,8 @@ import os
 import pickle
 import torch
 
+from capreolus.utils.loginit import get_logger
+logger = get_logger(__name__)
 
 class Reranker:
     ALL = {}
@@ -62,22 +64,34 @@ class Reranker:
         if not os.path.exists(os.path.dirname(outfn)):
             os.makedirs(os.path.dirname(outfn))
 
+        cfg = self.config.copy()
         d = self.model.state_dict()
         for k in list(d.keys()):
             if "embedding.weight" in k or "_nosave_" in k:
                 del d[k]
 
+        states = { "weights": d, "config": cfg }
         with open(outfn, "wb") as outf:
-            pickle.dump(d, outf, protocol=-1)
+            # pickle.dump(d, outf, protocol=-1)
+            pickle.dump(states, outf, protocol=-1)
 
     def load(self, fn):
         with open(fn, "rb") as f:
             d = pickle.load(f)
 
+        weights, cfg = d["weights"], vars(d["config"])
         cur_keys = set(k for k in self.model.state_dict().keys() if not ("embedding.weight" in k or "_nosave_" in k))
-        missing = cur_keys - set(d.keys())
+        missing = cur_keys - set(weights.keys())
         if len(missing) > 0:
             raise RuntimeError("loading state_dict with keys that do not match current model: %s" % missing)
+
+        cur_cfg = vars(self.config.copy())
+        mismatch = {k: {"loaded": cfg[k], "current": cur_cfg[k]} for k in cur_cfg}
+        if len(mismatch) > 0:
+            logger.warning(
+                "mismatch config from loaded model: (loaded / current)\n\t",
+                " ".join(["%s: %s/%s"%(k, v["loaded"], v["current"] for k, v in mismatch.items())])
+            )
 
         self.model.load_state_dict(d, strict=False)
 
