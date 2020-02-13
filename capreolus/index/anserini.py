@@ -101,6 +101,12 @@ class AnseriniIndex(Index):
         try:
             if self.index_utils is None:
                 self.open()
+
+            # ? AttributeError: 'io.anserini.index.IndexUtils' object has no attribute 'convertDocIdToLuceneDocid'
+            # lucene_docid = self.index_utils.convertDocidToLuceneDocid(docid)
+            # doc_01 = self.index_utils.getTransformedDocument(docid)
+            # doc_02 = self.index_utils.getTransformedDocument(lucene_docid)
+
             return self.index_utils.getTransformedDocument(docid)
         except Exception as e:
             raise

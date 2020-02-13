@@ -89,8 +89,8 @@ class Reranker:
         mismatch = {k: {"loaded": cfg[k], "current": cur_cfg[k]} for k in cur_cfg}
         if len(mismatch) > 0:
             logger.warning(
-                "mismatch config from loaded model: (loaded / current)\n\t",
-                " ".join(["%s: %s/%s"%(k, v["loaded"], v["current"] for k, v in mismatch.items())])
+                "mismatch config from loaded model: (loaded / current)\n\t" +
+                " ".join(["%s: %s/%s"%(k, v["loaded"], v["current"]) for k, v in mismatch.items()])
             )
 
         self.model.load_state_dict(d, strict=False)
