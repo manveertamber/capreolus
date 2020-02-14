@@ -72,8 +72,10 @@ class CedeRobust04Benchmark(Benchmark):
 
     @staticmethod
     def config():
+        earlystopping = True
+        esepoch = 10
+
         fold = "s1"
-        # searcher = "cedrsearcher"
         index = "anserini"
         searcher = "bm25"
         collection = "rob04_cedr"
@@ -82,9 +84,12 @@ class CedeRobust04Benchmark(Benchmark):
         maxdoclen = 800
 
         batch = 2
+        gradacc = 8
         itersize = 512
         niters = 20
         vanillaiters = 10
+        # jointbert = True
+        # freezebert = False
 
         lr = 0.001
         bertlr = 2e-5
