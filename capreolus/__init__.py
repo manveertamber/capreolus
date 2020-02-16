@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/home/xinyu1zhang/mpi-spring/capreolus')
+
 from collections import defaultdict
 
 from capreolus.utils.loginit import get_logger

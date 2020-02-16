@@ -1,6 +1,7 @@
+import math
 import numpy as np
-import torch
 
+import torch
 import capnp
 from tqdm import tqdm
 from pymagnitude import Magnitude, MagnitudeUtils
@@ -34,9 +35,10 @@ class BertText(Extractor):
         self.NILS = [0]
 
         # BERT maximum input size is 512 - 2 SEP - CLS - query
-        self.maxdoclen = min(self.pipeline_config["maxdoclen"], 512 - 3 - self.pipeline_config["maxqlen"])
-        if self.maxdoclen < self.pipeline_config["maxdoclen"]:
-            logger.warning("reducing maxdoclen to %s due to BERT's max input size of 512", self.maxdoclen)
+        # self.maxdoclen = min(self.pipeline_config["maxdoclen"], 512 - 3 - self.pipeline_config["maxqlen"])
+        # if self.maxdoclen < self.pipeline_config["maxdoclen"]:
+        #     logger.warning("reducing maxdoclen to %s due to BERT's max input size of 512", self.maxdoclen)
+        self.maxdoclen = self.pipeline_config["maxdoclen"]
 
         # tokenize docs and handle vocab, including embeddings for missing terms
         self.index.open()
@@ -88,20 +90,55 @@ class BertText(Extractor):
             return {}
 
         d = {}
-        dtoks, dmask = pad_and_mask(doc_toks, self.maxdoclen)
-        dsegs = [1 for _ in dmask]
+        toks, mask, segs, dmask = [], [], [], []
+        # segment document into passage with length smaller than (512 - 3 - QLEN)
+        qlen = self.pipeline_config["maxqlen"]
+        dlen = self.pipeline_config["maxdoclen"]
+        plen = 512 - 3 - qlen
+        n_passages = math.ceil(dlen / plen)
+        stride = math.ceil(dlen / n_passages)
 
-        toks = self.CLSS + qtoks + self.SEPS + dtoks + self.SEPS
-        mask = self.ONES + qmask + self.ONES + dmask + self.ONES    # so in this way there would be an isolated 1 at the end of mask
-        segs = self.NILS + qsegs + self.NILS + dsegs + self.ONES
+        doc_toks = doc_toks[:dlen]
+        for i in range(0, dlen, stride):
+            ptoks = doc_toks[i:i+stride]
+            if len(ptoks) == 0: # TODO: check, current segment is empty then replicate the first segment of current doc
+                ptoks = doc_toks[:stride]
 
-        assert len(toks) <= 512
-        assert len(toks) == len(mask)
-        assert len(mask) == len(segs)
+            # TODO: or pad_and_mask(ptoks, stride)
+            ptoks, pmask = pad_and_mask(ptoks, plen)  # pad ptoks, pmask to length == plen
+            psegs = [1 for _ in ptoks]
+            dmask.append(pmask)
+
+            ptoks = self.CLSS + qtoks + self.SEPS + ptoks + self.SEPS
+            pmask = self.ONES + qmask + self.ONES + pmask + self.ONES  # so in this way there would be an isolated 1 at the end of mask
+            psegs = self.NILS + qsegs + self.NILS + psegs + self.ONES
+
+            assert len(ptoks) == 512
+            assert len(ptoks) == len(pmask)
+            assert len(ptoks) == len(psegs)
+
+            toks.append(ptoks)
+            mask.append(pmask)
+            segs.append(psegs)
+
+        assert len(toks) == n_passages
+        assert len(mask) == n_passages
+        assert len(segs) == n_passages
+        # dtoks, dmask = pad_and_mask(doc_toks, self.maxdoclen)
+        # dsegs = [1 for _ in dmask]
+        #
+        # toks = self.CLSS + qtoks + self.SEPS + dtoks + self.SEPS
+        # mask = self.ONES + qmask + self.ONES + dmask + self.ONES    # so in this way there would be an isolated 1 at the end of mask
+        # segs = self.NILS + qsegs + self.NILS + dsegs + self.ONES
+        #
+        # assert len(toks) <= 512
+        # assert len(toks) == len(mask)
+        # assert len(mask) == len(segs)
 
         # pads = [0 for _ in range(512 - len(toks))]
 
-
+        # shape: (n_passage, 512) for toks, mask, segs, dmask
+        # shape: (512) for qmask
         d[prefix + "toks"] = np.array(toks)
         d[prefix + "mask"] = np.array(mask)
         d[prefix + "segs"] = np.array(segs)

@@ -83,6 +83,7 @@ def get_logger(name=None):
     logger.setLevel(GLOBAL_LOGGING_CONF["level"])
 
     logging.getLogger("pytorch_transformers.tokenization_utils").setLevel(logging.ERROR)
+    logging.getLogger("capreolus.extractor.berttext").setLevel(logging.ERROR)
 
     if name is None:
         return logger

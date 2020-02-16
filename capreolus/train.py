@@ -89,10 +89,12 @@ def train(_config, _run):
     if pipeline.cfg["predontrain"]:
         pred_fold_sizes[pipeline.cfg["fold"]] = sum(1 for qid in fold["train_qids"] for docid in benchmark.pred_pairs[qid])
         pred_folds[pipeline.cfg["fold"]] = (fold["train_qids"], predict_generator(pipeline.cfg, fold["train_qids"], benchmark))
+        # pred_folds[pipeline.cfg["fold"]] = (fold["train_qids"], "")
 
     for pred_fold, pred_qids in fold["predict"].items():
         pred_fold_sizes[pred_fold] = sum(1 for qid in pred_qids for docid in benchmark.pred_pairs[qid])
         pred_folds[pred_fold] = (pred_qids, predict_generator(pipeline.cfg, pred_qids, benchmark))
+        # pred_folds[pred_fold] = (pred_qids, "")
 
     metrics = {}
     initial_iter = 0
@@ -169,14 +171,14 @@ def train(_config, _run):
             test_qrels = {qid: labels for qid, labels in pipeline.collection.qrels.items() if qid in pred_qids}
             fold_metrics = eval_preds_niter(test_qrels, preds, niter)
 
-            if pred_fold == "dev" and fold_metrics["ndcg_cut_20"][1] >= dev_ndcg_max:
-                n_worse_epoch = 0   # reset
-                dev_ndcg_max = fold_metrics["ndcg_cut_20"][1]
-                # logger.info("saving best dev model with dev ndcg@20: %0.3f", dev_ndcg_max)
-                dev_best_info = "dev best: %0.3f on iter %s" % (dev_ndcg_max, niter)
-                reranker.save(os.path.join(weight_path, "dev"))
-            else:
-                n_worse_epoch += 1
+            if pred_fold == "dev":
+                if fold_metrics["ndcg_cut_20"][1] >= dev_ndcg_max:
+                    n_worse_epoch = 0   # reset
+                    dev_ndcg_max = fold_metrics["ndcg_cut_20"][1]
+                    dev_best_info = "dev best: %0.3f on iter %s" % (dev_ndcg_max, niter)
+                    reranker.save(os.path.join(weight_path, "dev"))
+                else:
+                    n_worse_epoch += 1
 
             for metric, (x, y) in fold_metrics.items():
                 metrics.setdefault(pred_fold, {}).setdefault(metric, []).append((x, y))

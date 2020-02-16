@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 # from pytorch_pretrained_bert import BertModel
-from pytorch_transformers import BertModel, BertConfig
+from pytorch_transformers import BertModel
 
 from torch import nn
 
@@ -24,11 +24,13 @@ class CEDRKNRM(Reranker):
 
     @staticmethod
     def config():
-        gradacc = 8
-        batch = 2
-        lr = 0.001
-        bertlr = 0.00002
-        vanillaiters = 10
+        # gradacc = 8
+        # batch = 2
+        # lr = 0.001
+        # bertlr = 0.00002
+        # vanillaiters = 10
+        jointbert = False
+        freezebert = False
         return locals().copy()  # ignored by sacred
 
     def build(self):
@@ -48,12 +50,20 @@ class CEDRKNRM(Reranker):
         self.model.zero_grad(*args, **kwargs)
 
     def get_optimizer(self):
+        # TODO: support changing optimizor along the training?
+        # the current version only allows separate the finetuning and training downstream task
+        # in different experiment
         params = [(k, v) for k, v in self.model.named_parameters() if v.requires_grad]
         non_bert_params = {"params": [v for k, v in params if ".bert." not in k]}
         # we set a lower LR for the CustomBertModel (self.bert in BertRanker) only
         # params have names like: bert_ranker.bert.encoder.layer.9.attention.self.value.weight
-        bert_params = {"params": [v for k, v in params if ".bert." in k], "lr": self.cfg["bertlr"]}
-        opt = torch.optim.Adam([bert_params, non_bert_params], lr=self.cfg["lr"])
+
+        if not self.cfg["freezebert"]:
+            bert_params = {"params": [v for k, v in params if ".bert." in k], "lr": self.cfg["bertlr"]}
+            opt = torch.optim.Adam([bert_params, non_bert_params], lr=self.cfg["lr"])
+        else:  # TODO: or just set bertlr == 0?
+            # freeze bert parameters?
+            opt = torch.optim.Adam([non_bert_params], lr=self.cfg["lr"])
         return opt
 
 
@@ -65,29 +75,44 @@ class BertRanker(torch.nn.Module):
         self.CHANNELS = 12 + 1  # from bert-base-uncased
         self.BERT_SIZE = 768  # from bert-base-uncased
 
-        # bert_config = BertConfig(output_hidden_states=True)
-        self.bert = CustomBertModel.from_pretrained(
-            self.BERT_MODEL,
-            output_hidden_states=True,
-        )
-
-    def encode(self, d):
-        toks, mask, segs = d["toks"], d["mask"], d["segs"]
-        result = self.bert(toks, segs.long(), mask)
-        QLEN = self.cfg["maxqlen"]
-
-        doc_results = [r[:, QLEN + 2 : -1] for r in result]
-        query_results = [r[:, 1 : QLEN + 1] for r in result]
-        cls_results = [r[:, 0] for r in result]
-
-        return cls_results, query_results, doc_results
-
 
 class VanillaBertRanker(BertRanker):
     def __init__(self, config):
         super().__init__(config)
+        self.bert = CustomBertModel.from_pretrained(
+            self.BERT_MODEL,
+            output_hidden_states=True,
+        )
         self.dropout = torch.nn.Dropout(0.1)
         self.cls = torch.nn.Linear(self.BERT_SIZE, 1)
+
+    def encode(self, d):
+        toks, mask, segs = d["toks"], d["mask"], d["segs"]  # (B, n_passages, L)
+        segs = segs.long()
+
+        qlen = self.cfg["maxqlen"]
+        n_passages = toks.size(1)
+        assert ( mask.size(1) == n_passages and segs.size(1) == n_passages)
+
+        cls_results, query_results, doc_results = [], [], []
+        for i in range(n_passages):
+            results = self.bert(toks[:, i, :], segs[:, i, :], mask[:, i, :])
+            cls_results.append(torch.stack([r[:, 0] for r in results], dim=0))  # (13, B, 768)
+            query_results.append([r[:, 1:qlen+2] for r in results])
+            doc_results.append(torch.stack([r[:, qlen+2:] for r in results], dim=0))  # each: (13, B, 512, 768)
+
+        query_results = query_results[0]                            # q_vec of the last passage
+        cls_results = torch.stack(cls_results, dim=-1).mean(dim=-1).unbind(dim=0)
+        doc_results = torch.cat(doc_results, dim=2).unbind(dim=0)   # concatenate along the timestep dimension
+
+        # result = self.bert(toks, segs.long(), mask)
+        # QLEN = self.cfg["maxqlen"]
+        #
+        # doc_results = [r[:, QLEN + 2 : -1] for r in result]
+        # query_results = [r[:, 1 : QLEN + 1] for r in result]
+        # cls_results = [r[:, 0] for r in result]
+
+        return cls_results, query_results, doc_results
 
     def forward(self, d):
         cls_reps, _, _ = self.encode(d)
@@ -103,12 +128,19 @@ class CedrKNRM_class(BertRanker):
         self.bert_ranker = VanillaBertRanker(config)
         self.simmat = SimmatModule()
         self.kernels = KNRMRbfKernelBank(MUS, SIGMAS)
-        self.combine = torch.nn.Linear(self.kernels.count() * self.CHANNELS + self.BERT_SIZE, 1)
+
+        ffw_dim = self.kernels.count() * self.CHANNELS + self.BERT_SIZE if self.cfg["jointbert"] else \
+            self.kernels.count() * self.CHANNELS
+        self.combine = torch.nn.Linear(ffw_dim, 1)
         self.epsilon = nn.Parameter(torch.tensor(1e-9), requires_grad=False)
         self.oniter = 0
 
+    def is_finetuning(self):
+        return self.oniter <= self.cfg["vanillaiters"]
+
     def forward(self, d):
-        if self.oniter <= self.cfg["vanillaiters"]:
+        # if self.oniter <= self.cfg["vanillaiters"]:
+        if self.is_finetuning():
             return self.bert_ranker(d)
 
         cls_reps, query_reps, doc_reps = self.bert_ranker.encode(d)
@@ -125,7 +157,7 @@ class CedrKNRM_class(BertRanker):
         mask = simmat.sum(dim=3) != 0.0  # which query terms are not padding?
         result = torch.where(mask, (result + self.epsilon).log(), mask.float())
         result = result.sum(dim=2)  # sum over query terms
-        result = torch.cat([result, cls_reps[-1]], dim=1)
+        result = torch.cat([result, cls_reps[-1]], dim=1) if self.cfg["jointbert"] else result
         scores = self.combine(result)  # linear combination over kernels
         return scores
 
