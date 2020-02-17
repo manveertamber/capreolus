@@ -5,6 +5,7 @@ class Tokenizer(ModuleBase, metaclass=RegisterableModule):
     """the module base class"""
 
     module_type = "tokenizer"
+    cfg = {}
 
 
 class AnseriniTokenizer(Tokenizer):

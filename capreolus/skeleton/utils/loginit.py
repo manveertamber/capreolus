@@ -6,7 +6,7 @@ import logging.handlers
 
 
 GLOBAL_LOGGING_CONF = {"level": os.environ.get("CAPREOLUS_LOGGING", logging.INFO)}
-
+print(GLOBAL_LOGGING_CONF)
 
 class RepeatFilter(logging.Filter):
     def __init__(self, logger, maxlevel=logging.DEBUG, max_repeats=5):
@@ -82,7 +82,6 @@ def get_logger(name=None):
 
     logger.setLevel(GLOBAL_LOGGING_CONF["level"])
     if name is None:
-        name = "capreolus"
-    if not name.startswith("capreolus"):
-        name = "capreolus." + name
-    return logging.getLogger(name)
+        return logger
+    else:
+        return logging.getLogger(name)

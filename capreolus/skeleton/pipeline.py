@@ -11,6 +11,8 @@ sacred.SETTINGS.CONFIG.READ_ONLY_CONFIG = False
 from capreolus.registry import all_known_modules
 from capreolus.task import Task
 
+print('pipeline: ', __name__)
+
 
 class Pipeline:
     def __init__(self, task_name, rewritten_args):
@@ -131,8 +133,8 @@ class Pipeline:
     def create_experiment(self, experiment_name, interactive=False):
         """ Create a sacred.Experiment containing config options for the chosen modules (and their dependencies) """
 
-        chosen = self._extract_choices_from_argv(self.rewritten_args)
-        self.rewritten_args = self._rewrite_argv_for_ingredients(self.rewritten_args)
+        chosen = self._extract_choices_from_argv(sys.argv)
+        sys.argv = self._rewrite_argv_for_ingredients(sys.argv)
 
         ingredients, ingredient_commands = self._create_module_ingredients(chosen)
         # for ingredient in ingredients:

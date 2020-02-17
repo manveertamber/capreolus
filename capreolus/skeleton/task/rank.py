@@ -35,11 +35,13 @@ def train(config, modules):
     searcher["index"].create_index()
     print(searcher["index"].getdoc("FBIS4-16592"))
 
+    topic_path, topic_type = benchmark.get_topic_path_and_type()
+    searcher.search(topic_path, topic_type)
+    print("finished")
 
 def evaluate(config, modules):
     output_path = _pipeline_path(config, modules)
     print("**** got evaluate!!")
-
 
 def _pipeline_path(config, modules):
     pipeline_cfg = {k: v for k, v in config.items() if k not in modules and k not in ["expid"]}
@@ -63,7 +65,9 @@ class RankTask(Task):
 
     name = "rank"
     module_order = ["collection", "searcher", "benchmark"]
+    # module_defaults = {"searcher": "SDM", "collection": "robust04", "benchmark": "wsdm20demo"}
     module_defaults = {"searcher": "BM25", "collection": "robust04", "benchmark": "wsdm20demo"}
+
     config_functions = [pipeline_config]
     config_overrides = []
     commands = {"train": train, "evaluate": evaluate, "describe": describe}

@@ -59,8 +59,12 @@ class RegisterableModule(type):
         cls.plugins[plugin.name] = plugin
 
 
-class RegisterableMixIn:
-    """ Class providing utility class methods for use with RegisterableModules. """
+class ModuleBase:
+    """ Base class to be inherited by Capreolus module classes (e.g., Collection, Searcher) """
+
+    def __init__(self, cfg):
+        """ Use instantiate_from_config. """
+        self.cfg = sacred.config.custom_containers.ReadOnlyDict(cfg)
 
     @classmethod
     def add_missing_modules_to_config(cls, config, module_lookup, provided_modules):
@@ -105,7 +109,7 @@ class RegisterableMixIn:
 
         # create module config consisting of (1) the module class name and (2) its config options (from config())
         ingredient.add_config({"_name": cls.name})
-        ingredient.config(cls.config)
+        ingredient.config(cls.config) # should be ingredient.config(cls.cfg)?
 
         # add ingredient's commands to the shared command_list
         for command_name, command_func in cls.commands.items():
@@ -150,14 +154,6 @@ class RegisterableMixIn:
 
         ingredient = cls._create_ingredient(path, sub_ingredients=sub_ingredients, command_list=command_list)
         return ingredient, command_list
-
-
-class ModuleBase(RegisterableMixIn):
-    """ Base class to be inherited by Capreolus module classes (e.g., Collection, Searcher) """
-
-    def __init__(self, cfg):
-        """ Use classmethod instantiate_from_config. """
-        self.cfg = sacred.config.custom_containers.ReadOnlyDict(cfg)
 
     # this module's dependencies: dict mapping config keys to Dependency objects
     dependencies = {}

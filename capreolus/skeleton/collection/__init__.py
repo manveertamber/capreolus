@@ -13,7 +13,8 @@ class Collection(ModuleBase, metaclass=RegisterableModule):
 
 class Robust04(Collection):
     name = "robust04"
-    path = "/home/andrew/Aquaint-TREC-3-4"
+    # path = "/home/andrew/Aquaint-TREC-3-4"
+    path = "/tuna1/collections/newswire/disk45"
     collection_type = "TrecCollection"
     generator_type = "JsoupGenerator"
 
@@ -23,3 +24,4 @@ class Robust05(Collection):
     path = "missingpath"
     collection_type = "TrecCollection"
     generator_type = "JsoupGenerator"
+
