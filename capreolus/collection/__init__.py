@@ -178,6 +178,7 @@ class DummyCollection(Collection):
 
     def _validate_document_path(self, path):
         """ Validate that the document path contains `dummy_trec_doc` """
+        return True
 
 class Robust05(Collection):
     name = "robust05"
@@ -188,7 +189,7 @@ class Robust05(Collection):
 
 class ANTIQUE(Collection):
     name = "antique"
-    path = "/home/x978zhan/mpi-spring/data/antique/collection"
+    path = PACKAGE_PATH / "data" / "antique-collection"
 
     collection_type = "TrecCollection"
     generator_type = "JsoupGenerator"

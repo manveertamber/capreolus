@@ -16,6 +16,7 @@ class TrainDataset(torch.utils.data.IterableDataset):
     def __init__(self, qid_docid_to_rank, qrels, extractor):
         self.extractor = extractor
         self.iterations = 0
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # remove qids from qid_docid_to_rank that do not have relevance labels in the qrels
         qid_docid_to_rank = qid_docid_to_rank.copy()
@@ -78,6 +79,7 @@ class PredDataset(torch.utils.data.IterableDataset):
     """
 
     def __init__(self, qid_docid_to_rank, extractor):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         def genf():
             for qid, docids in qid_docid_to_rank.items():
                 for docid in docids:
