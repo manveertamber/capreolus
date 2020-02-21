@@ -1,10 +1,12 @@
-from capreolus.reranker.reranker import Reranker
-from capreolus.reranker.common import create_emb_layer
-from capreolus.extractor.embedtext import EmbedText
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from capreolus.reranker import Reranker
+from capreolus.reranker.common import create_emb_layer
+from capreolus.utils.loginit import get_logger
+
+logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class DRMM_class(nn.Module):
@@ -36,11 +38,14 @@ class DRMM_class(nn.Module):
 
     def _hist_map(self, queries, documents, d_masks):
         """
-        ： param queries: (B, Tq, H)
-        ： param documents: (B, Td, H)
-        : param d_masks: (B, Td)
-        return: (B, Tq, 6)
+        Args:
+            queries: (B, Tq, H)
+            documents: (B, Td, H)
+            d_masks: (B, Td)
+
+        Returns: (B, Tq, 6)
         """
+
         # compute cos similarity
         q_norm = torch.sqrt((queries * queries).sum(dim=-1) + 1e-7)[:, :, None] + 1e-7
         d_norm = torch.sqrt((documents * documents).sum(dim=-1) + 1e-7)[:, None, :] + 1e-7
@@ -50,7 +55,6 @@ class DRMM_class(nn.Module):
         sim_matrix = sim_matrix / d_norm  # (B, Tq, Td)
 
         sim_matrix += (1 - d_masks[:, None, :]) * 1e7  # assign large number on <PAD> pos
-
         hist = torch.zeros([sim_matrix.size(0), sim_matrix.size(1), self.nbins + 1], dtype=torch.float)
 
         idxs = list(range(self.nbins))
@@ -115,10 +119,9 @@ class DRMM_class(nn.Module):
 dtype = torch.FloatTensor
 
 
-@Reranker.register
 class DRMM(Reranker):
     description = """Jiafeng Guo, Yixing Fan, Qingyao Ai, and W. Bruce Croft. 2016. A Deep Relevance Matching Model for Ad-hoc Retrieval. In CIKM'16."""
-    EXTRACTORS = [EmbedText]
+    # EXTRACTORS = [EmbedText]
 
     @staticmethod
     def config():
@@ -126,19 +129,19 @@ class DRMM(Reranker):
         nodes = 5  # hidden layer dimension for feed forward matching network
         histType = "LCH"  # histogram type: 'CH', 'NH' or 'LCH'
         gateType = "IDF"  # term gate type: 'TV' or 'IDF'
-        return locals().copy()  # ignored by sacred
 
-    @staticmethod
-    def required_params():
-        # Used for validation. Returns a set of params required by the class defined in get_model_class()
-        return {"gateType", "histType", "nodes", "nbins"}
+    # @staticmethod
+    # def required_params():
+    #     # Used for validation. Returns a set of params required by the class defined in get_model_class()
+    #     return {"gateType", "histType", "nodes", "nbins"}
 
-    @classmethod
-    def get_model_class(cls):
-        return DRMM_class
+    # @classmethod
+    # def get_model_class(cls):
+    #     return DRMM_class
 
     def build(self):
-        self.model = DRMM_class(self.embeddings, self.config)
+        if not hasattr(self, "model"):
+            self.model = DRMM_class(self.embeddings, self.config)
         return self.model
 
     def score(self, d):
@@ -150,8 +153,5 @@ class DRMM(Reranker):
             self.model(neg_sentence, query_sentence, query_idf).view(-1),
         ]
 
-    def test(self, query_sentence, query_idf, pos_sentence, *args, **kwargs):
+    def test(self, query_sentence, query_idf, pos_sentence):
         return self.model(pos_sentence, query_sentence, query_idf).view(-1)
-
-    def zero_grad(self, *args, **kwargs):
-        self.model.zero_grad(*args, **kwargs)
