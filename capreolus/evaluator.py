@@ -87,7 +87,6 @@ def eval_runfile(runfile, qrels, metrics):
     metrics = [metrics] if isinstance(metrics, str) else list(metrics)
     _verify_metric(metrics)
     runs = Searcher.load_trec_run(runfile)
-    # return {metric: _eval_runfile(runfile, dev_qids=list(qrels.keys()), qrels=qrels, metric=metric), "path": runfile}
     return _eval_runs(runs, qrels, metrics, dev_qids=list(qrels.keys()))
 
 
@@ -132,5 +131,5 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
         test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
         test_qrels.update({qid: v for qid, v in benchmark.qrels.items() if qid in test_qids})
 
-    scores = eval_runs(test_runs, test_qrels, metrics)
-    return {"score": scores, "path": {s: os.path.basename(v["path"]) for s, v in best_scores.items()}}
+    scores = eval_runs(test_runs, benchmark.qrels, metrics)
+    return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}

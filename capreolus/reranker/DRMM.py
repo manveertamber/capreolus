@@ -10,15 +10,15 @@ logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 
 class DRMM_class(nn.Module):
-    def __init__(self, embeddings, config):
+    def __init__(self, extractor, config):
         super(DRMM_class, self).__init__()
-        self.p = config
-        self.nbins = self.p["nbins"]
-        self.nodes = self.p["nodes"]
-        self.hist_type = self.p["histType"]
-        self.gate_type = self.p["gateType"]
+        # self.p = config
+        self.nbins = config["nbins"]
+        self.nodes = config["nodes"]
+        self.hist_type = config["histType"]
+        self.gate_type = config["gateType"]
 
-        self.embedding = create_emb_layer(embeddings, non_trainable=True)
+        self.embedding = create_emb_layer(extractor.embeddings, non_trainable=True)
 
         self.ffw = nn.Sequential(nn.Linear(self.nbins + 1, self.nodes), nn.Tanh(), nn.Linear(self.nodes, 1), nn.Tanh())
 
@@ -63,7 +63,7 @@ class DRMM_class(nn.Module):
             hist[:, :, i] = (sim_matrix < bin_upperbound).sum(dim=-1)
         hist[:, :, -1] = ((sim_matrix > 0.999) * (sim_matrix < 1.001)).sum(dim=-1)
 
-        for i in list(range(self.nbins - 1, 0, -1)):  # exclude idx=self.p['nbins'] and idx=0
+        for i in list(range(self.nbins - 1, 0, -1)):  # exclude idx=config['nbins'] and idx=0
             hist[:, :, i] -= hist[:, :, i - 1]
 
         hist += 1
@@ -142,7 +142,7 @@ class DRMM(Reranker):
 
     def build(self):
         if not hasattr(self, "model"):
-            self.model = DRMM_class(self.embeddings, self.config)
+            self.model = DRMM_class(self["extractor"], self.cfg)
         return self.model
 
     def score(self, d):
@@ -154,5 +154,9 @@ class DRMM(Reranker):
             self.model(neg_sentence, query_sentence, query_idf).view(-1),
         ]
 
-    def test(self, query_sentence, query_idf, pos_sentence):
+    # def test(self, query_sentence, query_idf, pos_sentence):
+    def test(self, d):
+        query_idf = d["query_idf"]
+        query_sentence = d["query"]
+        pos_sentence = d["posdoc"]
         return self.model(pos_sentence, query_sentence, query_idf).view(-1)

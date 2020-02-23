@@ -31,7 +31,7 @@ class PytorchTrainer(Trainer):
         itersize = 512  # number of training instances in one iteration (epoch)
         gradacc = 1  # number of batches to accumulate over before updating weights
         lr = 0.001  # learning rate
-        softmaxloss = True  # True to use softmax loss (over pairs) or False to use hinge loss
+        softmaxloss = False  # True to use softmax loss (over pairs) or False to use hinge loss
 
         # sanity checks
         if batch < 1:
@@ -68,7 +68,9 @@ class PytorchTrainer(Trainer):
 
         for bi, batch in enumerate(train_dataloader):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
-            batch = {k: torch.tensor(v, device=self.device) for k, v in batch.items()}
+            batch = {
+                k: v.to(self.device) if k not in ["qid", "posdocid", "negdocid"] else v
+                for k, v in batch.items()}
             doc_scores = reranker.score(batch)
             loss = self.loss(doc_scores)
             iter_loss.append(loss)
@@ -257,7 +259,9 @@ class PytorchTrainer(Trainer):
         pred_dataloader = torch.utils.data.DataLoader(pred_data, batch_size=self.cfg["batch"], pin_memory=True, num_workers=0)
         with torch.autograd.no_grad():
             for bi, batch in enumerate(pred_dataloader):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+                batch = {
+                    k: v.to(self.device) if k not in ["qid", "posdocid", "negdocid"] else v
+                    for k, v in batch.items()}
                 scores = reranker.test(batch)
                 scores = scores.view(-1).cpu().numpy()
                 for qid, docid, score in zip(batch["qid"], batch["posdocid"], scores):
