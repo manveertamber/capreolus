@@ -237,7 +237,6 @@ class PytorchTrainer(Trainer):
 
         json.dump(metrics_history, open(metrics_fn, "w", encoding="utf-8"))
         plot_metrics(metrics_history, str(dev_output_path) + ".pdf", interactive=self.cfg["interactive"])
-        print("training loss: ", train_loss)
         plot_loss(train_loss, str(loss_fn).replace(".txt", ".pdf"), interactive=self.cfg["interactive"])
 
     def load_best_model(self, reranker, train_output_path):

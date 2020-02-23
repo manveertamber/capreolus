@@ -119,7 +119,7 @@ def plot_loss(history, outfn, interactive=False):
     plt.ylabel("Training Loss")
     plt.tick_params("y")
     plt.xlabel("Iteration")
-    plt.title("min loss: %d %.3f" % (best_epoch, losses[best_epoch]))
+    plt.title("min loss: %d %.3f" % (best_epoch, losses[best_epoch-1]))
     fig.savefig(outfn, format="pdf")
     if interactive:
         plt.show(block=False)
