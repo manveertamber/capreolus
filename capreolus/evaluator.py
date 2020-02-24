@@ -48,8 +48,7 @@ def _eval_runs(runs, qrels, metrics, dev_qids):
     dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
     evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, _transform_metric(metrics))
 
-    tmpx = evaluator.evaluate(runs).values()
-    scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in tmpx]
+    scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in evaluator.evaluate(runs).values()]
     scores = np.array(scores).mean(axis=0).tolist()
     scores = dict(zip(metrics, scores))
     return scores
@@ -110,7 +109,11 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     _verify_metric(metrics)
 
     folds = {s: benchmark.folds[s] for s in [folds]} if folds else benchmark.folds
-    runfiles = [os.path.join(runfile_dir, f) for f in os.listdir(runfile_dir) if f != "done"]
+    runfiles = [
+        os.path.join(runfile_dir, f)
+        for f in os.listdir(runfile_dir)
+        if (f != "done" and not os.path.isdir(os.path.join(runfile_dir, f)))
+    ]
 
     if len(runfiles) == 1:
         return {"score": eval_runfile(runfiles[0], benchmark.qrels, metrics), "path": {s: runfiles[0] for s in folds}}

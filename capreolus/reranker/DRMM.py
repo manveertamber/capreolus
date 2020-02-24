@@ -154,7 +154,6 @@ class DRMM(Reranker):
             self.model(neg_sentence, query_sentence, query_idf).view(-1),
         ]
 
-    # def test(self, query_sentence, query_idf, pos_sentence):
     def test(self, d):
         query_idf = d["query_idf"]
         query_sentence = d["query"]

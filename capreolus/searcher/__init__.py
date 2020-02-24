@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from capreolus.registry import ModuleBase, RegisterableModule, Dependency, MAX_THREADS
+from capreolus.registry import ModuleBase, RegisterableModule, Dependency, MAX_THREADS, PACKAGE_PATH
 from capreolus.utils.common import Anserini
 from capreolus.utils.loginit import get_logger
 
@@ -123,8 +123,8 @@ class BM25Grid(Searcher, AnseriniSearcherMixIn):
 
     @staticmethod
     def config():
-        bmax = 0.9  # maximum b value to include in grid search (starting at 0.1)
         k1max = 1.0  # maximum k1 value to include in grid search (starting at 0.1)
+        bmax = 1.0  # maximum b value to include in grid search (starting at 0.1)
         hits = 1000
 
     def query_from_file(self, topicsfn, output_path):
@@ -159,11 +159,34 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
         return "-".join(str(x) for x in l)
 
     def query_from_file(self, topicsfn, output_path):
-        # paras = {k: self.list2str(self.cfg[k]) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         paras = {k: " ".join(self.cfg[k].split("-")) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         hits = str(self.cfg["hits"])
 
-        anserini_param_str = "-rm3 " + " ".join(f"-rm3.{k} {paras[k]}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"]) + " -bm25 " + " ".join(f"-{k} {paras[k]}" for k in ["k1", "b"]) + f" -hits {hits}"
+        anserini_param_str = (
+            "-rm3 "
+            + " ".join(f"-rm3.{k} {paras[k]}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
+            + " -bm25 "
+            + " ".join(f"-{k} {paras[k]}" for k in ["k1", "b"])
+            + f" -hits {hits}"
+        )
         self._anserini_query_from_file(topicsfn, anserini_param_str, output_path)
+
+        return output_path
+
+
+class StaticBM25RM3Rob04Yang19(Searcher):
+    """ Tuned BM25+RM3 run used by Yang et al. in [1]. This should be used only with a benchmark using the same folds and queries.
+
+        [1] Wei Yang, Kuang Lu, Peilin Yang, and Jimmy Lin. Critically Examining the "Neural Hype": Weak Baselines and  the Additivity of Effectiveness Gains from Neural Ranking Models. SIGIR 2019.
+    """
+
+    name = "bm25staticrob04yang19"
+
+    def query_from_file(self, topicsfn, output_path):
+        import shutil
+
+        outfn = os.path.join(output_path, "static.run")
+        os.makedirs(output_path, exist_ok=True)
+        shutil.copy2(PACKAGE_PATH / "data" / "rob04_yang19_rm3.run", outfn)
 
         return output_path

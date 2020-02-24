@@ -1,4 +1,5 @@
 import os
+import json
 
 import numpy as np
 import torch
@@ -7,6 +8,7 @@ from capreolus.registry import ModuleBase, RegisterableModule, Dependency, MAX_T
 from capreolus.reranker.common import pair_hinge_loss, pair_softmax_loss
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
+from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
@@ -32,6 +34,8 @@ class PytorchTrainer(Trainer):
         gradacc = 1  # number of batches to accumulate over before updating weights
         lr = 0.001  # learning rate
         softmaxloss = False  # True to use softmax loss (over pairs) or False to use hinge loss
+
+        interactive = False  # True for training with Notebook or False for command line environment
 
         # sanity checks
         if batch < 1:
@@ -68,9 +72,7 @@ class PytorchTrainer(Trainer):
 
         for bi, batch in enumerate(train_dataloader):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
-            batch = {
-                k: v.to(self.device) if k not in ["qid", "posdocid", "negdocid"] else v
-                for k, v in batch.items()}
+            batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
             doc_scores = reranker.score(batch)
             loss = self.loss(doc_scores)
             iter_loss.append(loss)
@@ -187,6 +189,8 @@ class PytorchTrainer(Trainer):
         os.makedirs(info_output_path, exist_ok=True)
 
         loss_fn = info_output_path / "loss.txt"
+        metrics_fn = dev_output_path / "metrics.json"
+        metrics_history = {}
         initial_iter = self.fastforward_training(reranker, weights_output_path, loss_fn)
         logger.info("starting training from iteration %s/%s", initial_iter, self.cfg["niters"])
 
@@ -225,9 +229,15 @@ class PytorchTrainer(Trainer):
             # write best dev weights to file
             if metrics[metric] > dev_best_metric:
                 reranker.save_weights(dev_best_weight_fn, self.optimizer)
+            for m in metrics:
+                metrics_history.setdefault(m, []).append(metrics[m])
 
             # write train_loss to file
             loss_fn.write_text("\n".join(f"{idx} {loss}" for idx, loss in enumerate(train_loss)))
+
+        json.dump(metrics_history, open(metrics_fn, "w", encoding="utf-8"))
+        plot_metrics(metrics_history, str(dev_output_path) + ".pdf", interactive=self.cfg["interactive"])
+        plot_loss(train_loss, str(loss_fn).replace(".txt", ".pdf"), interactive=self.cfg["interactive"])
 
     def load_best_model(self, reranker, train_output_path):
         self.optimizer = torch.optim.Adam(
@@ -259,9 +269,7 @@ class PytorchTrainer(Trainer):
         pred_dataloader = torch.utils.data.DataLoader(pred_data, batch_size=self.cfg["batch"], pin_memory=True, num_workers=0)
         with torch.autograd.no_grad():
             for bi, batch in enumerate(pred_dataloader):
-                batch = {
-                    k: v.to(self.device) if k not in ["qid", "posdocid", "negdocid"] else v
-                    for k, v in batch.items()}
+                batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
                 scores = reranker.test(batch)
                 scores = scores.view(-1).cpu().numpy()
                 for qid, docid, score in zip(batch["qid"], batch["posdocid"], scores):
