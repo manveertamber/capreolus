@@ -71,15 +71,18 @@ class EmbedText(Extractor):
     def _build_vocab(self, qids, docids, topics):
         tokenize = self["tokenizer"].tokenize
         self.qid2toks = {qid: tokenize(topics[qid]) for qid in qids}
-        self.docid2toks = {docid: tokenize(self["index"].get_doc(docid)) for docid in docids}
-        # self.docid2toks = {}
-        # for docid in docids:
-        #     try:
-        #         self.docid2toks[docid] = tokenize(self["index"].get_doc(docid))
-        #     except:
-        #         print('warning: docid ', docid)
-        #         continue
-
+        # self.docid2toks = {docid: tokenize(self["index"].get_doc(docid)) for docid in docids}
+        # seems like for antique the doc '2814599_5' doesn't appear in the collection
+        self.docid2toks = {}
+        for docid in docids:
+            try:
+                doc = tokenize(self["index"].get_doc(docid))
+                if not doc or len(doc) == 0:
+                    logger.warning(f"bad document {docid} tokenization result, ignore the document")
+                    continue
+                self.docid2toks[docid] = doc
+            except:
+                logger.warning(f"cannot find doc {docid} from index")
         self._extend_stoi(self.qid2toks.values(), calc_idf=self.cfg["calcidf"])
         self._extend_stoi(self.docid2toks.values(), calc_idf=self.cfg["calcidf"])
         self.itos = {i: s for s, i in self.stoi.items()}
@@ -138,8 +141,10 @@ class EmbedText(Extractor):
         self._build_vocab(qids, docids, topics)
         self._build_embedding_matrix()
 
+    def has_doc(self, docid):
+        return docid in self.docid2toks
+
     def _tok2vec(self, toks):
-        # return [self.embeddings[self.stoi[tok]] for tok in toks]
         return [self.stoi[tok] for tok in toks]
 
     def id2vec(self, qid, posid, negid=None):
