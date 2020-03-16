@@ -1,10 +1,9 @@
 import torch
-
 from torch import nn
 
-from capreolus.reranker import Reranker
-from capreolus.reranker.common import create_emb_layer, SimilarityMatrix, RbfKernel, RbfKernelBank
+from capreolus.reranker.common import create_emb_layer, SimilarityMatrix, RbfKernelBank
 from capreolus.utils.loginit import get_logger
+from capreolus.reranker import Reranker
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -78,10 +77,6 @@ class KNRM(Reranker):
             self.model(pos_sentence, query_sentence, query_idf).view(-1),
             self.model(neg_sentence, query_sentence, query_idf).view(-1),
         ]
-        # return [
-        #     self.model(neg_sentence, query_sentence, query_idf).view(-1),
-        #     self.model(pos_sentence, query_sentence, query_idf).view(-1),
-        # ]
 
     def test(self, d):
         query_idf = d["query_idf"]
