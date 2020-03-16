@@ -12,6 +12,10 @@ from capreolus.utils.loginit import get_logger
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 
 
+def list2str(l):
+    return "-".join(str(x) for x in l)
+
+
 class Searcher(ModuleBase, metaclass=RegisterableModule):
     """the module base class"""
 
@@ -164,19 +168,15 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
 
     @staticmethod
     def config():
-        k1 = BM25RM3.list2str([0.65, 0.70, 0.75])
-        b = BM25RM3.list2str([0.60, 0.7])  # [0.60, 0.65, 0.7]
-        fbTerms = BM25RM3.list2str([65, 70, 95, 100])
-        fbDocs = BM25RM3.list2str([5, 10, 15])
-        originalQueryWeight = BM25RM3.list2str([0.2, 0.25])
+        # the following parameters can either be a single float or a list of float concatenated with '-'
+        k1 = list2str([0.65, 0.70, 0.75])  # for bm25, float
+        b = list2str([0.60, 0.7])  # for bm25, float
+        fbTerms = list2str([65, 70, 95, 100])  # for rm3, int
+        fbDocs = list2str([5, 10, 15])  # for rm3, int
+        originalQueryWeight = list2str([0.2, 0.25])  # for rm3, float
         hits = 1000
 
-    @staticmethod
-    def list2str(l):
-        return "-".join(str(x) for x in l)
-
     def query_from_file(self, topicsfn, output_path):
-        # paras = {k: self.list2str(self.cfg[k]) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         paras = {k: " ".join(self.cfg[k].split("-")) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         hits = str(self.cfg["hits"])
 
