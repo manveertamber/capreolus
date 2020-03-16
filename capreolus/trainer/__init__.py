@@ -34,6 +34,7 @@ class PytorchTrainer(Trainer):
         itersize = 512  # number of training instances in one iteration (epoch)
         gradacc = 1  # number of batches to accumulate over before updating weights
         lr = 0.001  # learning rate
+        dropoutrate = 0  # dropout rate
         softmaxloss = False  # True to use softmax loss (over pairs) or False to use hinge loss
 
         interactive = False  # True for training with Notebook or False for command line environment
@@ -245,7 +246,6 @@ class PytorchTrainer(Trainer):
 
         json.dump(metrics_history, open(metrics_fn, "w", encoding="utf-8"))
         plot_metrics(metrics_history, str(dev_output_path) + ".pdf", interactive=self.cfg["interactive"])
-        print("training loss: ", train_loss)
         plot_loss(train_loss, str(loss_fn).replace(".txt", ".pdf"), interactive=self.cfg["interactive"])
 
     def load_best_model(self, reranker, train_output_path):
