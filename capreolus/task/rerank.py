@@ -40,21 +40,27 @@ def train(config, modules):
     searcher_cache_dir = os.path.join(searcher.get_cache_path(), benchmark.name)
     searcher_run_dir = searcher.query_from_file(topics_fn, searcher_cache_dir)
 
+
     results = evaluator.search_best_run(searcher_run_dir, benchmark, metric)
-    print("score: ", results["score"])
-    # end of tmp
     best_search_run_path = results["path"][fold]
     best_search_run = searcher.load_trec_run(best_search_run_path)
 
-    docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
-    reranker["extractor"].create(qids=best_search_run.keys(), docids=docids, topics=benchmark.topics[benchmark.query_type])
+    if config["rundocsonly"]:
+        docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
+        reranker["extractor"].create(qids=best_search_run.keys(), docids=docids,
+                                     topics=benchmark.topics[benchmark.query_type])
+        train_run = {qid: docs for qid, docs in best_search_run.items() if qid in benchmark.folds[fold]["train_qids"]}
+        dev_run = {qid: docs for qid, docs in best_search_run.items() if qid in benchmark.folds[fold]["predict"]["dev"]}
+    else:
+        docids = set(docid for querydocs in benchmark.qrels.values() for docid in querydocs)
+        reranker["extractor"].create(qids=benchmark.qrels.keys(), docids=docids,
+                                     topics=benchmark.topics[benchmark.query_type])
+        train_run = {qid: docs for qid, docs in benchmark.qrels.items() if qid in benchmark.folds[fold]["train_qids"]}
+        dev_run = {qid: docs for qid, docs in benchmark.qrels.items() if qid in benchmark.folds[fold]["predict"]["dev"]}
+
     reranker.build()
-
-    train_run = {qid: docs for qid, docs in best_search_run.items() if qid in benchmark.folds[fold]["train_qids"]}
-    dev_run = {qid: docs for qid, docs in best_search_run.items() if qid in benchmark.folds[fold]["predict"]["dev"]}
-
     train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=reranker["extractor"])
-    dev_dataset = PredDataset(qid_docid_to_rank=dev_run, extractor=reranker["extractor"])
+    dev_dataset = PredDataset(qid_docid_to_rank=dev_run, qrels=benchmark.qrels, extractor=reranker["extractor"], mode="val")
 
     train_output_path = _pipeline_path(config, modules)
     dev_output_path = train_output_path / "pred" / "dev"
@@ -88,7 +94,7 @@ def evaluate(config, modules):
         reranker["trainer"].load_best_model(reranker, train_output_path)
 
         test_run = {qid: docs for qid, docs in best_search_run.items() if qid in benchmark.folds[fold]["predict"]["test"]}
-        test_dataset = PredDataset(qid_docid_to_rank=test_run, extractor=reranker["extractor"])
+        test_dataset = PredDataset(qid_docid_to_rank=test_run, extractor=reranker["extractor"], mode="test")
 
         test_preds = reranker["trainer"].predict(reranker, test_dataset, test_output_path)
 
@@ -139,7 +145,7 @@ class RerankTask(Task):
         expid = "debug"
         seed = 123_456
         fold = "s1"
-        # rundocsonly = True  # use only docs from the searcher as pos/neg training instances (i.e., not all qrels)
+        rundocsonly = True  # use only docs from the searcher as pos/neg training instances (i.e., not all qrels)
 
     name = "rerank"
     module_order = ["collection", "searcher", "reranker", "benchmark"]
