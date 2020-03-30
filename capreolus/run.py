@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/xinyu1zhang/mpi-spring/capreolus")
+sys.path.append("/home/x978zhan/mpi-spring/capreolus_v2")
 from capreolus.pipeline import Pipeline
 
 # NEXT:
