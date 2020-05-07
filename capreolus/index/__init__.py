@@ -1,9 +1,11 @@
 import logging
 import math
 import os
+import json
 import subprocess
 from itertools import islice
 from threading import Thread
+from multiprocessing import get_context, Process
 
 import numpy as np
 from tqdm import tqdm
@@ -96,7 +98,7 @@ class AnseriniIndex(Index):
         try:
             if not hasattr(self, "index_utils") or self.index_utils is None:
                 self.open()
-            return self.index_utils.getTransformedDocument(docid)
+            return self.index_reader_utils.doc_contents(docid)
         except Exception as e:
             raise
 
@@ -130,6 +132,8 @@ class AnseriniIndex(Index):
         self.numdocs = self.reader.numDocs()
         self.JTerm = autoclass("org.apache.lucene.index.Term")
 
+        self.index_reader_utils = IndexReaderUtils(index_path)
+
 
 class AnseriniIndexWithTf(AnseriniIndex):
     name = "anserini_tf"
@@ -140,7 +144,7 @@ class AnseriniIndexWithTf(AnseriniIndex):
         indexstops = False
         stemmer = "porter"
 
-    def analyze(self, term):
+    def analyze_term(self, term):
         self.open()
         if term in self.term_analyze:
             return self.term_analyze[term]
@@ -150,25 +154,19 @@ class AnseriniIndexWithTf(AnseriniIndex):
         self.term_analyze[term] = analyzed_term
         return analyzed_term
 
+    def analyze_sent(self, sent):
+        return self.index_reader_utils.analyze(sent)
+
     def get_doc_vec(self, docid):
         self.open()
         if isinstance(docid, int):
             docid = self.index_reader_utils.convert_internal_docid_to_collection_docid(docid)
         return self.index_reader_utils.get_document_vector(docid)
 
-    # def calc_doclen_tfdict(self, docid):
-    #     doc_vec = self.get_doc_vec(docid)
-    #     self.doclen[docid], self.tf[docid] = sum(doc_vec.values()), doc_vec
-    #     self.docnos_bar.update()
-    #     return self.doclen[docid], self.tf[docid]
-
-    def calc_doclen_tfdict(self, docids):
-        for docid in docids:
-            doc_vec = self.get_doc_vec(docid)
-            doc_vec = {k: v for k, v in doc_vec.items() if v}
-            self.tf[docid] = doc_vec
-            self.doclen[docid] = sum(doc_vec.values()) if doc_vec else 0
-            self.docnos_bar.update()
+    def calc_doclen_tfdict(self, docid):
+        doc_vec = self.get_doc_vec(docid)
+        doc_vec = {k: v for k, v in doc_vec.items() if v}
+        return sum(doc_vec.values()), doc_vec
 
     def get_doclen(self, docid):
         self.open()
@@ -179,6 +177,16 @@ class AnseriniIndexWithTf(AnseriniIndex):
         self.open()
         return self.avgdl
 
+    def get_df(self, term, analyze=False):
+        if analyze:
+            term = self.analyze(term)
+
+        if not term or term in ["in", "at", "an", "it", "on", "be", "their", "or", "is", "no", "with", "will"]:
+            return 0
+
+        df, _ = self.index_reader_utils.get_term_counts(term)
+        return df
+
     def get_idf(self, term):
         """ BM25's IDF with a floor of 0 """
         self.open()
@@ -187,17 +195,20 @@ class AnseriniIndexWithTf(AnseriniIndex):
 
         df = self.get_df(term)
         idf = (self.numdocs - df + 0.5) / (df + 0.5)
-        idf = max(math.log(1 + idf), 0)
+        idf = math.log(1 + idf)
         self.idf[term] = idf
+
         return idf
 
-    def get_tf(self, term, docid):
+    def get_tf(self, term, docid, analyze=False):
         """
         :param term: term in unanalyzed form
         :param docid: the collection document id
         :return: float, the tf of the term if the term is found, otherwise math.nan
         """
-        term = self.analyze(term)
+        if analyze:
+            term = self.analyze(term)
+
         if not term:
             return math.nan
 
@@ -207,106 +218,38 @@ class AnseriniIndexWithTf(AnseriniIndex):
 
         return self.tf[docid].get(term, math.nan)
 
-    def get_bm25_weight(self, term, docid):
+    def get_bm25_weight(self, term, docid, analyze=False):
         """
         :param term: term in unanalyzed form ?? # TODO, CONFORM
         :param docid: the collection document id
         :return: float, the tf of the term if the term is found, otherwise math.nan
         """
-        term = self.analyze(term)
+        if analyze:
+            term = self.analyze(term)
         return self.index_reader_utils.compute_bm25_term_weight(docid, term) if term else math.nan
 
-    # not used
-    def get_avgdoclen(self, term):
-        term = self.analyze(term)
-        return self.term2avglen.get(term, -1) if term else -1
-
-    # not used
-    def get_and_udpate_avgdoclen(self, term):
-        ERR_RET = -1
-        analyze_term = self.analyze(term)
-        if not analyze_term:
-            self.term2avglen[term] = ERR_RET
-            return ERR_RET
-
-        term = analyze_term
-        avglen = self.term2avglen.get(term, None)
-        if avglen:
-            return avglen
-
-        try:
-            postings = self.index_reader_utils.get_postings_list(term, analyze=False)
-        except Exception as e:
-            logger.warn(f"exception while get_postings_list: {term}")
-            logger.warn(e)
-            self.term2avglen[term] = ERR_RET
-            return ERR_RET
-
-        if not postings:
-            logger.warn(f"postings_list could not be found: {term}")
-            self.term2avglen[term] = ERR_RET
-            return ERR_RET
-
-        docids = [posting.docid for posting in postings]  # the internal lucene ids
-        avglen = np.mean([self.get_doclen(docid) for docid in docids])
-        self.term2avglen[term] = avglen
-        return avglen
-
     def open(self):
-        if hasattr(self, "index_reader_utils"):
-            assert hasattr(self, "tf")
-            assert hasattr(self, "doclen")
+        if hasattr(self, "tf"):
+            assert all([hasattr(self, f) for f in ["idf", "doclen", "term_analyze"]])
             return
 
         if not hasattr(self, "index_utils"):
             super().open()
 
-        self.index_reader_utils = IndexReaderUtils(self.index_path)
-        self.tf, self.idf = {}, {}
-        self.doclen = {}
-        self.term_analyze = {}
+        self.tf, self.idf, self.doclen, self.term_analyze = {}, {}, {}, {}
 
-        docnos = self["collection"].get_docnos()
-        # for docid in tqdm(docnos, desc="Preparing doclen & tf"):
-        #     self.doclen[docid], self.tf[docid] = self.calc_doclen_tfdict(docid)
+        tf_path = self.get_cache_path() / "tf.json"
+        if os.path.exists(tf_path):
+            self.tf = json.load(open(tf_path))
+            self.doclen = {docid: sum(doc_vec.values()) for docid, doc_vec in self.tf.items()}
+            print(f"tf been loaded from {tf_path}")
+        else:
+            docnos = self["collection"].get_docnos()
+            for docid in tqdm(docnos, desc="Preparing doclen & tf"):
+                self.doclen[docid], self.tf[docid] = self.calc_doclen_tfdict(docid)
 
-        n_thread, threads = 5, []
-        chunk_size = (len(docnos) // n_thread) + 1
-        self.docnos_bar = tqdm(total=len(docnos), desc="Preparing doclen & tf")
-        for i in range(n_thread):
-            start, end = i*chunk_size, (i+1)*chunk_size
-            t = Thread(target=self.calc_doclen_tfdict, args=[docnos[start:end]])
-            threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join()
+            json.dump(self.tf, open(tf_path, "w"))
+            print(f"{len(self.tf)} tf values been cached into {tf_path}")
 
         self.avgdl = np.mean(list(self.doclen.values()))
         print(f"average doc len: {self.avgdl}")
-        return
-
-        def get_avg_lens(docids):
-            return np.array([self.get_doclen(docid) for docid in docids]).mean()  # add up the tf for each word
-
-        n_total, n_exception, n_unfound = 0, 0, 0
-        for term in islice(self.index_reader_utils.terms(), None):
-            n_total += 1  # 25334
-            try:
-                postings = self.index_reader_utils.get_postings_list(term.term, analyze=False)
-            except Exception as e:
-                print(e)
-                print(f"exception while get_postings_list: ", term.term)
-                n_exception += 1
-                continue
-
-            if not postings:
-                print(f"no posting list for term {term.term}")
-                n_unfound += 1
-                continue
-
-            docids = []
-            for posting in postings:
-                docids.append(self.index_reader_utils.convert_internal_docid_to_collection_docid(posting.docid))
-            self.term2avglen[term.term] = get_avg_lens(docids)
-        print(f"Finished term2avglen: total {n_total}, num of exception: {n_exception}, num of unfound: {n_unfound}")

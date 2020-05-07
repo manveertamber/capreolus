@@ -4,8 +4,6 @@ import glob
 import gzip
 import math
 import subprocess
-from threading import Thread
-from multiprocessing import get_context
 from collections import defaultdict, OrderedDict
 
 from tqdm import tqdm
@@ -187,7 +185,6 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
         return "-".join(str(x) for x in l)
 
     def query_from_file(self, topicsfn, output_path):
-        # paras = {k: self.list2str(self.cfg[k]) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         paras = {k: " ".join(self.cfg[k].split("-")) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         hits = str(self.cfg["hits"])
 
@@ -225,9 +222,6 @@ class BM25Reranker(Searcher):
         k1 = 0.9
         hits = 1000
 
-    def _calc_bm25(self, query, docid):
-        return np.nansum([self["index"].get_bm25_weight(qterm, docid) for qterm in query.split()])
-
     def __calc_bm25(self, query, docid):
         k1, b = self.cfg["k1"], self.cfg["b"]
         avg_doc_len = self["index"].get_avglen()
@@ -241,24 +235,14 @@ class BM25Reranker(Searcher):
                 return math.nan
 
             idf = self["index"].get_idf(term)
-            numerator = tf * (k1 + 1)
+            numerator = tf  # * (k1 + 1)  # ignore the (k1+1) since the constant does not affect the ranking result
             denominator = tf + k1 * (1 - b + b * doclen / avg_doc_len)
             return idf * numerator / denominator
 
-        bm25_per_qterm = [term_bm25(qterm) for qterm in query.split()]
+        bm25_per_qterm = [term_bm25(qterm) for qterm in query]
         return np.nansum(bm25_per_qterm)
 
-    # def calc_bm25(self, qid, query, docids):  # for multiprocess setup
-    #     if not docids:
-    #         return {qid: {}}
-    #
-    #     bm25 = {docid: self._calc_bm25(query, docid) for docid in docids}
-    #     bm25 = sorted(bm25.items(), key=lambda k_v: k_v[1], reverse=True)
-    #     bm25 = {docid: bm25 for i, (docid, bm25) in enumerate(bm25) if i < self.cfg["hits"]}
-    #     return qid, bm25
-
     def calc_bm25(self, query, docids):
-        # bm25 = {docid: self._calc_bm25(query, docid) for docid in docids}
         bm25 = {docid: self.__calc_bm25(query, docid) for docid in docids}
         bm25 = sorted(bm25.items(), key=lambda k_v: k_v[1], reverse=True)
         bm25 = {docid: bm25 for i, (docid, bm25) in enumerate(bm25) if i < self.cfg["hits"]}
@@ -271,40 +255,27 @@ class BM25Reranker(Searcher):
             logger.debug(f"done file for {self.name} already exists, skip search")
             return output_path
 
-        topics = load_trec_topics(topicsfn)["title"]
-        # qid_query_docids = [(qid, query, runs.get(qid, {})) for qid, query in topics.items()]
-        # with get_context("spawn").Pool(10) as p:
-        #     bm25_lists = p.starmap(self.calc_bm25, qid_query_docids)
-        # assert len(bm25_lists) == len(qid_query_docids)
-        # bm25runs = {qid: bm25 for qid, bm25 in bm25_lists}
+        self["index"].open()
+        self.bm25_cache = {}
+
+        topic_cache_path = self.get_cache_path() / "topic.analyze.json"
+        if os.path.exists(topic_cache_path):
+            topics = json.load(open(topic_cache_path))
+            print(f"loading analyzed topic from cache {topic_cache_path}")
+        else:
+            topics = load_trec_topics(topicsfn)["title"]
+            topics = {qid: self["index"].analyze_sent(q) for qid, q in tqdm(topics.items(), desc="Transforming query")}
+            json.dump(topics, open(topic_cache_path, "w"))
+            print(f"storing analyzed topic from cache {topic_cache_path}")
 
         bm25runs = {}
-        docnos = self["index"].open()
         docnos = self["index"]["collection"].get_docnos()
 
-        def bm25(qid_queries):
-            for qid, query in qid_queries:
-                docids = runs.get(qid, None) if runs else docnos
-                bm25runs[qid] = self.calc_bm25(query, docids) if docids else {}
-
-        topics = list(topics.items())
-        n_thread, threads = 5, []
-        chunk_size = (len(topics) // n_thread) + 1
-        for i in range(n_thread):
-            start, end = i*chunk_size, (i+1)*chunk_size
-            t = Thread(target=bm25, args=[topics[start:end]])
-            threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join()
-
-        # for qid, query in tqdm(topics.items(), desc=f"Calculating bm25"):
-        #     docids = runs.get(qid, None)
-        #     bm25runs[qid] = self.calc_bm25(query, docids) if docids else {}
+        for qid, query in tqdm(topics.items(), desc=f"Calculating bm25"):
+            docids = runs.get(qid, None) if runs else docnos
+            bm25runs[qid] = self.calc_bm25(query, docids) if docids else {}
 
         os.makedirs(output_path, exist_ok=True)
-        print(f"runs: {len(bm25runs)}")
         self.write_trec_run(bm25runs, os.path.join(output_path, "searcher"))
 
         with open(donefn, "wt") as donef:
@@ -391,8 +362,7 @@ class CodeSearchDistractor(Searcher):
         csn_lang_dir = os.path.join(csn_rawdata_dir, lang, "final", "jsonl")
 
         runs = defaultdict(dict)
-        # for set_name in ["train", "valid", "test"]:
-        for set_name in ["valid", "test"]:
+        for set_name in ["train", "valid", "test"]:
             csn_lang_path = os.path.join(csn_lang_dir, set_name)
 
             objs = []
@@ -402,7 +372,8 @@ class CodeSearchDistractor(Searcher):
                     for line in tqdm(lines, desc=f"Processing set {set_name} {os.path.basename(fn)}"):
                         objs.append(json.loads(line))
 
-                        if len(objs) == 1000:  # 1 ground truth and 999 distractor docs
+                        size_neighbour = 20 if set_name == "train" else 1000
+                        if len(objs) == size_neighbour:  # 1 ground truth and 999 distractor docs
                             for obj1 in objs:
                                 qid = benchmark.get_qid(obj1["docstring_tokens"], parse=True)
                                 gt_docid = benchmark.get_docid(obj1["url"], obj1["code_tokens"], parse=True)
