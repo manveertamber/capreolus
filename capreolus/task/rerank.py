@@ -42,6 +42,7 @@ def train(config, modules):
 
     results = evaluator.search_best_run(searcher_run_dir, benchmark, metric)
     best_search_run_path = results["path"][fold]
+    print(best_search_run_path)
     best_search_run = searcher.load_trec_run(best_search_run_path)
 
     if config["rundocsonly"]:

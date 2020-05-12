@@ -214,13 +214,16 @@ class AnseriniIndexWithTf(AnseriniIndex):
             term = self.analyze(term)
 
         if not term:
-            return math.nan
+            # return math.nan
+            return 0
 
         if docid not in self.tf:
             docvec = self.get_doc_vec(docid)  # a dict that map docid to docvec, empty if not found
             self.tf[docid] = docvec
 
-        return self.tf[docid].get(term, math.nan)
+        # return self.tf[docid].get(term, math.nan)
+        return self.tf[docid].get(term, 0.0)
+
 
     def get_bm25_weight(self, term, docid, analyze=False):
         """

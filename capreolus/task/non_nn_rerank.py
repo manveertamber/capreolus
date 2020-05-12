@@ -25,7 +25,7 @@ def train(config, modules):
     if os.path.exists(os.path.join(rerank_path, "done")):
         print(rerank_path)
         print("Done Training")
-        # return
+        return
 
     # base searcher
     topics_fn = base_benchmark.topic_file

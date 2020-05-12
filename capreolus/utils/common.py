@@ -153,7 +153,9 @@ def plot_metrics(metrics, outfn, interactive=False, show={"map", "P_20", "ndcg_c
 
 
 def remove_newline(txt):
-    return txt.replace("\r", "").replace("\n", "").strip()
+    txt = txt.replace("\r", " ").replace("\n", " ").strip()
+    txt = " ".join(txt.split())
+    return txt
 
 
 def get_code_parser():
@@ -162,7 +164,11 @@ def get_code_parser():
     def code_parser(name):
         for pattern in camel_patterns:
             name = pattern.sub(r'\1 \2', name)  # tokenize camel naming
+        # before = name
+        # name = re.sub("[^0-9a-zA-Z]+", " ", name)  # remove special symbols like @, =,
         name = name.replace(":", " ").replace("_", " ").split()  # tokenize snake naming
+        # print(set(before.split()) - set(name))
+
         name = " ".join(name)  # remove extra space between tokens
         return name.lower()
 

@@ -89,8 +89,8 @@ class EmbedText(Extractor):
         embeddings = "glove6b"
         zerounk = False
         calcidf = True
-        maxqlen = 4
-        maxdoclen = 800
+        maxqlen = 30
+        maxdoclen = 100
         usecache = False
 
     def _get_pretrained_emb(self):
