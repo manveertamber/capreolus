@@ -2,12 +2,8 @@ import os
 import json
 import glob
 import gzip
-import math
 import subprocess
-from functools import reduce
 from collections import defaultdict, OrderedDict
-
-from time import time
 
 from tqdm import tqdm
 import numpy as np
@@ -227,8 +223,6 @@ class BM25Reranker(Searcher):
 
     def __calc_bm25(self, query, docid):
         doclen = self["index"].get_doclen(docid)
-        # t1 = time()
-
         k1s = [self.cfg["k1"]] if isinstance(self.cfg["k1"], float) else self.cfg["k1"].split("~")
         bs = [self.cfg["b"]] if isinstance(self.cfg["b"], float) else self.cfg["b"].split("~")
         k1_b = [(float(k1), float(b)) for k1 in k1s for b in bs]
@@ -238,40 +232,20 @@ class BM25Reranker(Searcher):
         bm25_per_qterm = {f"k1={k1},b={b}": (docid, sum(
             [idfs[term] * tfs[term] / (tfs[term] + k1 * (1 - b + b * doclen / self.avg_doc_len)) for term in query]))
             for k1, b in k1_b}
-        # print(f"{time() - t1}\tcalc bm25 per query")
         return bm25_per_qterm
 
     def calc_bm25(self, query, docids):
-        def flat_dict(d1, d2):
-            for k in d2:
-                d2[k].update(d1[k])
-            return d2
-        # bm25s = reduce(flat_dict, runname_docid_scores)
-
-        # t1 = time()
         runname_docid_scores = [self.__calc_bm25(query, docid) for docid in docids]  # {runname: {docid: score}}
-        # print(f"{time() - t1}\tcalc bm25 for all docid")
-        # t1 = time()
-        # bm25s = reduce(flat_dict, runname_docid_scores)
-
         runnames = runname_docid_scores[0].keys()
         bm25s = {runname:
             {r_idx_score[runname][0]: r_idx_score[runname][1] for r_idx_score in runname_docid_scores}
             for runname in runnames}
-
-        # print(f"{time() - t1}\treduce operation")
-        # t1 = time()
-
-        # for docid, runname_bm25 in docid_runname_bm25.items():
-        #     for runname, score in runname_bm25.items():
-        #         bm25s[runname].update({docid: score})
 
         for runname in bm25s:
             if self.cfg["hits"] >= len(bm25s[runname]):
                 continue
             sorted_bm25 = sorted(bm25s[runname].items(), key=lambda k_v: k_v[1], reverse=True)
             bm25s[runname] = {docid: score for docid, score in sorted_bm25[:self.cfg["hits"]]}
-        # print(f"{time() - t1}\tsort and keep only first 1k")
 
         return bm25s
 
@@ -280,7 +254,7 @@ class BM25Reranker(Searcher):
         donefn = os.path.join(output_path, "done")
         if os.path.exists(donefn):
             logger.debug(f"done file for {self.name} already exists, skip search")
-            # return output_path
+            return output_path
 
         self["index"].open()
 
@@ -305,19 +279,12 @@ class BM25Reranker(Searcher):
         if isinstance(runs, dict):  # filter undesired query if runs are given
             topics = [(qid, query) for qid, query in topics.items() if qid in runs]
         for qid, query in tqdm(topics, desc=f"Calculating bm25"):
-            # t1 = time()
             docids = runs.get(qid, None) if runs else docnos
-            # print(f"{time() - t1}\tget docid")
-            # t1 = time()
             runname_bm25 = self.calc_bm25(query, docids)
-            # print(f"{time() - t1}\tcalc_all bm25")
-            # t1 = time()
             for runname, bm25 in runname_bm25.items():
                 bm25runs[runname][qid] = bm25
-            # print(f"{time() - t1}\treorder everything")
 
         os.makedirs(output_path, exist_ok=True)
-
         for runname in bm25runs:
             self.write_trec_run(bm25runs[runname], os.path.join(output_path, f"searcher_{runname}"))
 
