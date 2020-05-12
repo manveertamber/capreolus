@@ -1,5 +1,5 @@
 from capreolus.registry import ModuleBase, RegisterableModule, Dependency
-
+from capreolus.utils.common import get_code_parser
 
 class Tokenizer(ModuleBase, metaclass=RegisterableModule):
     """the module base class"""
@@ -41,3 +41,27 @@ class AnseriniTokenizer(Tokenizer):
             return self._tokenize(sentences)
 
         return [self._tokenize(s) for s in sentences]
+
+
+class CodeTokenizer(AnseriniTokenizer):
+    """ A tokenizer specially handles camel and snake naming form on top of Anserini tokenization """
+    name = "code"
+
+    @staticmethod
+    def config():
+        keepstops = True
+        stemmer = "none"
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self._tokenize = self._get_tokenize_fn()
+
+    def _get_tokenize_fn(self):
+        """ add code tokenizer on top of the super() tokenizer """
+        tokenizefn = super()._get_tokenize_fn()
+        code_parser = get_code_parser()
+
+        def _tokenize(sentence):
+            return tokenizefn(code_parser(sentence))
+
+        return _tokenize

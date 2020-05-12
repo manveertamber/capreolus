@@ -181,11 +181,15 @@ class AnseriniIndexWithTf(AnseriniIndex):
         if analyze:
             term = self.analyze(term)
 
-        if not term or term in ["in", "at", "an", "it", "on", "be", "their", "or", "is", "no", "with", "will"]:
-            return 0
+        # if not term or term in ["in", "at", "an", "it", "on", "be", "their", "or", "is", "no", "with", "will"]:
+        #     return 0
 
-        df, _ = self.index_reader_utils.get_term_counts(term)
-        return df
+        try:
+            df, _ = self.index_reader_utils.get_term_counts(term, analyzer=None)
+            return df
+        except Exception as e:
+            print(term, "|", e)
+            return 0
 
     def get_idf(self, term):
         """ BM25's IDF with a floor of 0 """
@@ -238,6 +242,8 @@ class AnseriniIndexWithTf(AnseriniIndex):
 
         self.tf, self.idf, self.doclen, self.term_analyze = {}, {}, {}, {}
 
+        cache_path = self.get_cache_path()
+        cache_path.mkdir(exist_ok=True, parents=True)
         tf_path = self.get_cache_path() / "tf.json"
         if os.path.exists(tf_path):
             self.tf = json.load(open(tf_path))

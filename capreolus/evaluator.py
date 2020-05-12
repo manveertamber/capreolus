@@ -38,7 +38,6 @@ def _mrr(rundoc, qrel):
 def mrr(qrels, runs, qids=None):
     qids = set(qrels.keys()) & set(runs.keys()) & set(qids) if qids \
         else set(qrels.keys()) & set(runs.keys())
-    print("length of qrel: ", f"qrel: {len(qrels)}; runs: {len(runs)}; qids: {len(qids)}")
 
     rundoc_qrel = [(runs.get(q, {}), qrels.get(q, {})) for q in qids]
     with get_context("spawn").Pool(12) as p:
@@ -89,6 +88,7 @@ def calc_single_query_runs_trec(qrel, run, metrics):
 def _eval_runs(runs, qrels, metrics, dev_qids):
     assert isinstance(metrics, list)
 
+    # print(f"runs: {len(runs)}, qrels: {len(qrels)}, dev_qids: {len(dev_qids)}")
     calc_mrr = "mrr" in metrics
     if calc_mrr:
         metrics.remove("mrr")
@@ -107,6 +107,10 @@ def _eval_runs(runs, qrels, metrics, dev_qids):
             assert len(trec_scores) == len(qrel_run_metrics)
 
         trec_scores = np.array(trec_scores).mean(axis=0).tolist()
+
+        print("trec_score / metrics: ", trec_scores, metrics)
+        if len(trec_scores) != len(metrics):
+            raise ValueError(f"Mismatch trec_score and metrics, metrics: {metrics}; trec score: {trec_scores}")
         trec_scores = dict(zip(metrics, trec_scores))
         scores.update(trec_scores)
 
@@ -174,8 +178,13 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     # TMP
     # p = "/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_runfile_camel_2/filtered_bm25"
     # p = "/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_runfile_4/filtered_bm25"
+    # p = "/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_runfile_lucenebm25/filtered_bm25/"
+    # p = "/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_runfile_python_nocomma/filtered_bm25/"
     # runfiles = [os.path.join(p, benchmark.cfg["lang"], "test.filtered.runfile")]
-    print("all runfiles", runfiles)
+
+    # runfiles = [f"/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-ruby/" \
+    #            f"index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-1000_k1-1.2/" \
+    #            f"codesearchnet_corpus/searcher"]
     # end of tmp
 
     best_scores = {s: {primary_metric: 0, "path": None} for s in folds}

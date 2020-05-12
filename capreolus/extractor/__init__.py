@@ -72,7 +72,7 @@ class EmbedText(Extractor):
     name = "embedtext"
     dependencies = {
         "index": Dependency(module="index", name="anserini", config_overrides={"indexstops": True, "stemmer": "none"}),
-        "tokenizer": Dependency(module="tokenizer", name="anserini"),
+        "tokenizer": Dependency(module="tokenizer", name="code"),
     }
 
     pad = 0
@@ -183,11 +183,10 @@ class EmbedText(Extractor):
         # return [self.embeddings[self.stoi[tok]] for tok in toks]
         return [self.stoi[tok] for tok in toks]
 
-    def id2vec(self, qid, posid, negid=None, query=None):
+    def id2vec(self, posid, negid=None, qid=None, query=None):
         if query is not None:
             if qid is None:
                 query = self["tokenizer"].tokenize(query)
-                pass
             else:
                 raise RuntimeError("received both a qid and query, but only one can be passed")
 

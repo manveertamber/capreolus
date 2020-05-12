@@ -23,6 +23,8 @@ def get_camel_parser():
     def camel_parser(name):
         for pattern in camel_patterns:
             name = pattern.sub(r'\1 \2', name)
+
+        name = name.replace(":", " ")
         return name.lower()
 
     return camel_parser
@@ -33,7 +35,7 @@ class Docobj2docid:
         self.docmap = json.load(open(docmap_fn))
 
     def __getitem__(self, item):
-        url, code_tokens = item["url"], " ".join(item["code_tokens"])
+        url, code_tokens = item["url"], remove_newline(" ".join(item["code_tokens"]))
         docids = self.docmap[url]
         return docids[0] if len(docids) == 1 else docids[code_tokens]
 
@@ -84,13 +86,12 @@ def prep_csn_runfile(csn_rawdata_dir, map_dir, langs, csn_outp_dir, withcamel=Tr
                                 docstring = camel_parser(docstring).replace("_", " ").strip() if withcamel else docstring # tmp
                                 docstring = " ".join(docstring.split()[:1020])  # for TooManyClause
                                 qid = qidmap[docstring]
+                                # print(qid, docstring, len(objs))
 
                                 for fake_rank, obj2 in enumerate(objs):
                                     docid = docidmap[obj2]
                                     all_docs.append(docid)
 
-                                    if docid == gt_docid:
-                                        fake_rank = 2000
                                     outp_f.write(f"{qid} Q0 {docid} {fake_rank} {(1000-fake_rank)/1000} csn\n")  # 0 Q0 go-FUNCTION-351245 1 9.159600 Anserini
                                 assert gt_docid in all_docs
                             objs = []  # reset
@@ -125,10 +126,10 @@ def filter_results(bm25_runfile_pattern, csn_runfile_dir, langs, outp_dir):
             csn_lang_path = os.path.join(csn_lang_dir, f"{set_name}.runfile.txt")  # used as filter
             runs = load_runfile(csn_lang_path)
 
-            # tmp
-            gts = {q: [d for d in runs[q] if runs[q][d] == "2000"] for q in runs}
-            found_docs = {}
-            # end of tmp
+            # # tmp
+            # gts = {q: [d for d in runs[q] if runs[q][d] == "2000"] for q in runs}
+            # found_docs = {}
+            # # end of tmp
 
             with open(bm25_lang_path) as f, open(outp_lang_dir, "w") as fout:
                 for l in f:
@@ -137,42 +138,38 @@ def filter_results(bm25_runfile_pattern, csn_runfile_dir, langs, outp_dir):
                     if qid not in runs:
                         continue
 
-                    assert gts.get(qid, None)
+                    # assert gts.get(qid, None)
                     if docid not in runs[qid]:
-                        # print(docid, len(runs[qid]), "qid; ", qid)
                         continue
 
                     fout.write(l)
                     # tmp
-                    if qid not in found_docs:
-                        found_docs[qid] = [docid]
-                    else:
-                        found_docs[qid].append(docid)
+                    # if qid not in found_docs:
+                    #     found_docs[qid] = [docid]
+                    # else:
+                    #     found_docs[qid].append(docid)
 
         print(f"finished {lang}")
         # tmp
-        print(f"number of recorded qid: {len(found_docs)}")
-        doclens = [len(d) for d in found_docs.values()]
-        print(f"doc statistics: ", max(doclens), min(doclens), sum(doclens)/len(doclens))
+        # print(f"number of recorded qid: {len(found_docs)}")
+        # doclens = [len(d) for d in found_docs.values()]
+        # print(f"doc statistics: ", max(doclens), min(doclens), sum(doclens)/len(doclens))
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--overwrite_csn_runfile", "-o", type=bool, default=False)
     parser.add_argument("--lang", "-l", type=str, default="all")
-    parser.add_argument("--withcamel", type=bool, default=False)
+    parser.add_argument("--withcamel", type=bool, default=True)
 
     parser.add_argument("--raw_csn_data", type=str, default="/tmp")
-    parser.add_argument("--csn_runfile_dir", type=str, default="./csn_runfile_4")
+    parser.add_argument("--csn_runfile_dir", type=str, default="./csn_runfile_python_nocomma")
     parser.add_argument(
         "--bm25_runfile_pattern", "-csn", type=str,
-        # default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camel_parser_lang-%s/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-100_k1-1.2/codesearchnet_corpus_camel_fix/searcher")
-        # default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_lang-%s_camelstemmer-True/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.4_hits-100_k1-0.9/codesearchnet_corpus_camelstemmer-True/searcher")
-        default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-100_k1-1.2/codesearchnet_corpus/searcher")
+        default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-1000_k1-1.2/codesearchnet_corpus/searcher")
     parser.add_argument(
         "--map_dir", type=str,
         default="/home/xinyu1zhang/mpi-spring/capreolus/capreolus/data/csn_corpus")
-        # default="/home/xinyu1zhang/mpi-spring/capreolus/capreolus/data/csn_corpus_camel")
 
     args = parser.parse_args()
     langs = parse_lang(args.lang)

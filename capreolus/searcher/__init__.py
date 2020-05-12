@@ -226,20 +226,26 @@ class BM25Reranker(Searcher):
         k1, b = self.cfg["k1"], self.cfg["b"]
         avg_doc_len = self["index"].get_avglen()
         doclen = self["index"].get_doclen(docid)
+
+        # print(f">>>>>> {query} {docid} avg doc len: ", avg_doc_len, "doclen: ", doclen)
+
         if doclen == -1:
             return -math.inf
 
         def term_bm25(term):
             tf = self["index"].get_tf(term, docid)
-            if tf == math.nan:
+            if math.isnan(tf):  # a == math.nan will always be False!
                 return math.nan
 
             idf = self["index"].get_idf(term)
             numerator = tf  # * (k1 + 1)  # ignore the (k1+1) since the constant does not affect the ranking result
             denominator = tf + k1 * (1 - b + b * doclen / avg_doc_len)
+            # print(term, "idf: ", idf, "tf: ", tf, "bm25: ", idf * numerator / denominator)
             return idf * numerator / denominator
 
         bm25_per_qterm = [term_bm25(qterm) for qterm in query]
+        # print(dict(zip(query, bm25_per_qterm)))
+        # print(np.nansum(bm25_per_qterm))
         return np.nansum(bm25_per_qterm)
 
     def calc_bm25(self, query, docids):
@@ -253,12 +259,20 @@ class BM25Reranker(Searcher):
         donefn = os.path.join(output_path, "done")
         if os.path.exists(donefn):
             logger.debug(f"done file for {self.name} already exists, skip search")
-            return output_path
+            # return output_path
 
         self["index"].open()
-        self.bm25_cache = {}
 
-        topic_cache_path = self.get_cache_path() / "topic.analyze.json"
+        # prepare topic
+        cache_fn = self.get_cache_path()
+        cache_fn.mkdir(exist_ok=True, parents=True)
+
+        # topics = load_trec_topics(topicsfn)["title"]
+        # print(409130, topics["408747"])
+        # print(cache_fn)
+        # print("after analyze: ")
+        # print(self["index"].analyze_sent(topics["408747"]))
+        topic_cache_path = cache_fn / "topic.analyze.json"
         if os.path.exists(topic_cache_path):
             topics = json.load(open(topic_cache_path))
             print(f"loading analyzed topic from cache {topic_cache_path}")
@@ -268,12 +282,18 @@ class BM25Reranker(Searcher):
             json.dump(topics, open(topic_cache_path, "w"))
             print(f"storing analyzed topic from cache {topic_cache_path}")
 
+        # print("from loaded: ")
+        # print(topics["408747"])
+
         bm25runs = {}
         docnos = self["index"]["collection"].get_docnos()
 
+        # topics = {"408747": topics["408747"]}
         for qid, query in tqdm(topics.items(), desc=f"Calculating bm25"):
+            # print(qid, query)
             docids = runs.get(qid, None) if runs else docnos
             bm25runs[qid] = self.calc_bm25(query, docids) if docids else {}
+        # raise
 
         os.makedirs(output_path, exist_ok=True)
         self.write_trec_run(bm25runs, os.path.join(output_path, "searcher"))
@@ -362,8 +382,10 @@ class CodeSearchDistractor(Searcher):
         csn_lang_dir = os.path.join(csn_rawdata_dir, lang, "final", "jsonl")
 
         runs = defaultdict(dict)
-        for set_name in ["train", "valid", "test"]:
+        # for set_name in ["train", "valid", "test"]:
+        for set_name in ["test"]:
             csn_lang_path = os.path.join(csn_lang_dir, set_name)
+            neighbour_size = 20 if set_name == "train" else 1000
 
             objs = []
             for fn in glob.glob(os.path.join(csn_lang_path, "*.jsonl.gz")):
@@ -372,8 +394,7 @@ class CodeSearchDistractor(Searcher):
                     for line in tqdm(lines, desc=f"Processing set {set_name} {os.path.basename(fn)}"):
                         objs.append(json.loads(line))
 
-                        size_neighbour = 20 if set_name == "train" else 1000
-                        if len(objs) == size_neighbour:  # 1 ground truth and 999 distractor docs
+                        if len(objs) == neighbour_size:  # 1 ground truth and 999 distractor docs
                             for obj1 in objs:
                                 qid = benchmark.get_qid(obj1["docstring_tokens"], parse=True)
                                 gt_docid = benchmark.get_docid(obj1["url"], obj1["code_tokens"], parse=True)
@@ -386,8 +407,17 @@ class CodeSearchDistractor(Searcher):
                                 assert gt_docid in all_docs
                             objs = []  # reset
 
+            # for valid and test set, in case of duplicated qid: preserve the only 1k neighbors
+            if set_name == "train":
+                continue
+
+            for qid in runs:
+                if len(runs[qid]) == neighbour_size:
+                    continue
+                top1kneighbor = sorted(runs[qid].items(), key=lambda k_v: k_v[1])
+                runs[qid] = {k: v for k, v in top1kneighbor[-neighbour_size:]}
+
         os.makedirs(output_path, exist_ok=True)
-        print(f"runs: {len(runs)}")
         self.write_trec_run(runs, os.path.join(output_path, "searcher"))
 
         with open(donefn, "wt") as donef:

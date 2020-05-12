@@ -40,7 +40,8 @@ def load_trec_topics(queryfn):
                 block = None
             elif line.startswith("<title>"):
                 # <title>  query here
-                title[qid].extend(line.strip().split()[1:])
+                # title[qid].extend(line.strip().split()[1:])
+                title[qid].extend(line.replace("<title>", "").strip().split())
                 block = "title"
                 # TODO does this sometimes start with Topic: ?
                 assert "Topic:" not in line
@@ -129,7 +130,7 @@ def document_to_trectxt(docno, txt):
 def topic_to_trectxt(qno, title, desc=None, narr=None):
     return f"<top>\n\n" \
            f"<num> Number: {qno}\n" \
-           f"<title>{title}\n\n" \
+           f"<title> {title}\n\n" \
            f"<desc> Description:\n{desc or title}\n\n" \
            f"<narr> Narrative:\n{narr or title}\n\n" \
            f"</top>\n\n\n"

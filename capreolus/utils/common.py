@@ -162,7 +162,7 @@ def get_code_parser():
     def code_parser(name):
         for pattern in camel_patterns:
             name = pattern.sub(r'\1 \2', name)  # tokenize camel naming
-        name = name.replace("_", " ").split()  # tokenize snake naming
+        name = name.replace(":", " ").replace("_", " ").split()  # tokenize snake naming
         name = " ".join(name)  # remove extra space between tokens
         return name.lower()
 

@@ -167,7 +167,8 @@ class CodeSearchNetCorpus(Benchmark):
         pkl_fn = tmp_dir / f"{lang}_dedupe_definitions_v2.pkl"
         doc_objs = pickle.load(open(pkl_fn, "rb"))
         self._docid_map = self._prep_docid_map(doc_objs)
-        assert self._get_n_docid() == len(doc_objs)
+        n_docid = self._get_n_docid()
+        assert n_docid == len(doc_objs), f"Expected {len(doc_objs)} documents yet got {n_docid}"
 
         # prepare folds, qrels, topics, docstring2qid  # TODO: shall we add negative samples?
         qrels, self._qid_map = defaultdict(dict), {}

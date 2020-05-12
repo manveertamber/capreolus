@@ -59,7 +59,7 @@ class TrainDataset(torch.utils.data.IterableDataset):
                 negdocid = random.choice(self.qid_to_negdocs[qid])
 
                 try:
-                    yield self.extractor.id2vec(qid, posdocid, negdocid)
+                    yield self.extractor.id2vec(posdocid, negdocid, qid=qid)
                 except MissingDocError:
                     # at training time we warn but ignore on missing docs
                     logger.warning(
@@ -84,7 +84,7 @@ class PredDataset(torch.utils.data.IterableDataset):
             for qid, docids in qid_docid_to_rank.items():
                 for docid in docids:
                     try:
-                        yield extractor.id2vec(qid, docid)
+                        yield extractor.id2vec(posid=docid, qid=qid)
                     except MissingDocError:
                         # when predictiong we raise an exception on missing docs, as this may invalidate results
                         logger.error("got none features for prediction: qid=%s posid=%s", qid, docid)

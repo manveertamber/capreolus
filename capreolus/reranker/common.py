@@ -90,3 +90,35 @@ def create_emb_layer(weights, non_trainable=True):
         layer.weight.requires_grad = True
 
     return layer
+
+
+def pool(tensor, dim=-1, pool_type="avg", ignore_padding=True):
+    """
+    conduct pool on given tensor over dimention dim
+
+    :param tensor: torch.tensor, it should at least has dimension dim
+    :param dim: int, which dimention to perform pool operation. default to be -1
+    :param pool_type: str, 'max' / 'avg'
+    :return:
+    """
+    supported_pool_type = ["max", "avg"]
+    if pool_type not in supported_pool_type:
+        raise ValueError(f"Unrecognized pooling type, should be one from {' '.join(supported_pool_type)}")
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError(f"Unexpected input type: expected torch.Tensor yet got {type(tensor)}")
+    if 0 <= dim and dim >= len(tensor.shape):
+        raise ValueError(f"Attempt to perform operation on dim {dim} on tensor with shape {tensor.shape}, {len(tensor.shape)}")
+
+    if pool_type == "max":
+        # only rows whose sum is zeros are considered as padding position
+        mask = (tensor.abs().sum(dim=-1) == 0).type(tensor.dtype)  # (B, T)
+        tensor = (tensor - mask.unsqueeze(dim=-1) * 1e5) if ignore_padding else tensor
+        max_values, indices = tensor.max(dim=dim)
+        return max_values
+
+    if pool_type == "avg":
+        if ignore_padding:
+            return tensor.mean(dim=dim)  # (B, H)
+
+        real_length = (tensor.abs().sum(dim=-1) != 0).sum(dim=-1, keepdim=True)  # (B, T) -> (B, 1)
+        return tensor.sum(dim=dim) / real_length
