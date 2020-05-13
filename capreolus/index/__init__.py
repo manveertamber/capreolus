@@ -3,10 +3,8 @@ import math
 import os
 import json
 import subprocess
-from itertools import islice
-from threading import Thread
-from multiprocessing import get_context, Process
 
+import jnius
 import numpy as np
 from tqdm import tqdm
 from pyserini.index.pyutils import IndexReaderUtils
@@ -161,7 +159,13 @@ class AnseriniIndexWithTf(AnseriniIndex):
         self.open()
         if isinstance(docid, int):
             docid = self.index_reader_utils.convert_internal_docid_to_collection_docid(docid)
-        return self.index_reader_utils.get_document_vector(docid)
+
+        try:
+            docvec = self.index_reader_utils.get_document_vector(docid)
+        except jnius.JavaException as e:
+            print("docid: ", docid, e)
+            docvec = {}
+        return docvec
 
     def calc_doclen_tfdict(self, docid):
         doc_vec = self.get_doc_vec(docid)
@@ -180,9 +184,6 @@ class AnseriniIndexWithTf(AnseriniIndex):
     def get_df(self, term, analyze=False):
         if analyze:
             term = self.analyze(term)
-
-        # if not term or term in ["in", "at", "an", "it", "on", "be", "their", "or", "is", "no", "with", "will"]:
-        #     return 0
 
         try:
             df, _ = self.index_reader_utils.get_term_counts(term, analyzer=None)
@@ -212,18 +213,9 @@ class AnseriniIndexWithTf(AnseriniIndex):
         """
         if analyze:
             term = self.analyze(term)
-
         if not term:
-            # return math.nan
             return 0
-
-        if docid not in self.tf:
-            docvec = self.get_doc_vec(docid)  # a dict that map docid to docvec, empty if not found
-            self.tf[docid] = docvec
-
-        # return self.tf[docid].get(term, math.nan)
         return self.tf[docid].get(term, 0.0)
-
 
     def get_bm25_weight(self, term, docid, analyze=False):
         """
