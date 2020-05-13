@@ -34,9 +34,9 @@ class Searcher(ModuleBase, metaclass=RegisterableModule):
         return run
 
     @staticmethod
-    def write_trec_run(preds, outfn):
+    def write_trec_run(preds, outfn, mode="wt"):
         count = 0
-        with open(outfn, "wt") as outf:
+        with open(outfn, mode) as outf:
             for qid in sorted(preds):
                 rank = 1
                 for docid, score in sorted(preds[qid].items(), key=lambda x: x[1], reverse=True):
@@ -272,21 +272,23 @@ class BM25Reranker(Searcher):
             json.dump(topics, open(topic_cache_path, "w"))
             print(f"storing analyzed topic from cache {topic_cache_path}")
 
-        bm25runs = defaultdict(dict)
         docnos = self["index"]["collection"].get_docnos()
         self.avg_doc_len = self["index"].get_avglen()
 
+        os.makedirs(output_path, exist_ok=True)
         if isinstance(runs, dict):  # filter undesired query if runs are given
             topics = [(qid, query) for qid, query in topics.items() if qid in runs]
+
+        mode = "w"
         for qid, query in tqdm(topics, desc=f"Calculating bm25"):
-            docids = runs.get(qid, None) if runs else docnos
+            docids = runs[qid] if runs else docnos
+            if not docids:
+                continue
+
             runname_bm25 = self.calc_bm25(query, docids)
             for runname, bm25 in runname_bm25.items():
-                bm25runs[runname][qid] = bm25
-
-        os.makedirs(output_path, exist_ok=True)
-        for runname in bm25runs:
-            self.write_trec_run(bm25runs[runname], os.path.join(output_path, f"searcher_{runname}"))
+                self.write_trec_run({qid: bm25}, os.path.join(output_path, f"searcher_{runname}"), mode)
+            mode = "a"
 
         with open(donefn, "wt") as donef:
             print("done", file=donef)
@@ -359,6 +361,10 @@ class CodeSearchDistractor(Searcher):
     name = "csn_distractors"
     dependencies = {"benchmark": Dependency(module="benchmark", name="codesearchnet_corpus")}
 
+    @staticmethod
+    def config():
+        includetrain = False
+
     def query_from_file(self, topicsfn, output_path):
         donefn = os.path.join(output_path, "done")
         if os.path.exists(donefn):
@@ -372,8 +378,8 @@ class CodeSearchDistractor(Searcher):
         csn_lang_dir = os.path.join(csn_rawdata_dir, lang, "final", "jsonl")
 
         runs = defaultdict(dict)
-        for set_name in ["train", "valid", "test"]:
-            # for set_name in ["test"]:
+        set_names = ["train", "valid", "test"] if self.cfg["includetrain"] else ["valid", "test"]
+        for set_name in set_names:
             csn_lang_path = os.path.join(csn_lang_dir, set_name)
             neighbour_size = 20 if set_name == "train" else 1000
 
@@ -397,6 +403,7 @@ class CodeSearchDistractor(Searcher):
                                 assert gt_docid in all_docs
                             objs = []  # reset
 
+            # TODO: is the following really necessary??
             # for valid and test set, in case of duplicated qid: preserve the only 1k neighbors
             if set_name == "train":
                 continue
