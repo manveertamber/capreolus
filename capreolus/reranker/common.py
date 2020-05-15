@@ -117,8 +117,13 @@ def pool(tensor, dim=-1, pool_type="avg", ignore_padding=True):
         return max_values
 
     if pool_type == "avg":
-        if ignore_padding:
+        if not ignore_padding:
             return tensor.mean(dim=dim)  # (B, H)
 
-        real_length = (tensor.abs().sum(dim=-1) != 0).sum(dim=-1, keepdim=True)  # (B, T) -> (B, 1)
-        return tensor.sum(dim=dim) / real_length
+        nonzero_pos = tensor.abs().sum(dim=-1) != 0  # (B, T)
+        real_length = nonzero_pos.sum(dim=-1, keepdim=True)  # (B, T) -> (B, 1)
+
+        tensor = tensor * nonzero_pos.unsqueeze(dim=-1)  # (B, T, H)
+        # if (real_length == 0).sum() > 0:
+        #     print(pool_type, real_length)
+        return tensor.sum(dim=dim) / real_length  # since real_length are not supposed to be zero
