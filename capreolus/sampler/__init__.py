@@ -88,7 +88,7 @@ class PredDataset(torch.utils.data.IterableDataset):
                     except MissingDocError:
                         # when predictiong we raise an exception on missing docs, as this may invalidate results
                         logger.error("got none features for prediction: qid=%s posid=%s", qid, docid)
-                        raise
+                        # raise
 
         self.generator_func = genf
 
