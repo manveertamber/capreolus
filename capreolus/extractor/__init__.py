@@ -3,6 +3,8 @@ from collections import defaultdict
 
 import os
 import numpy as np
+import torch
+import torch.nn as nn
 import hashlib
 from pymagnitude import Magnitude, MagnitudeUtils
 from tqdm import tqdm
@@ -87,10 +89,11 @@ class EmbedText(Extractor):
     @staticmethod
     def config():
         embeddings = "glove6b"
+        embdim = 300  # will be ignore if conflicts with pretrained embedding
         zerounk = False
         calcidf = True
-        maxqlen = 30
-        maxdoclen = 100
+        maxqlen = 4
+        maxdoclen = 800
         usecache = False
 
     def _get_pretrained_emb(self):
@@ -119,6 +122,11 @@ class EmbedText(Extractor):
             tokenize = self["tokenizer"].tokenize
             self.qid2toks = {qid: tokenize(topics[qid]) for qid in qids}
             self.docid2toks = {docid: tokenize(self["index"].get_doc(docid)) for docid in docids}
+
+            # filter empty query or docs in case of the dirty dataset
+            self.qid2toks = {qid: q for qid, q in self.qid2toks.items() if len(q) > 0}
+            self.docid2toks = {docid: doc for docid, doc in self.docid2toks.items() if len(doc) > 0}
+
             self._extend_stoi(self.qid2toks.values(), calc_idf=self.cfg["calcidf"])
             self._extend_stoi(self.docid2toks.values(), calc_idf=self.cfg["calcidf"])
             self.itos = {i: s for s, i in self.stoi.items()}
@@ -132,8 +140,16 @@ class EmbedText(Extractor):
     def _build_embedding_matrix(self):
         assert len(self.stoi) > 1  # needs more vocab than self.pad_tok
 
+        if self.cfg["embeddings"] == "random":
+            n_terms, emb_dim = len(self.stoi), self.cfg["embdim"]
+            self.embeddings = torch.zeros(n_terms, emb_dim)
+            nn.init.xavier_uniform_(self.embeddings)
+            return
+
         magnitude_emb = self._get_pretrained_emb()
         emb_dim = magnitude_emb.dim
+        if emb_dim != self.cfg["embdim"]:
+            logger.warning(f"specified emb_dim={self.cfg['embdim']} conflicts with the pretrained embedding, ignored")
         embed_vocab = set(term for term, _ in magnitude_emb)
         embed_matrix = np.zeros((len(self.stoi), emb_dim), dtype=np.float32)
 
@@ -143,6 +159,7 @@ class EmbedText(Extractor):
                 embed_matrix[idx] = magnitude_emb.query(term)
             elif term == self.pad_tok:
                 embed_matrix[idx] = np.zeros(emb_dim)
+                assert idx == self.pad
             else:
                 n_missed += 1
                 embed_matrix[idx] = np.zeros(emb_dim) if self.cfg["zerounk"] else np.random.normal(scale=0.5, size=emb_dim)
@@ -152,6 +169,8 @@ class EmbedText(Extractor):
             logger.warning(f"{n_missed}/{len(self.stoi)} (%.3f) term missed" % (n_missed / len(self.stoi)))
 
         self.embeddings = embed_matrix
+        # query: not in 20375 740043 0.027532183940662907
+        # not in 155715 3048936 0.05107191492376357
 
     def exist(self):
         return (
@@ -162,7 +181,6 @@ class EmbedText(Extractor):
         )
 
     def create(self, qids, docids, topics):
-
         if self.exist():
             return
 
@@ -191,6 +209,9 @@ class EmbedText(Extractor):
                 raise RuntimeError("received both a qid and query, but only one can be passed")
 
         else:
+            if qid not in self.qid2toks:
+                raise MissingDocError(qid, docid="shitty-query")
+
             query = self.qid2toks[qid]
 
         # TODO find a way to calculate qlen/doclen stats earlier, so we can log them and check sanity of our values
@@ -200,8 +221,16 @@ class EmbedText(Extractor):
             raise MissingDocError(qid, posid)
 
         idfs = padlist(self._get_idf(query), qlen, 0)
+
+        querystr, posdocstr = query, posdoc
         query = self._tok2vec(padlist(query, qlen, self.pad_tok))
         posdoc = self._tok2vec(padlist(posdoc, doclen, self.pad_tok))
+
+        # tmp
+        if sum(query) == 0:
+            print("query: ", qid, querystr, query, "is zero!")
+        if sum(posdoc) == 0:
+            print("posdoc: ", posid, posdocstr, posdoc, " is zero!")
 
         # TODO determine whether pin_memory is happening. may not be because we don't place the strings in a np or torch object
         data = {
@@ -218,8 +247,11 @@ class EmbedText(Extractor):
             if not negdoc:
                 raise MissingDocError(qid, negid)
 
+            negdocstr = negdoc
             negdoc = self._tok2vec(padlist(negdoc, doclen, self.pad_tok))
+            if sum(negdoc) == 0:
+                print("posdoc: ", negid, negdocstr, negdoc, " is zero!")
+
             data["negdocid"] = negid
             data["negdoc"] = np.array(negdoc, dtype=np.long)
-
         return data
