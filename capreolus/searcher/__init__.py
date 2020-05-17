@@ -219,7 +219,7 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
             "-rm3 "
             + " ".join(f"-rm3.{k}{suffix} {paras[k]}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
             + " -bm25 "
-            + " ".join(f"-bm25.{k} {paras[k]}" for k in ["k1", "b"])
+            + " ".join(f"-bm25.{k}{suffix} {paras[k]}" for k in ["k1", "b"])
             + f" -hits {hits}"
         )
         # anserini_param_str = f"-bm25 -bm25.k1 {paras['k1'][0]} -bm25.b {paras['b'][0]} " \
