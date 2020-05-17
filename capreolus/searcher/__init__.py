@@ -48,7 +48,7 @@ class Searcher(ModuleBase, metaclass=RegisterableModule):
 class AnseriniSearcherMixIn:
     """ MixIn for searchers that use Anserini's SearchCollection script """
 
-    def _anserini_query_from_file(self, topicsfn, anserini_param_str, output_base_path):
+    def _anserini_query_from_file(self, topicsfn, anserini_param_str, output_base_path, rerank=False, run_fn=""):
         if not os.path.exists(topicsfn):
             raise IOError(f"could not find topics file: {topicsfn}")
 
@@ -70,7 +70,15 @@ class AnseriniSearcherMixIn:
 
         index_path = self["index"].get_index_path()
         anserini_fat_jar = Anserini.get_fat_jar()
-        cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx31G -Dapp.name=SearchCollection io.anserini.search.SearchCollection -topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} -inmem -threads {MAX_THREADS} {anserini_param_str}"
+        if rerank:
+            anserini_fat_jar = "/home/xinyu1zhang/mpi-spring/anserini/target/anserini-0.9.1-SNAPSHOT-fatjar.jar"
+            cmd = f"java -classpath {anserini_fat_jar} " \
+                  f"-Xms512M -Xmx31G -Dapp.name=SimpleSearch io.anserini.search.SimpleSearcher " \
+                  f"-index {index_path} -topics {topicsfn} -output {output_path} -rerank -runfile {run_fn} " \
+                  f"-threads {MAX_THREADS} {anserini_param_str}"
+            print("reranking: ", cmd)
+        else:
+            cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx31G -Dapp.name=SearchCollection io.anserini.search.SearchCollection -topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} -inmem -threads {MAX_THREADS} {anserini_param_str}"
         logger.info("Anserini writing runs to %s", output_path)
         logger.debug(cmd)
 
@@ -92,15 +100,19 @@ class BM25(Searcher, AnseriniSearcherMixIn):
     """ BM25 with fixed k1 and b. """
 
     name = "BM25"
-    dependencies = {"index": Dependency(module="index", name="anserini")}
+    dependencies = {
+        "index": Dependency(module="index", name="anserini"),
+        "searcher": Dependency(module="searcher", name="csn_distractors"),
+    }
 
     @staticmethod
     def config():
         b = 0.4  # controls document length normalization
         k1 = 0.9  # controls term saturation
         hits = 1000
+        rerank = False
 
-    def query_from_file(self, topicsfn, output_path):
+    def query_from_file(self, topicsfn, output_path, run_fn=None):
         """
         Runs BM25 search. Takes a query from the topic files, and fires it against the index
         Args:
@@ -110,13 +122,20 @@ class BM25(Searcher, AnseriniSearcherMixIn):
         Returns: Path to the run file where the results of the search are stored
 
         """
+        if self.cfg["rerank"]:
+            if not (run_fn and os.path.exists(run_fn)):
+                raise ValueError(f"Invalid runfile path: {run_fn}")
+
         bs = [self.cfg["b"]]
         k1s = [self.cfg["k1"]]
         bstr = " ".join(str(x) for x in bs)
         k1str = " ".join(str(x) for x in k1s)
         hits = self.cfg["hits"]
         anserini_param_str = f"-bm25 -bm25.b {bstr} -bm25.k1 {k1str} -hits {hits}"
-        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path)
+        if self.cfg["rerank"]:
+            self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, True, run_fn)
+        else:
+            self._anserini_query_from_file(topicsfn, anserini_param_str, output_path)
 
         return output_path
 
@@ -168,7 +187,10 @@ class BM25Grid(Searcher, AnseriniSearcherMixIn):
 class BM25RM3(Searcher, AnseriniSearcherMixIn):
 
     name = "BM25RM3"
-    dependencies = {"index": Dependency(module="index", name="anserini")}
+    dependencies = {
+        "index": Dependency(module="index", name="anserini"),
+        "searcher": Dependency(module="searcher", name="csn_distractors"),
+    }
 
     @staticmethod
     def config():
@@ -178,23 +200,36 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
         fbDocs = BM25RM3.list2str([5, 10, 15])
         originalQueryWeight = BM25RM3.list2str([0.2, 0.25])
         hits = 1000
+        rerank=False
 
     @staticmethod
     def list2str(l):
         return "-".join(str(x) for x in l)
 
-    def query_from_file(self, topicsfn, output_path):
+    def query_from_file(self, topicsfn, output_path, run_fn=None):
+        if self.cfg["rerank"]:
+            if not (run_fn and os.path.exists(run_fn)):
+                raise ValueError(f"Invalid runfile path: {run_fn}")
+
         paras = {k: " ".join(self.cfg[k].split("-")) for k in ["k1", "b", "fbTerms", "fbDocs", "originalQueryWeight"]}
         hits = str(self.cfg["hits"])
 
+        suffix = ".multi" if self.cfg["rerank"] else ""
         anserini_param_str = (
             "-rm3 "
-            + " ".join(f"-rm3.{k} {paras[k]}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
+            + " ".join(f"-rm3.{k}{suffix} {paras[k]}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
             + " -bm25 "
             + " ".join(f"-bm25.{k} {paras[k]}" for k in ["k1", "b"])
             + f" -hits {hits}"
         )
-        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path)
+        # anserini_param_str = f"-bm25 -bm25.k1 {paras['k1'][0]} -bm25.b {paras['b'][0]} " \
+        #                      f"-rm3 " \
+        #                      f"-rm3.fbTerms {paras['fbTerms'][0]} -rm3.fbDocs {paras['fbDocs'][0]} " \
+        #                      f"-rm3.originalQueryWeight {paras['originalQueryWeight'][0]} "
+        if self.cfg["rerank"]:
+            self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, True, run_fn)
+        else:
+            self._anserini_query_from_file(topicsfn, anserini_param_str, output_path)
 
         return output_path
 
@@ -384,7 +419,7 @@ class CodeSearchDistractor(Searcher):
             neighbour_size = 20 if set_name == "train" else 1000
 
             objs = []
-            for fn in glob.glob(os.path.join(csn_lang_path, "*.jsonl.gz")):
+            for fn in sorted(glob.glob(os.path.join(csn_lang_path, "*.jsonl.gz"))):
                 with gzip.open(fn, "rb") as f:
                     lines = f.readlines()
                     for line in tqdm(lines, desc=f"Processing set {set_name} {os.path.basename(fn)}"):
