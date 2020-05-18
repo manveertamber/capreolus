@@ -158,10 +158,15 @@ def remove_newline(txt):
     return txt
 
 
-def get_code_parser():
+def get_code_parser(remove_punc):
     camel_patterns = [re.compile('(.)([A-Z][a-z]+)'), re.compile('([a-z0-9])([A-Z])')]
 
     def code_parser(name):
+        if remove_punc:
+            name = re.sub('[^A-Za-z]+', ' ', name).strip()  # TODO: shall we keep numbers??
+            if name == "":
+                name = "emptytmp"
+
         for pattern in camel_patterns:
             name = pattern.sub(r'\1 \2', name)  # tokenize camel naming
         # before = name
