@@ -1,4 +1,5 @@
 import os
+import glob
 from tqdm import tqdm
 from multiprocessing import Pool, get_context
 
@@ -35,7 +36,7 @@ def _mrr(rundoc, qrel):
     return 1/min(pos_doc_ranks)
 
 
-def mrr(qrels, runs, qids=None):
+def mrr(qrels, runs, qids=None, aggregate=True):
     qids = set(qrels.keys()) & set(runs.keys()) & set(qids) if qids \
         else set(qrels.keys()) & set(runs.keys())
 
@@ -44,7 +45,10 @@ def mrr(qrels, runs, qids=None):
         ranks = p.starmap(_mrr, rundoc_qrel)
     # print("number of runs: ", len(ranks),  sum(ranks) / len(ranks), "number of zero: ", ranks.count(0.0))
 
-    return sum(ranks) / len(ranks)
+    if aggregate:
+        return sum(ranks) / len(ranks)
+    else:
+        return dict(zip(qids, ranks))
 
 
 def _verify_metric(metrics):
@@ -178,6 +182,8 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
         metrics = [primary_metric] + metrics
 
     folds = {s: benchmark.folds[s] for s in [folds]} if folds else benchmark.folds
+    # folds = {s: f for s, f in folds.items() if not os.path.exists(os.path.join(runfile_dir, f".{s}.best"))}
+    folds = {s: f for s, f in folds.items() if not glob.glob(os.path.join(runfile_dir, f".{s}.best*"))}
     runfiles = [
         os.path.join(runfile_dir, f)
         for f in os.listdir(runfile_dir)
@@ -185,12 +191,12 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     ]
 
     # runfiles = ["/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_rm3/filtered_bm25/ruby/test.filtered.runfile"]
+    # runfiles = ["/home/xinyu1zhang/mpi-spring/capreolus/capreolus/csn_rm3new/filtered_bm25/ruby/test.filtered.runfile"]
     # print("runfiles: ", runfiles)
 
     best_scores = {s: {primary_metric: 0, "path": None} for s in folds}
     for runfile in tqdm(runfiles, desc="Processing available runfiles"):
         runs = Searcher.load_trec_run(runfile)
-        # print("loaded ", runfile)
         if not runs:
             logger.warning(f"empty file: {runfile}")
             continue
@@ -205,9 +211,20 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
 
     test_runs, test_qrels = {}, {}
     for s, score_dict in best_scores.items():
+        best_path = score_dict["path"]
         test_qids = folds[s]["predict"]["test"]
-        test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
+        test_runs.update({qid: v for qid, v in Searcher.load_trec_run(best_path).items() if qid in test_qids})
         test_qrels.update({qid: v for qid, v in benchmark.qrels.items() if qid in test_qids})
+
+        # prepare a copy of the best one
+        dirname, basename = os.path.dirname(best_path), os.path.basename(best_path)
+        new_file = os.path.join(dirname, f"{s}.best.{basename}")
+        with open(new_file, "w") as fout:
+            # fout.write(basename+"\n")
+            with open(best_path) as f:
+                for line in f:
+                    fout.write(line)
+
 
     scores = eval_runs(test_runs, benchmark.qrels, metrics)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
