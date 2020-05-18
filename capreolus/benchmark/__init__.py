@@ -102,12 +102,15 @@ class CodeSearchNetCorpus(Benchmark):
     def config():
         lang = "ruby"  # which language dataset under CodeSearchNet
         camelstemmer = True
+        remove_punc = True
 
     def __init__(self, cfg):
         super().__init__(cfg)
-        lang, camel = cfg["lang"], cfg["camelstemmer"]
-        config_name = "with_camelstem" if camel else "without_camelstem"
-        self.parser = get_code_parser() if camel else (lambda x: x)
+        lang, camel, remove_punc = cfg["lang"], cfg["camelstemmer"], cfg["remove_punc"]
+        camel_config_name = "with_camelstem" if camel else "without_camelstem"
+        punc_config_name = "remove_punc" if remove_punc else "keep_punc"
+        config_name = camel_config_name + "-" + punc_config_name
+        self.parser = get_code_parser(remove_punc) if camel else (lambda x: x)
 
         self.qid_map_file = self.qidmap_dir / config_name / f"{lang}.json"
         self.docid_map_file = self.docidmap_dir / config_name / f"{lang}.json"

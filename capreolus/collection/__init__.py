@@ -256,6 +256,7 @@ class CodeSearchNet(Collection):
     def config():
         lang = "ruby"
         camelstemmer = True
+        remove_punc = True
 
     def download_if_missing(self):
         cachedir = self.get_cache_path()
@@ -295,7 +296,8 @@ class CodeSearchNet(Collection):
         with open(pkl_path, "rb") as f:
             codes = pickle.load(f)
 
-        code_parser = get_code_parser() if self.cfg["camelstemmer"] else None
+        code_parser = get_code_parser(self.cfg["remove_punc"]) if self.cfg["camelstemmer"] else None
+
         fout = open(trec_path, "w", encoding="utf-8")
         for i, code in tqdm(enumerate(codes), desc=f"Preparing the {lang} collection file"):
             docno = f"{lang}-FUNCTION-{i}"

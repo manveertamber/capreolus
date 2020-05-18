@@ -51,6 +51,7 @@ class CodeTokenizer(AnseriniTokenizer):
     def config():
         keepstops = True
         stemmer = "none"
+        remove_punc = True
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -59,7 +60,7 @@ class CodeTokenizer(AnseriniTokenizer):
     def _get_tokenize_fn(self):
         """ add code tokenizer on top of the super() tokenizer """
         tokenizefn = super()._get_tokenize_fn()
-        code_parser = get_code_parser()
+        code_parser = get_code_parser(self.cfg["remove_punc"])
 
         def _tokenize(sentence):
             return tokenizefn(code_parser(sentence))
