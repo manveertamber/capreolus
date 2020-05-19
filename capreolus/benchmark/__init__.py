@@ -11,7 +11,7 @@ from collections import defaultdict
 from capreolus.registry import ModuleBase, RegisterableModule, PACKAGE_PATH
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.trec import load_qrels, load_trec_topics, topic_to_trectxt
-from capreolus.utils.common import download_file, hash_file, remove_newline, get_code_parser
+from capreolus.utils.common import download_file, hash_file, remove_newline, get_code_parser, load_keywords
 
 logger = get_logger(__name__)
 
@@ -103,13 +103,17 @@ class CodeSearchNetCorpus(Benchmark):
         lang = "ruby"  # which language dataset under CodeSearchNet
         camelstemmer = True
         remove_punc = True
+        remove_keywords = True
 
     def __init__(self, cfg):
         super().__init__(cfg)
-        lang, camel, remove_punc = cfg["lang"], cfg["camelstemmer"], cfg["remove_punc"]
+        lang, camel, remove_punc, remove_keywords = \
+            cfg["lang"], cfg["camelstemmer"], cfg["remove_punc"], cfg["remove_keywords"]
         camel_config_name = "with_camelstem" if camel else "without_camelstem"
         punc_config_name = "remove_punc" if remove_punc else "keep_punc"
-        config_name = camel_config_name + "-" + punc_config_name
+        keyw_config_name = "remove_keywords" if remove_keywords else "keep_keywords"
+
+        config_name = camel_config_name + "-" + punc_config_name + "-" + keyw_config_name
         self.parser = get_code_parser(remove_punc) if camel else (lambda x: x)
 
         self.qid_map_file = self.qidmap_dir / config_name / f"{lang}.json"
@@ -122,6 +126,7 @@ class CodeSearchNetCorpus(Benchmark):
         for file in [var for var in vars(self) if var.endswith("file")]:
             eval(f"self.{file}").parent.mkdir(exist_ok=True, parents=True)  # TODO: is eval a good coding habit?
 
+        self.keywords = load_keywords(lang)
         self.download_if_missing()
 
     @property
@@ -196,7 +201,7 @@ class CodeSearchNetCorpus(Benchmark):
             set_path = tmp_dir / lang / "final" / "jsonl" / set_name
             for doc in gen_doc_from_gzdir(set_path):
                 code = self.process_sentence(" ".join(doc["code_tokens"]))
-                docstring = self.process_sentence(" ".join(doc["docstring_tokens"])).split()
+                docstring = self.process_sentence(" ".join(doc["docstring_tokens"]), is_code=False).split()
                 n_words_in_docstring = len(docstring)
                 if n_words_in_docstring >= 1024:
                     logger.warning(f"chunk query to first 1000 words otherwise TooManyClause would be triggered "
@@ -223,7 +228,11 @@ class CodeSearchNetCorpus(Benchmark):
             "predict": {"dev": qids["valid"], "test": qids["test"]}
         }}, open(self.fold_file, "w"))
 
-    def process_sentence(self, sent):
+    def process_sentence(self, sent, is_code=True):
+        if self.cfg["remove_keywords"] and is_code:
+            sent = sent.split() if isinstance(sent, str) else sent
+            sent = [w for w in sent if w.lower() not in self.keywords]
+
         if isinstance(sent, list):
             sent = " ".join(sent)
         sent = remove_newline(sent)
@@ -267,7 +276,7 @@ class CodeSearchNetCorpus(Benchmark):
 
     def get_qid(self, docstring, parse=False):
         if parse:
-            docstring = " ".join(self.process_sentence(docstring).split()[:1020])
+            docstring = " ".join(self.process_sentence(docstring, is_code=False).split()[:1020])
         return self.qid_map[docstring]
 
 

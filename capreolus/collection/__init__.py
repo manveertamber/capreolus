@@ -8,7 +8,7 @@ from tqdm import tqdm
 from zipfile import ZipFile
 
 from capreolus.registry import ModuleBase, RegisterableModule, PACKAGE_PATH
-from capreolus.utils.common import download_file, hash_file, remove_newline, get_code_parser
+from capreolus.utils.common import download_file, hash_file, remove_newline, get_code_parser, load_keywords
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.trec import anserini_index_to_trec_docs, document_to_trectxt, load_trec_coll_docno
 
@@ -257,8 +257,10 @@ class CodeSearchNet(Collection):
         lang = "ruby"
         camelstemmer = True
         remove_punc = True
+        remove_keywords = True
 
     def download_if_missing(self):
+        self.keywords = load_keywords(self.cfg["lang"])
         cachedir = self.get_cache_path()
         document_dir = cachedir / "documents"
         coll_filename = document_dir / ("csn-"+self.cfg["lang"]+"-collection.txt")
@@ -286,6 +288,10 @@ class CodeSearchNet(Collection):
         return document_dir
 
     def process_sentence(self, sent, parser=None):
+        if self.cfg["remove_keywords"]:
+            sent = sent.split() if isinstance(sent, str) else sent
+            sent = [w for w in sent if w.lower() not in self.keywords]
+
         if isinstance(sent, list):
             sent = " ".join(sent)
         sent = remove_newline(sent)
