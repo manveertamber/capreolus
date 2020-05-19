@@ -178,3 +178,12 @@ def get_code_parser(remove_punc):
         return name.lower()
 
     return code_parser
+
+
+def load_keywords(lang):
+    # TODO: REMOVE HARDCODE
+    root = "/home/xinyu1zhang/mpi-spring/capreolus/capreolus/data/csn_corpus/code_keywords/"
+    fn = os.path.join(root, f"{lang}.txt")
+    with open(fn) as f:
+        keywords = [l.strip().lower() for l in f.readlines()]
+    return keywords
