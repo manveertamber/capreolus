@@ -163,10 +163,14 @@ if __name__ == "__main__":
     parser.add_argument("--withcamel", type=bool, default=True)
 
     parser.add_argument("--raw_csn_data", type=str, default="/tmp")
-    parser.add_argument("--csn_runfile_dir", type=str, default="./csn_runfile_python_nocomma")
+    parser.add_argument("--csn_runfile_dir", type=str, default="./csn_rm3new")
     parser.add_argument(
         "--bm25_runfile_pattern", "-csn", type=str,
-        default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-1000_k1-1.2/codesearchnet_corpus/searcher")
+        default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/index-anserini_indexstops-False_stemmer-porter/benchmark-codesearchnet_corpus_camelstemmer-True_lang-ruby/searcher-csn_distractors_includetrain-False/searcher-BM25RM3_b-0.9_fbDocs-2_fbTerms-75_hits-1000_k1-1.0_originalQueryWeight-0.9_rerank-False/codesearchnet_corpus/searcher")
+        # default=f"/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/"
+        #         "index-anserini_indexstops-False_stemmer-porter/benchmark-codesearchnet_corpus_camelstemmer-True_lang-ruby/"
+        #         "searcher-csn_distractors_includetrain-False/searcher-BM25RM3_b-0.8_fbDocs-2_fbTerms-50_hits-1000_k1-1.0_originalQueryWeight-0.3_rerank-False/codesearchnet_corpus/searcher")
+        # default="/home/xinyu1zhang/.capreolus/cache/collection-codesearchnet_camelstemmer-True_lang-%s/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.75_hits-1000_k1-1.2/codesearchnet_corpus/searcher")
     parser.add_argument(
         "--map_dir", type=str,
         default="/home/xinyu1zhang/mpi-spring/capreolus/capreolus/data/csn_corpus")

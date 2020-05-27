@@ -41,8 +41,11 @@ def mrr(qrels, runs, qids=None, aggregate=True):
         else set(qrels.keys()) & set(runs.keys())
 
     rundoc_qrel = [(runs.get(q, {}), qrels.get(q, {})) for q in qids]
-    with get_context("spawn").Pool(12) as p:
-        ranks = p.starmap(_mrr, rundoc_qrel)
+    # ranks = [_mrr(*rq) for rq in tqdm(rundoc_qrel, desc="calc mrr")]
+    ranks = [_mrr(*rq) for rq in rundoc_qrel]
+    # with get_context("spawn").Pool(12) as p:
+    #     with Pool(12) as p:
+    #     ranks = p.starmap(_mrr, rundoc_qrel)
     # print("number of runs: ", len(ranks),  sum(ranks) / len(ranks), "number of zero: ", ranks.count(0.0))
 
     if aggregate:
@@ -102,22 +105,7 @@ def _eval_runs(runs, qrels, metrics, dev_qids):
 
     if metrics:  # in case only "mrr" is provided
         _verify_metric(metrics)
-        qids = set(dev_qids) & set(qrels.keys()) & set(runs.keys())
-        # qrel_run_metrics = [({q: qrels.get(q, {})}, {q: runs.get(q, {})}, metrics) for q in qids]
-        # qrel_run_metrics = [
-        #     (qrel, run, metrics) for qrel, run, metrics in qrel_run_metrics if len(qrel) > 0 and len(run) > 0]
-        # if not qrel_run_metrics:
-        #     logger.warning(f"empty qrels runs pair")
-        #     return 0
-        # print(f"qrel_run_metrics: {len(qrel_run_metrics)}")
-        # with get_context("spawn").Pool(12) as p:
-        #     trec_scores = p.starmap(calc_single_query_runs_trec, qrel_run_metrics)  # (Q, n_metrics)
-        #     assert len(trec_scores) == len(qrel_run_metrics)
-        # trec_scores = np.array(trec_scores).mean(axis=0).tolist()
-        # if len(trec_scores) != len(metrics):
-        #     raise ValueError(f"Mismatch trec_score and metrics, metrics: {metrics}; trec score: {trec_scores}")
-        # trec_scores = dict(zip(metrics, trec_scores))
-        # scores.update(trec_scores)
+        # qids = set(dev_qids) & set(qrels.keys()) & set(runs.keys())
 
         dev_qrels = {qid: labels for qid, labels in qrels.items() if (qid in dev_qids and qid in runs)}
         evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, _transform_metric(metrics))
@@ -220,11 +208,9 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
         dirname, basename = os.path.dirname(best_path), os.path.basename(best_path)
         new_file = os.path.join(dirname, f"{s}.best.{basename}")
         with open(new_file, "w") as fout:
-            # fout.write(basename+"\n")
             with open(best_path) as f:
                 for line in f:
                     fout.write(line)
-
 
     scores = eval_runs(test_runs, benchmark.qrels, metrics)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}

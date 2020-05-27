@@ -256,7 +256,7 @@ class CodeSearchNet(Collection):
     def config():
         lang = "ruby"
         camelstemmer = True
-        remove_punc = True
+        # remove_punc = True
         remove_keywords = True
 
     def download_if_missing(self):
@@ -288,21 +288,24 @@ class CodeSearchNet(Collection):
         return document_dir
 
     def process_sentence(self, sent, parser=None):
-        if self.cfg["remove_keywords"]:
-            sent = sent.split() if isinstance(sent, str) else sent
-            sent = [w for w in sent if w.lower() not in self.keywords]
+        # if self.cfg["remove_keywords"]:
+        #     sent = sent.split() if isinstance(sent, str) else sent
+        #     sent = [w for w in sent if w.lower() not in self.keywords]
+
+        keywords = self.keywords if (self.cfg["remove_keywords"]) else []
 
         if isinstance(sent, list):
             sent = " ".join(sent)
         sent = remove_newline(sent)
-        return parser(sent) if parser else sent
+        return parser(sent, keywords) if parser else sent
 
     def _pkl2trec(self, pkl_path, trec_path):
         lang = self.cfg["lang"]
         with open(pkl_path, "rb") as f:
             codes = pickle.load(f)
 
-        code_parser = get_code_parser(self.cfg["remove_punc"]) if self.cfg["camelstemmer"] else None
+        # code_parser = get_code_parser(self.cfg["remove_punc"]) if self.cfg["camelstemmer"] else None
+        code_parser = get_code_parser() if self.cfg["camelstemmer"] else None
 
         fout = open(trec_path, "w", encoding="utf-8")
         for i, code in tqdm(enumerate(codes), desc=f"Preparing the {lang} collection file"):

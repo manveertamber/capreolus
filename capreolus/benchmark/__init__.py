@@ -102,19 +102,23 @@ class CodeSearchNetCorpus(Benchmark):
     def config():
         lang = "ruby"  # which language dataset under CodeSearchNet
         camelstemmer = True
-        remove_punc = True
         remove_keywords = True
+        # remove_punc = True
 
     def __init__(self, cfg):
         super().__init__(cfg)
-        lang, camel, remove_punc, remove_keywords = \
-            cfg["lang"], cfg["camelstemmer"], cfg["remove_punc"], cfg["remove_keywords"]
+        lang, camel, remove_keywords = cfg["lang"], cfg["camelstemmer"], cfg["remove_keywords"]
         camel_config_name = "with_camelstem" if camel else "without_camelstem"
-        punc_config_name = "remove_punc" if remove_punc else "keep_punc"
         keyw_config_name = "remove_keywords" if remove_keywords else "keep_keywords"
 
-        config_name = camel_config_name + "-" + punc_config_name + "-" + keyw_config_name
-        self.parser = get_code_parser(remove_punc) if camel else (lambda x: x)
+        # lang, camel, remove_punc, remove_keywords = cfg["lang"], cfg["camelstemmer"], cfg["remove_punc"], cfg["remove_keywords"]
+        # punc_config_name = "remove_punc" if remove_punc else "keep_punc"
+        # config_name = camel_config_name + "-" + punc_config_name + "-" + keyw_config_name
+        # self.parser = get_code_parser(remove_punc) if camel else (lambda x: x)
+
+        config_name = camel_config_name + "-" + keyw_config_name
+        # self.parser = get_code_parser() if camel else (lambda x: x)
+        self.parser = get_code_parser() if camel else None
 
         self.qid_map_file = self.qidmap_dir / config_name / f"{lang}.json"
         self.docid_map_file = self.docidmap_dir / config_name / f"{lang}.json"
@@ -229,14 +233,15 @@ class CodeSearchNetCorpus(Benchmark):
         }}, open(self.fold_file, "w"))
 
     def process_sentence(self, sent, is_code=True):
-        if self.cfg["remove_keywords"] and is_code:
-            sent = sent.split() if isinstance(sent, str) else sent
-            sent = [w for w in sent if w.lower() not in self.keywords]
-
+        # if self.cfg["remove_keywords"] and is_code:
+        #     sent = sent.split() if isinstance(sent, str) else sent
+        #     sent = [w for w in sent if w.lower() not in self.keywords]
         if isinstance(sent, list):
             sent = " ".join(sent)
+
+        keywords = self.keywords if (self.cfg["remove_keywords"] and is_code) else []
         sent = remove_newline(sent)
-        return self.parser(sent)
+        return self.parser(sent, keywords) if self.parser else sent
 
     def _prep_docid_map(self, doc_objs):
         """
