@@ -37,7 +37,7 @@ def get_id_text(fn):
 def filtered_transform(cache_dir, kept_docs, outp_dir):
     exists = os.path.exists
     os.makedirs(outp_dir, exist_ok=True)
-    for i in range(1):
+    for i in range(4):
         cache_fold = os.path.join(cache_dir, f"pmc-0{i}")
         cache_fold_tar = f"{cache_fold}.tar.gz"
         if not exists(cache_fold) and not exists(cache_fold_tar):
