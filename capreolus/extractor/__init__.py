@@ -426,8 +426,8 @@ class BertText(Extractor):
 class BertPassage(Extractor):
     name = "bertpassage"
     dependencies = {
-        "index": Dependency(module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
-        "tokenizer": Dependency(module="tokenizer", name="berttokenizer"),
+        "index": Dependency(key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
+        "tokenizer": Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     }
 
     pad = 0
