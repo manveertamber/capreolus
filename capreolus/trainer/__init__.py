@@ -433,6 +433,7 @@ class TensorFlowTrainer(Trainer):
         ConfigOption("lr", 0.001, "learning rate"),
         ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
         # ConfigOption("fastforward", False),
+        ConfigOption("warmupsteps", 10),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
         ConfigOption("usecache", False),
@@ -492,9 +493,9 @@ class TensorFlowTrainer(Trainer):
         self.optimizer.apply_gradients(zip(grads, weights))
 
     def do_warmup(self, epoch):
-        warmup_steps = self.cfg["warmupsteps"]
+        warmup_steps = self.config["warmupsteps"]
         
-        return min(self.cfg["lr"] * ((epoch+1)/warmup_steps), self.cfg["lr"])
+        return min(self.config["lr"] * ((epoch+1)/warmup_steps), self.config["lr"])
 
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         # summary_writer = tf.summary.create_file_writer("{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"]))
