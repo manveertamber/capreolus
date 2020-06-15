@@ -66,7 +66,9 @@ class Extractor(ModuleBase):
         Returns a boolean indicating whether the state corresponding to the qids and docids passed has already
         been cached
         """
-        return os.path.exists(self.get_state_cache_file_path(qids, docids))
+        file_path = self.get_state_cache_file_path(qids, docids)
+        logger.debug("Looking for extractor cache at {}".format(file_path))
+        return os.path.exists(file_path)
 
     def _build_vocab(self, qids, docids, topics):
         raise NotImplementedError
