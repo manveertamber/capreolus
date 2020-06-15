@@ -16,11 +16,6 @@ class TFBERTMaxP_Class(tf.keras.Model):
         self.extractor = extractor
         self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
         self.config = config
-        self.aggregate_fn = self.get_aggregate_fn()
-
-    def get_aggregate_fn(self):
-        if self.config["mode"] == "maxp":
-            return tf.math.reduce_max
 
     def call(self, x, **kwargs):
         posdoc_input, posdoc_mask, posdoc_seg, negdoc_input, negdoc_mask, negdoc_seg = x
