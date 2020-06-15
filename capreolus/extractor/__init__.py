@@ -422,9 +422,9 @@ class BertText(Extractor):
         mask = [1 for _ in s] + [0 for _ in range(padlen)]
         return mask
 
-
+@Extractor.register
 class BertPassage(Extractor):
-    name = "bertpassage"
+    module_name = "bertpassage"
     dependencies = {
         "index": Dependency(key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
         "tokenizer": Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
@@ -432,6 +432,14 @@ class BertPassage(Extractor):
 
     pad = 0
     pad_tok = " "
+
+    config_spec = [
+        ConfigOption("maxqlen", 8, "Max query length"), ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
+        ConfigOption("usecache", False, "Should the extracted features be cached?"),
+        ConfigOption("passagelen", 150, "Length of the extracted passage"),
+        ConfigOption("stride", 100, "Stride"),
+        ConfigOption("numpassages", 16, "Number of passages per document")
+    ]
 
     @staticmethod
     def config():
