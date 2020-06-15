@@ -116,6 +116,6 @@ class TFBERTMaxP(Reranker):
         ConfigOption("stride", 20, "Stride"),
     ]
 
-    def build(self):
+    def build_model(self):
         self.model = TFBERTMaxP_Class(self.extractor, self.config)
         return self.model
