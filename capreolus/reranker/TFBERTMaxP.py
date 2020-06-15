@@ -1,7 +1,7 @@
 import tensorflow as tf
-from transformers import TFBertForSequenceClassification, BertConfig
+from transformers import TFBertForSequenceClassification
 
-from capreolus.registry import Dependency
+from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 from capreolus.utils.loginit import get_logger
 
@@ -106,21 +106,20 @@ class TFBERTMaxP_Class(tf.keras.Model):
     #     negdoc_scores = tf.math.reduce_max(neg_passage_scores.stack(), axis=0)
     #     return tf.stack([posdoc_scores, negdoc_scores], axis=1)
 
-
+@Reranker.register
 class TFBERTMaxP(Reranker):
-    name = "TFBERTMaxP"
-    dependencies = {
-        "extractor": Dependency(module="extractor", name="bertpassage"),
-        "trainer": Dependency(module="trainer", name="tensorflow"),
-    }
+    module_name = "TFBERTMaxP"
 
-    @staticmethod
-    def config():
-        pretrained = "bert-base-uncased"
-        passagelen = 100
-        dropout=0.1
-        stride = 20
-        mode = "maxp"
+    dependencies = [
+        Dependency(key="extractor", module="extractor", name="bertpassage"),
+        Dependency(key="trainer", module="trainer", name="tensorflow"),
+    ]
+    config_spec = [
+        ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),
+        ConfigOption("passagelen", 100, "Passage length"),
+        ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
+        ConfigOption("stride", 20, "Stride"),
+    ]
 
     def build(self):
         self.model = TFBERTMaxP_Class(self["extractor"], self.cfg)
