@@ -506,7 +506,7 @@ class BertPassage(Extractor):
 
         def parse_tensor(x):
             parsed_tensor = tf.io.parse_tensor(x, tf.int64)
-            parsed_tensor.set_shape([self.cfg["numpassages"], self.cfg["maxseqlen"]])
+            parsed_tensor.set_shape([self.config["numpassages"], self.config["maxseqlen"]])
 
             return parsed_tensor
 
@@ -521,7 +521,7 @@ class BertPassage(Extractor):
         return (posdoc, posdoc_mask, posdoc_seg, negdoc, negdoc_mask, negdoc_seg), label
 
     def _build_vocab(self, qids, docids, topics):
-        if self.is_state_cached(qids, docids) and self.cfg["usecache"]:
+        if self.is_state_cached(qids, docids) and self.config["usecache"]:
             self.load_state(qids, docids)
             logger.info("Vocabulary loaded from cache")
         else:
@@ -535,11 +535,11 @@ class BertPassage(Extractor):
                 # Naive tokenization based on white space
                 doc = get_doc(docid).split()
                 passages = []
-                for i in range(0, self.cfg["numpassages"]):
+                for i in range(0, self.config["numpassages"]):
                     if i >= len(doc):
-                        passage = padlist([], padlen=self.cfg["passagelen"], pad_token=self.pad_tok)
+                        passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
-                        passage = padlist(doc[i: i+self.cfg["passagelen"]], padlen=self.cfg["passagelen"], pad_token=self.pad_tok)
+                        passage = padlist(doc[i: i+self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
 
                     # N.B: The passages are not bert tokenized.
                     passages.append(tokenize(" ".join(passage)))
@@ -557,7 +557,7 @@ class BertPassage(Extractor):
         if self.exist():
             return
 
-        if self.cfg["maxseqlen"] < self.cfg["passagelen"] + self.cfg["maxqlen"] + 3:
+        if self.config["maxseqlen"] < self.config["passagelen"] + self.config["maxqlen"] + 3:
             raise ValueError("maxseqlen is too short")
 
         self["index"].create_index()
@@ -568,7 +568,7 @@ class BertPassage(Extractor):
 
     def id2vec(self, qid, posid, negid=None):
         tokenizer = self["tokenizer"]
-        maxseqlen = self.cfg["maxseqlen"]
+        maxseqlen = self.config["maxseqlen"]
 
         query_toks = self.qid2toks[qid]
         pos_bert_inputs = []
@@ -583,7 +583,7 @@ class BertPassage(Extractor):
                 input_line = input_line[:maxseqlen]
                 input_line[-1] = '[SEP]'
 
-            padded_input_line = padlist(input_line, padlen=self.cfg["maxseqlen"], pad_token=self.pad_tok)
+            padded_input_line = padlist(input_line, padlen=self.config["maxseqlen"], pad_token=self.pad_tok)
             pos_bert_masks.append([1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line)))
             pos_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
             pos_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
@@ -596,9 +596,9 @@ class BertPassage(Extractor):
             "posdoc_mask": np.array(pos_bert_masks, dtype=np.long),
             "posdoc_seg": np.array(pos_bert_segs, dtype=np.long),
             "negdocid": "",
-            "negdoc": np.zeros((self.cfg["numpassages"], self.cfg["maxseqlen"]), dtype=np.long),
-            "negdoc_mask": np.zeros((self.cfg["numpassages"], self.cfg["maxseqlen"]), dtype=np.long),
-            "negdoc_seg": np.zeros((self.cfg["numpassages"], self.cfg["maxseqlen"]), dtype=np.long),
+            "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
 
         }
 
@@ -613,7 +613,7 @@ class BertPassage(Extractor):
                     input_line = input_line[:maxseqlen]
                     input_line[-1] = '[SEP]'
 
-                padded_input_line = padlist(input_line, padlen=self.cfg["maxseqlen"], pad_token=self.pad_tok)
+                padded_input_line = padlist(input_line, padlen=self.config["maxseqlen"], pad_token=self.pad_tok)
                 neg_bert_masks.append([1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line)))
                 neg_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
                 neg_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
