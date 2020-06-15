@@ -59,17 +59,18 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     return scores
 
 
-def eval_runs(runs, qrels, metrics, relevance_level):
+def eval_runs(runs, qrels, metrics, relevance_level=1):
     """
-    Evaluate runs loaded by Searcher.load_trec_run
+    Evaluate runs produced by a ranker (or loaded with Searcher.load_trec_run)
 
     Args:
-        runs: a dict with format {qid: {docid: score}}, could be prepared by Searcher.load_trec_run
-        qrels: dict, containing the judgements provided by benchmark
-        metrics: str or list, metrics expected to calculate, e.g. ndcg_cut_20, etc
+        runs: dict in the format ``{qid: {docid: score}}``
+        qrels: dict containing relevance judgements (e.g., ``benchmark.qrels``)
+        metrics (str or list): metrics to calculate (e.g., ``evaluator.DEFAULT_METRICS``)
+        relevance_level (int): relevance label threshold to use with non-graded metrics (equivalent to trec_eval's --level_for_rel)
 
     Returns:
-        a dict with format {metric: score}, containing the evaluation score of specified metrics
+           dict: a dict in the format ``{metric: score}`` containing the average score for each metric
     """
     metrics = [metrics] if isinstance(metrics, str) else list(metrics)
     return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
@@ -92,12 +93,12 @@ def eval_runfile(runfile, qrels, metrics, relevance_level):
     return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
 
 
-def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=None):
+def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None):
     """
     Select the runfile with respect to the specified metric
 
     Args:
-        runfile_dir: the directory path to all the runfiles to select from
+        runfile_dirs: the directory path to all the runfiles to select from
         benchmark: Benchmark class
         primary_metric: str, metric used to select the best runfile , e.g. ndcg_cut_20, etc
         metrics: str or list, metric expected by be calculated on the best runs
@@ -106,6 +107,10 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     Returns:
        a dict storing specified metric score and path to the corresponding runfile
     """
+
+    if not isinstance(runfile_dirs, (list, tuple)):
+        runfile_dirs = [runfile_dirs]
+
     metrics = [] if not metrics else ([metrics] if isinstance(metrics, str) else list(metrics))
     if primary_metric not in metrics:
         metrics = [primary_metric] + metrics
@@ -113,6 +118,7 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     folds = {s: benchmark.folds[s] for s in [folds]} if folds else benchmark.folds
     runfiles = [
         os.path.join(runfile_dir, f)
+        for runfile_dir in runfile_dirs
         for f in os.listdir(runfile_dir)
         if (f != "done" and not os.path.isdir(os.path.join(runfile_dir, f)))
     ]
