@@ -122,5 +122,5 @@ class TFBERTMaxP(Reranker):
     ]
 
     def build(self):
-        self.model = TFBERTMaxP_Class(self["extractor"], self.cfg)
+        self.model = TFBERTMaxP_Class(self.extractor, self.config)
         return self.model
