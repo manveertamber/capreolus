@@ -553,7 +553,7 @@ class BertPassage(Extractor):
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
 
-    def create(self, qids, docids, topics):
+    def preprocess(self, qids, docids, topics):
         if self.exist():
             return
 
