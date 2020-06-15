@@ -526,8 +526,8 @@ class BertPassage(Extractor):
             logger.info("Vocabulary loaded from cache")
         else:
             logger.info("Building bertpassage vocabulary")
-            tokenize = self["tokenizer"].tokenize
-            get_doc = self["index"].get_doc
+            tokenize = self.tokenizer.tokenize
+            get_doc = self.index.get_doc
             self.docid2passages = {}
 
             # TODO: Move this to a method
@@ -560,14 +560,14 @@ class BertPassage(Extractor):
         if self.config["maxseqlen"] < self.config["passagelen"] + self.config["maxqlen"] + 3:
             raise ValueError("maxseqlen is too short")
 
-        self["index"].create_index()
+        self.index.create_index()
         self.qid2toks = defaultdict(list)
         self.docid2passages = None
 
         self._build_vocab(qids, docids, topics)
 
     def id2vec(self, qid, posid, negid=None):
-        tokenizer = self["tokenizer"]
+        tokenizer = self.tokenizer
         maxseqlen = self.config["maxseqlen"]
 
         query_toks = self.qid2toks[qid]
