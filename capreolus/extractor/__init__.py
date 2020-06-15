@@ -426,7 +426,7 @@ class BertText(Extractor):
 class BertPassage(Extractor):
     name = "bertpassage"
     dependencies = {
-        "index": Dependency(module="index", name="anserini", config_overrides={"indexstops": True, "stemmer": "none"}),
+        "index": Dependency(module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
         "tokenizer": Dependency(module="tokenizer", name="berttokenizer"),
     }
 
