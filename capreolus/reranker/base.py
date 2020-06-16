@@ -1,4 +1,5 @@
 import os
+import tensorflow as tf
 import pickle
 
 from profane import ConfigOption, Dependency, ModuleBase
@@ -45,3 +46,34 @@ class Reranker(ModuleBase):
         optimizer_fn = weights_fn.as_posix() + ".optimizer"
         with open(optimizer_fn, "rb") as f:
             optimizer.load_state_dict(pickle.load(f))
+
+
+class KerasModel(tf.keras.Model):
+    """
+    Wrapper class for Keras models. Handles the invocation of call() based on whether the training
+    input is a triplet or a pair
+    """
+    def __init__(self, model, config, *args, **kwargs):
+        super(KerasModel, self).__init__(*args, **kwargs)
+        self.model = model
+        self.config = config
+
+    def call(self, x, **kwargs):
+        posdoc, negdoc, query, additional = x[0], x[1], x[2], x[3:]
+
+        def score_pos():
+            return self.model((posdoc, query, ) + tuple(additional))
+
+        def score_pos_and_neg():
+            pos_score = self.model((posdoc, query) + tuple(additional))
+            neg_score = self.model((negdoc, query) + tuple(additional))
+
+            return tf.stack([pos_score, neg_score], axis=1)
+
+        # If the negdoc is a zero tensor, score only the positive document
+        # If the negdoc tensor is zero, it could either mean:
+        #   1. The training input is pairwise (eg: when using cross-entropy loss) instead of triplets (eg: pairwise-hinge loss)
+        #   2. We are predicting on a validation/dev set
+        result = tf.cond(tf.equal(tf.math.count_nonzero(negdoc), 0), score_pos, score_pos_and_neg)
+
+        return result

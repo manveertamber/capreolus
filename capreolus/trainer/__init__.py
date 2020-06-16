@@ -416,7 +416,7 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
 
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
             # Pytrec_eval has problems with high precision floats
-            pred_dict[qid][docid] = predictions[i][0].astype(np.float16).item()
+            pred_dict[qid][docid] = predictions[i].astype(np.float16).item()
 
         return dict(pred_dict)
 
@@ -497,6 +497,14 @@ class TensorFlowTrainer(Trainer):
         
         return min(self.config["lr"] * ((epoch+1)/warmup_steps), self.config["lr"])
 
+    def get_loss(self, loss_name):
+        try:
+            loss = tfr.keras.losses.get(loss_name)
+        except ValueError:
+            loss = tf.keras.losses.get(loss_name)
+
+        return loss
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         # summary_writer = tf.summary.create_file_writer("{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"]))
 
@@ -511,10 +519,11 @@ class TensorFlowTrainer(Trainer):
         logger.info("starting training from iteration %s/%s", initial_iter, self.config["niters"])
 
         strategy_scope = self.strategy.scope()
+        tf.config.experimental_run_functions_eagerly(True)
         with strategy_scope:
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)
-            trec_callback = TrecCheckpointCallback(qrels, dev_data, dev_records, train_output_path, validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
+            trec_callback = TrecCheckpointCallback(qrels, dev_data, dev_records, train_output_path, metric, validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
             learning_rate_callback = tf.keras.callbacks.LearningRateScheduler(self.do_warmup)
             tensorboard_callback = tf.keras.callbacks.TensorBoard(
                 log_dir="{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"])
@@ -522,7 +531,7 @@ class TensorFlowTrainer(Trainer):
             reranker.build_model()  # TODO needed here?
 
             self.optimizer = self.get_optimizer()
-            loss = tfr.keras.losses.get(self.config["loss"])
+            loss = self.get_loss(self.config["loss"])
             reranker.model.compile(optimizer=self.optimizer, loss=loss)
 
             train_start_time = time.time()

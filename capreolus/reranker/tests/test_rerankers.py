@@ -8,10 +8,10 @@ from pymagnitude import Magnitude
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor import EmbedText, BertText, BertPassage
 from capreolus.reranker.PACRR import PACRR
-from capreolus.sampler import TrainDataset, PredDataset
+from capreolus.sampler import TrainTripletSampler, PredSampler, TrainPairSampler
 from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
 from capreolus.tokenizer import AnseriniTokenizer, BertTokenizer
-from capreolus.trainer import PytorchTrainer
+from capreolus.trainer import PytorchTrainer, TensorFlowTrainer
 from capreolus.extractor.bagofwords import BagOfWords
 from capreolus.extractor.deeptileextractor import DeepTileExtractor
 from capreolus.reranker.CDSSM import CDSSM
@@ -23,6 +23,7 @@ from capreolus.reranker.PACRR import PACRR
 from capreolus.reranker.POSITDRMM import POSITDRMM
 from capreolus.reranker.CDSSM import CDSSM
 from capreolus.reranker.TFBERTMaxP import TFBERTMaxP
+from capreolus.reranker.TFKNRM import TFKNRM
 
 
 def test_knrm_pytorch(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
@@ -49,8 +50,8 @@ def test_knrm_pytorch(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -76,15 +77,43 @@ def test_knrm_tf(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler()
+    dev_dataset.prepare(train_run, benchmark.qrels, extractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
 
     assert os.path.exists(Path(tmpdir) / "train" / "dev.best.index")
 
+def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
+    def fake_magnitude_embedding(*args, **kwargs):
+        return Magnitude(None)
 
+    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+
+    reranker = TFKNRM(
+        {"gradkernels": True, "finetune": False, "trainer": {"niters": 1, "itersize": 4, "batch": 2, "loss": "binary_crossentropy"}},
+        provide={"index": dummy_index},
+    )
+    extractor = reranker.extractor
+    metric = "map"
+    benchmark = DummyBenchmark()
+
+    extractor.preprocess(["301"], ["LA010189-0001", "LA010189-0002"], benchmark.topics[benchmark.query_type])
+    reranker.build_model()
+
+    train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
+    train_dataset = TrainPairSampler()
+    train_dataset.prepare(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler()
+    dev_dataset.prepare(train_run, benchmark.qrels, extractor)
+    reranker.trainer.train(
+        reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
+    )
+
+    assert os.path.exists(Path(tmpdir) / "train" / "dev.best.index")
 def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
         return Magnitude(None)
@@ -110,8 +139,8 @@ def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -134,8 +163,8 @@ def test_dssm_unigram(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -174,8 +203,8 @@ def test_tk(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -278,8 +307,8 @@ def test_deeptilebars(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -305,8 +334,8 @@ def test_HINT(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -329,8 +358,8 @@ def test_POSITDRMM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
     reranker.searcher_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    dev_dataset = PredSampler(train_runextractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -363,8 +392,8 @@ def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
     reranker.searcher_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
@@ -409,8 +438,8 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build()
     reranker.bm25_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainDataset(qid_docid_to_rank=train_run, qrels=benchmark.qrels, extractor=extractor)
-    dev_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=extractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler(train_run, benchmark.qrelsx, extractor)
     reranker["trainer"].train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )

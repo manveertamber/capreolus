@@ -129,7 +129,8 @@ class EmbedText(Extractor):
             "query_idf": tf.io.FixedLenFeature([self.config["maxqlen"]], tf.float32),
             "posdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            # "label": tf.io.FixedLenFeature([2], tf.float32)
+            "label": tf.io.VarLenFeature(tf.float32),
         }
 
         return feature_description
@@ -139,12 +140,13 @@ class EmbedText(Extractor):
         sample - output from self.id2vec()
         return - a tensorflow feature
         """
-        query, query_idf, posdoc, negdoc = (sample["query"], sample["query_idf"], sample["posdoc"], sample["negdoc"])
+        query, query_idf, posdoc, negdoc, label = (sample["query"], sample["query_idf"], sample["posdoc"], sample["negdoc"], sample["label"])
         feature = {
             "query": tf.train.Feature(int64_list=tf.train.Int64List(value=query)),
             "query_idf": tf.train.Feature(float_list=tf.train.FloatList(value=query_idf)),
             "posdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=posdoc)),
             "negdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc)),
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
@@ -156,7 +158,7 @@ class EmbedText(Extractor):
         negdoc = parsed_example["negdoc"]
         query = parsed_example["query"]
         query_idf = parsed_example["query_idf"]
-        label = parsed_example["label"]
+        label = tf.sparse.to_dense(parsed_example["label"])
 
         return (posdoc, negdoc, query, query_idf), label
 
@@ -231,7 +233,9 @@ class EmbedText(Extractor):
         # return [self.embeddings[self.stoi[tok]] for tok in toks]
         return [self.stoi[tok] for tok in toks]
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         query = self.qid2toks[qid]
 
         # TODO find a way to calculate qlen/doclen stats earlier, so we can log them and check sanity of our values
@@ -254,6 +258,7 @@ class EmbedText(Extractor):
             "query_idf": np.array(idfs, dtype=np.float32),
             "negdocid": "",
             "negdoc": np.zeros(self.config["maxdoclen"], dtype=np.long),
+            "label": np.array(label)
         }
 
         if negid:
@@ -442,15 +447,6 @@ class BertPassage(Extractor):
         ConfigOption("stride", 100, "Stride"),
         ConfigOption("numpassages", 16, "Number of passages per document")
     ]
-
-    @staticmethod
-    def config():
-        maxseqlen = 256
-        numpassages = 16
-        maxqlen = 8
-        passagelen = 150
-        stride = 100
-        usecache = False
 
     def load_state(self, qids, docids):
         with open(self.get_state_cache_file_path(qids, docids), "rb") as f:
