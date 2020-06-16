@@ -35,12 +35,12 @@ class Sampler(ModuleBase):
 
         self.qid_to_reldocs = {
             qid: [docid for docid in docids if qrels[qid].get(docid, 0) >= relevance_level]
-            for qid, docids in qid_to_docids.items()
+            for qid, docids in self.qid_to_docids.items()
         }
         # TODO option to include only negdocs in a top k
         self.qid_to_negdocs = {
             qid: [docid for docid in docids if qrels[qid].get(docid, 0) < relevance_level]
-            for qid, docids in qid_to_docids.items()
+            for qid, docids in self.qid_to_docids.items()
         }
 
         self.total_samples = 0
