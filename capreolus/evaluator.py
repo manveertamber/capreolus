@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 
 import numpy as np
 import pytrec_eval
@@ -47,8 +48,7 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
         metrics.remove(f"judged_{n}")
 
     dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
-    evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=relevance_level)
-
+    evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=int(relevance_level))
     scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in evaluator.evaluate(runs).values()]
     scores = np.array(scores).mean(axis=0).tolist()
     scores = dict(zip(metrics, scores))
@@ -59,17 +59,18 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     return scores
 
 
-def eval_runs(runs, qrels, metrics, relevance_level):
+def eval_runs(runs, qrels, metrics, relevance_level=1):
     """
-    Evaluate runs loaded by Searcher.load_trec_run
+    Evaluate runs produced by a ranker (or loaded with Searcher.load_trec_run)
 
     Args:
-        runs: a dict with format {qid: {docid: score}}, could be prepared by Searcher.load_trec_run
-        qrels: dict, containing the judgements provided by benchmark
-        metrics: str or list, metrics expected to calculate, e.g. ndcg_cut_20, etc
+        runs: dict in the format ``{qid: {docid: score}}``
+        qrels: dict containing relevance judgements (e.g., ``benchmark.qrels``)
+        metrics (str or list): metrics to calculate (e.g., ``evaluator.DEFAULT_METRICS``)
+        relevance_level (int): relevance label threshold to use with non-graded metrics (equivalent to trec_eval's --level_for_rel)
 
     Returns:
-        a dict with format {metric: score}, containing the evaluation score of specified metrics
+           dict: a dict in the format ``{metric: score}`` containing the average score for each metric
     """
     metrics = [metrics] if isinstance(metrics, str) else list(metrics)
     return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
@@ -92,12 +93,12 @@ def eval_runfile(runfile, qrels, metrics, relevance_level):
     return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
 
 
-def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=None):
+def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None):
     """
     Select the runfile with respect to the specified metric
 
     Args:
-        runfile_dir: the directory path to all the runfiles to select from
+        runfile_dirs: the directory path to all the runfiles to select from
         benchmark: Benchmark class
         primary_metric: str, metric used to select the best runfile , e.g. ndcg_cut_20, etc
         metrics: str or list, metric expected by be calculated on the best runs
@@ -106,6 +107,10 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     Returns:
        a dict storing specified metric score and path to the corresponding runfile
     """
+
+    if not isinstance(runfile_dirs, (list, tuple)):
+        runfile_dirs = [runfile_dirs]
+
     metrics = [] if not metrics else ([metrics] if isinstance(metrics, str) else list(metrics))
     if primary_metric not in metrics:
         metrics = [primary_metric] + metrics
@@ -113,15 +118,10 @@ def search_best_run(runfile_dir, benchmark, primary_metric, metrics=None, folds=
     folds = {s: benchmark.folds[s] for s in [folds]} if folds else benchmark.folds
     runfiles = [
         os.path.join(runfile_dir, f)
+        for runfile_dir in runfile_dirs
         for f in os.listdir(runfile_dir)
         if (f != "done" and not os.path.isdir(os.path.join(runfile_dir, f)))
     ]
-
-    if len(runfiles) == 1:
-        return {
-            "score": eval_runfile(runfiles[0], benchmark.qrels, metrics, benchmark.relevance_level),
-            "path": {s: runfiles[0] for s in folds},
-        }
 
     best_scores = {s: {primary_metric: 0, "path": None} for s in folds}
     for runfile in runfiles:

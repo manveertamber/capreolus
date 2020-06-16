@@ -13,18 +13,13 @@ class TFBERTMaxP_Class(tf.keras.Model):
         self.extractor = extractor
         self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
         self.config = config
-        self.aggregate_fn = self.get_aggregate_fn()
-
-    def get_aggregate_fn(self):
-        if self.config["mode"] == "maxp":
-            return tf.math.reduce_max
 
     def call(self, x, **kwargs):
         posdoc_input, posdoc_mask, posdoc_seg, negdoc_input, negdoc_mask, negdoc_seg = x
 
         batch_size = tf.shape(posdoc_input)[0]
-        num_passages = self.extractor.cfg["numpassages"]
-        maxseqlen = self.extractor.cfg["maxseqlen"]
+        num_passages = self.extractor.config["numpassages"]
+        maxseqlen = self.extractor.config["maxseqlen"]
 
         posdoc_input = tf.reshape(posdoc_input, [batch_size * num_passages, maxseqlen])
         posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
@@ -107,15 +102,16 @@ class TFBERTMaxP_Class(tf.keras.Model):
 @Reranker.register
 class TFBERTMaxP(Reranker):
     module_name = "TFBERTMaxP"
+
     dependencies = [
         Dependency(key="extractor", module="extractor", name="bertpassage"),
         Dependency(key="trainer", module="trainer", name="tensorflow"),
     ]
     config_spec = [
-        ConfigOption("pretrained", "bert-base-uncased", "type of bert model"),
-        ConfigOption("passagelen", 100,),
-        ConfigOption("dropout", 0.1,),
-        ConfigOption("stride", 20,),
+        ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),
+        ConfigOption("passagelen", 100, "Passage length"),
+        ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
+        ConfigOption("stride", 20, "Stride"),
         ConfigOption("mode", "maxp",),
     ]
 
