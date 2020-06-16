@@ -441,7 +441,7 @@ class BertPassage(Extractor):
     pad_tok = " "
 
     config_spec = [
-        ConfigOption("maxqlen", 8, "Max query length"), ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
+        ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("stride", 100, "Stride"),
@@ -468,7 +468,7 @@ class BertPassage(Extractor):
             "negdoc": tf.io.FixedLenFeature([], tf.string),
             "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
             "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            "label": tf.io.VarLenFeature(tf.float32)
         }
 
         return feature_description
@@ -480,6 +480,7 @@ class BertPassage(Extractor):
         """
         posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = sample["posdoc_mask"], sample["posdoc_seg"], sample["negdoc_mask"], sample["negdoc_seg"]
+        label = sample["label"]
 
         def _bytes_feature(value):
             """Returns a bytes_list from a string / byte."""
@@ -494,6 +495,7 @@ class BertPassage(Extractor):
             "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
             "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)), 
             "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
+            "label": tf.train.feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
@@ -564,7 +566,9 @@ class BertPassage(Extractor):
 
         self._build_vocab(qids, docids, topics)
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         tokenizer = self.tokenizer
         maxseqlen = self.config["maxseqlen"]
 
@@ -597,7 +601,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-
+            "label": np.array(label)
         }
 
         if negid:

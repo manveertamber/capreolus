@@ -81,6 +81,7 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
     config_spec = [
         ConfigOption("seed", 1234),
     ]
+    dependencies = {}
 
     def __hash__(self):
         return self.get_hash()
@@ -135,6 +136,7 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
     config_spec = [
         ConfigOption("seed", 1234),
     ]
+    dependencies = {}
 
     def get_hash(self):
         sorted_rep = sorted([(qid, docids) for qid, docids in self.qid_to_docids.items()])
