@@ -155,9 +155,12 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
 
         for qid in all_qids:
             for posdoc_id in self.qid_to_reldocs[qid]:
-                yield self.extractor.id2vec(qid, posdoc_id, negid=None, label=[1])
-            for negdoc_id in self.qid_to_negdocs[qid]:
-                yield self.extractor.id2vec(qid, negdoc_id, negid=None, label=[0])
+                try:
+                    yield self.extractor.id2vec(qid, posdoc_id, negid=None, label=[1])
+                    negdoc_id = random.choice(self.qid_to_negdocs[qid])
+                    yield self.extractor.id2vec(qid, negdoc_id, negid=None, label=[0])
+                except MissingDocError:
+                    logger.warning("A docid was missed")
 
     def __iter__(self):
         return iter(self.generate_samples())
