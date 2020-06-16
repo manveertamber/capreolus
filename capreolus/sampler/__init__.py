@@ -47,7 +47,7 @@ class Sampler(ModuleBase):
         self.clean()
 
     def clean(self):
-        # remove any ids that do not have both relevant and non-relevant documents for training
+        # remove any ids that do not have any relevant docs or any non-relevant docs for training
         total_samples = 1  # keep tracks of the total possible number of unique training triples for this dataset
         for qid in self.qid_to_docids:
             posdocs = len(self.qid_to_reldocs[qid])
@@ -57,6 +57,7 @@ class Sampler(ModuleBase):
                 logger.debug("removing training qid=%s with %s positive docs and %s negative docs", qid, posdocs,
                              negdocs)
                 del self.qid_to_reldocs[qid]
+                del self.qid_to_docids[qid]
                 del self.qid_to_negdocs[qid]
 
         self.total_samples = total_samples
