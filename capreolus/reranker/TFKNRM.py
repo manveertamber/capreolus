@@ -3,7 +3,6 @@ from profane import ConfigOption, Dependency
 
 from capreolus.reranker import Reranker
 from capreolus.reranker.common import RbfKernelBankTF, similarity_matrix_tf
-from capreolus.reranker.base import KerasModel
 
 
 class TFKNRM_Class(tf.keras.Model):
@@ -44,6 +43,15 @@ class TFKNRM_Class(tf.keras.Model):
 
         return score
 
+    def score(self, x, **kwargs):
+        posdoc, negdoc, query, query_idf = x
+
+        return self.call((posdoc, query, query_idf))
+
+    def score_pair(self, x, **kwargs):
+        posdoc, negdoc, query, query_idf = x
+
+        return tf.stack([self.call((posdoc, query, query_idf)), self.call((negdoc, query, query_idf))], axis=1)
 
 @Reranker.register
 class TFKNRM(Reranker):
@@ -58,6 +66,6 @@ class TFKNRM(Reranker):
     ]
 
     def build_model(self):
-        self.model = KerasModel(TFKNRM_Class(self.extractor, self.config), self.config)
+        self.model = TFKNRM_Class(self.extractor, self.config)
 
         return self.model

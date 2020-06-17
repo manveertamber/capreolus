@@ -7,6 +7,25 @@ from tensorflow.python.keras.losses import BinaryCrossentropy
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
 
 
+class KerasPairModel(tf.keras.Model):
+    def __init__(self, model, *args, **kwargs):
+        super(KerasPairModel, self).__init__(*args, **kwargs)
+        self.model = model
+
+    def call(self, x, **kwargs):
+        score = self.model.score(x, **kwargs)
+        return tf.stack([score, tf.zeros_like(score)], axis=1)
+
+
+class KerasTripletModel(tf.keras.Model):
+    def __init__(self, model, *args, **kwargs):
+        super(KerasTripletModel, self).__init__(*args, **kwargs)
+        self.model = model
+
+    def call(self, x, **kwargs):
+        return self.model.score_pair(x, **kwargs)
+
+
 class TFBinaryCrossentropy(BinaryCrossentropy):
     def call(self, ytrue, ypred):
         # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)

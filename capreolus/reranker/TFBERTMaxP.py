@@ -2,7 +2,7 @@ import tensorflow as tf
 from transformers import TFBertForSequenceClassification
 
 from profane import ConfigOption, Dependency
-from capreolus.reranker.base import Reranker, KerasModel
+from capreolus.reranker.base import Reranker
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -31,6 +31,16 @@ class TFBERTMaxP_Class(tf.keras.Model):
         scores = tf.math.reduce_max(passage_scores, axis=1)
 
         return scores
+
+    def score(self, x, **kwargs):
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
+
+        return self.call((posdoc_bert_input, posdoc_mask, posdoc_seg))
+
+    def score_pair(self, x, **kwargs):
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
+
+        return tf.stack([self.call((posdoc_bert_input, posdoc_mask, posdoc_seg)), self.call((negdoc_bert_input, negdoc_mask, negdoc_seg))], axis=1)
 
     # def call(self, x, **kwargs):
     #     pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
@@ -107,5 +117,5 @@ class TFBERTMaxP(Reranker):
     ]
 
     def build_model(self):
-        self.model = KerasModel(TFBERTMaxP_Class(self.extractor, self.config), self.config)
+        self.model = TFBERTMaxP_Class(self.extractor, self.config)
         return self.model

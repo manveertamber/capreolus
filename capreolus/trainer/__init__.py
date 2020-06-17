@@ -26,7 +26,7 @@ from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
-from capreolus.reranker.common import TFBinaryCrossentropy
+from capreolus.reranker.common import TFBinaryCrossentropy, KerasPairModel, KerasTripletModel
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
@@ -519,6 +519,12 @@ class TensorFlowTrainer(Trainer):
 
         return loss
 
+    def get_model(self, model):
+        if self.config["loss"] == "binary_crossentropy":
+            return KerasPairModel(model)
+
+        return KerasTripletModel(model)
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         # summary_writer = tf.summary.create_file_writer("{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"]))
 
@@ -534,6 +540,8 @@ class TensorFlowTrainer(Trainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            reranker.build_model()  # TODO needed here?
+            wrapped_model = self.get_model(reranker.model)
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)
             trec_callback = TrecCheckpointCallback(qrels, dev_data, dev_records, train_output_path, metric, validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
@@ -541,14 +549,13 @@ class TensorFlowTrainer(Trainer):
             tensorboard_callback = tf.keras.callbacks.TensorBoard(
                 log_dir="{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"])
             )
-            reranker.build_model()  # TODO needed here?
 
             self.optimizer = self.get_optimizer()
             loss = self.get_loss(self.config["loss"])
-            reranker.model.compile(optimizer=self.optimizer, loss=loss)
+            wrapped_model.compile(optimizer=self.optimizer, loss=loss)
 
             train_start_time = time.time()
-            reranker.model.fit(
+            wrapped_model.fit(
                 train_records.prefetch(tf.data.experimental.AUTOTUNE),
                 epochs=self.config["niters"],
                 steps_per_epoch=self.config["itersize"],
