@@ -495,7 +495,7 @@ class BertPassage(Extractor):
             "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
             "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)), 
             "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
-            "label": tf.train.feature(float_list=tf.train.FloatList(value=label))
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
