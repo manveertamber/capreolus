@@ -129,8 +129,7 @@ class EmbedText(Extractor):
             "query_idf": tf.io.FixedLenFeature([self.config["maxqlen"]], tf.float32),
             "posdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
-            # "label": tf.io.FixedLenFeature([2], tf.float32)
-            "label": tf.io.VarLenFeature(tf.float32),
+            "label": tf.io.FixedLenFeature([2], tf.float32)
         }
 
         return feature_description
@@ -258,7 +257,7 @@ class EmbedText(Extractor):
             "query_idf": np.array(idfs, dtype=np.float32),
             "negdocid": "",
             "negdoc": np.zeros(self.config["maxdoclen"], dtype=np.long),
-            "label": np.array(label, dtype=np.float32)
+            "label": np.array(label + [0], dtype=np.float32)
         }
 
         if negid:
@@ -598,7 +597,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "label": np.array(label)
+            "label": np.array(label + [0])
         }
 
         if negid:

@@ -10,7 +10,7 @@ _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
 class TFBinaryCrossentropy(BinaryCrossentropy):
     def call(self, ytrue, ypred):
         # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
-        return super(TFBinaryCrossentropy, self).call(ytrue[:, 0], ypred)
+        return super(TFBinaryCrossentropy, self).call(ytrue[:, 0], ypred[:, 0])
 
 
 def pair_softmax_loss(pos_neg_scores, *args, **kwargs):
