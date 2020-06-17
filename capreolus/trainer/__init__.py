@@ -103,7 +103,7 @@ class PytorchTrainer(Trainer):
         batches_per_step = self.config["gradacc"]
 
         def reshaped_score_fn(_batch):
-            result = reranker.score(_batch)
+            result = reranker.test(_batch)
             result = result.reshape((self.config["batch"], 1))
             return result
 
