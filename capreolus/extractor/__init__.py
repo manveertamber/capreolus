@@ -257,7 +257,7 @@ class EmbedText(Extractor):
             "query_idf": np.array(idfs, dtype=np.float32),
             "negdocid": "",
             "negdoc": np.zeros(self.config["maxdoclen"], dtype=np.long),
-            "label": np.array(label + [0], dtype=np.float32)
+            "label": np.array(label, dtype=np.float32)
         }
 
         if negid:
@@ -597,7 +597,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "label": np.array(label + [0])
+            "label": np.array(label)
         }
 
         if negid:

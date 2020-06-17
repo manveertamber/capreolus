@@ -157,7 +157,7 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
             for qid, docid in all_pairs:
                 label = 1 if docid in self.qid_to_reldocs[qid] else 0
                 try:
-                    yield self.extractor.id2vec(qid, docid, negid=None, label=[label])
+                    yield self.extractor.id2vec(qid, docid, negid=None, label=[label, 0])
                 except MissingDocError:
                     logger.warning("Missing doc for query: {} while generating training pair, docid: {}".format(qid, docid))
 
@@ -187,7 +187,7 @@ class PredSampler(Sampler, torch.utils.data.IterableDataset):
             for docid in docids:
                 try:
                     label = 1 if docid in self.qid_to_reldocs[qid] else 0
-                    yield self.extractor.id2vec(qid, docid, label=[label])
+                    yield self.extractor.id2vec(qid, docid, label=[label, 0])
                 except MissingDocError:
                     # when predictiong we raise an exception on missing docs, as this may invalidate results
                     logger.error("got none features for prediction: qid=%s posid=%s", qid, docid)
