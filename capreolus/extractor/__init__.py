@@ -258,7 +258,7 @@ class EmbedText(Extractor):
             "query_idf": np.array(idfs, dtype=np.float32),
             "negdocid": "",
             "negdoc": np.zeros(self.config["maxdoclen"], dtype=np.long),
-            "label": np.array(label)
+            "label": np.array(label, dtype=np.float32)
         }
 
         if negid:
