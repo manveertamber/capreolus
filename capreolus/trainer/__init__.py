@@ -513,7 +513,7 @@ class TensorFlowTrainer(Trainer):
             loss = tfr.keras.losses.get(loss_name)
         except ValueError:
             if loss_name == "binary_crossentropy":
-                loss = TFBinaryCrossentropy
+                loss = TFBinaryCrossentropy()
             else:
                 loss = tf.keras.losses.get(loss_name)
 
