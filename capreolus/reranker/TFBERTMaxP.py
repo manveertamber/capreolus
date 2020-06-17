@@ -16,7 +16,7 @@ class TFBERTMaxP_Class(tf.keras.Model):
         self.config = config
 
     def call(self, x, **kwargs):
-        doc_bert_input, doc_mask, doc_seg = x
+        doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
 
         batch_size = tf.shape(doc_bert_input)[0]
         num_passages = self.extractor.config["numpassages"]
