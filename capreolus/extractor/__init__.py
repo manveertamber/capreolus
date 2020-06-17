@@ -314,7 +314,7 @@ class BertText(Extractor):
             "posdoc_mask": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc_mask": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            "label": tf.io.FixedLenFeature([2], tf.float32)
         }
 
         return feature_description
@@ -326,6 +326,7 @@ class BertText(Extractor):
         """
         query, posdoc, negdoc, negdoc_id = sample["query"], sample["posdoc"], sample["negdoc"], sample["negdocid"]
         query_mask, posdoc_mask, negdoc_mask = sample["query_mask"], sample["posdoc_mask"], sample["negdoc_mask"]
+        label = sample["label"]
 
         feature = {
             "query": tf.train.Feature(int64_list=tf.train.Int64List(value=query)),
@@ -334,6 +335,7 @@ class BertText(Extractor):
             "posdoc_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=posdoc_mask)),
             "negdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc)),
             "negdoc_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc_mask)),
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
@@ -379,7 +381,9 @@ class BertText(Extractor):
 
         self._build_vocab(qids, docids, topics)
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         tokenizer = self.tokenizer
         qlen, doclen = self.config["maxqlen"], self.config["maxdoclen"]
 
@@ -403,6 +407,7 @@ class BertText(Extractor):
             "negdocid": "",
             "negdoc": np.zeros(doclen, dtype=np.long),
             "negdoc_mask": np.zeros(doclen, dtype=np.long),
+            "label": np.array(label)
         }
 
         if negid:
@@ -427,6 +432,7 @@ class BertText(Extractor):
         padlen = to_len - len(s)
         mask = [1 for _ in s] + [0 for _ in range(padlen)]
         return mask
+
 
 @Extractor.register
 class BertPassage(Extractor):

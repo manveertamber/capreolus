@@ -398,7 +398,8 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
         self.relevance_level = relevance_level
 
     def save_model(self):
-        self.model.save_weights("{0}/dev.best".format(self.output_path))
+        # self.model.model because TFTrainer always uses a wrapped model (i.e KerasPairedModel or KerasTripletModel)
+        self.model.model.save_weights("{0}/dev.best".format(self.output_path))
 
     def on_epoch_begin(self, epoch, logs=None):
         self.iter_start_time = time.time()
