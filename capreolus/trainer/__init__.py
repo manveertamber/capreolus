@@ -58,7 +58,7 @@ class PytorchTrainer(Trainer):
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
         ConfigOption("lr", 0.001, "learning rate"),
-        ConfigOption("softmaxloss", False, "True to use softmax loss (over pairs) or False to use hinge loss"),
+        ConfigOption("loss", "pairwise_hinge", "Loss function name"),
         ConfigOption("fastforward", False),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
@@ -212,12 +212,14 @@ class PytorchTrainer(Trainer):
         model = reranker.model.to(self.device)
         self.optimizer = torch.optim.Adam(filter(lambda param: param.requires_grad, model.parameters()), lr=self.config["lr"])
 
-        if self.config["softmaxloss"]:
+        if self.config["loss"] == "pairwise_softmax":
             self.loss = pair_softmax_loss
-        elif self.config["binary_crossentropy"]:
+        elif self.config["loss"] == "binary_crossentropy":
             self.loss = torch.nn.BCEWithLogitsLoss()
-        else:
+        elif self.config["loss"] == "pairwise_hinge":
             self.loss = pair_hinge_loss
+        else:
+            raise ValueError("Unknown loss function name")
 
         dev_best_weight_fn, weights_output_path, info_output_path, loss_fn = self.get_paths_for_early_stopping(
             train_output_path, dev_output_path
