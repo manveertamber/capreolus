@@ -6,12 +6,12 @@ from tensorflow.keras.layers import Layer
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
 
 
-def pair_softmax_loss(pos_neg_scores):
+def pair_softmax_loss(pos_neg_scores, *args, **kwargs):
     scores = torch.stack(pos_neg_scores, dim=1)
     return torch.mean(1.0 - scores.softmax(dim=1)[:, 0])
 
 
-def pair_hinge_loss(pos_neg_scores):
+def pair_hinge_loss(pos_neg_scores, *args, **kwargs):
     label = torch.ones_like(pos_neg_scores[0])  # , dtype=torch.int)
     return _hinge_loss(pos_neg_scores[0], pos_neg_scores[1], label)
 

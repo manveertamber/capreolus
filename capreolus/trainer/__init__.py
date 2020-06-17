@@ -106,8 +106,8 @@ class PytorchTrainer(Trainer):
         for bi, batch in tqdm(enumerate(train_dataloader), desc="Iter progression"):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
             batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
-            doc_scores =  scoring_fn(batch)
-            loss = self.loss(doc_scores)
+            doc_scores = scoring_fn(batch)
+            loss = self.loss(doc_scores, batch["label"])
             iter_loss.append(loss)
             loss.backward()
 
@@ -214,6 +214,8 @@ class PytorchTrainer(Trainer):
 
         if self.config["softmaxloss"]:
             self.loss = pair_softmax_loss
+        elif self.config["binary_crossentropy"]:
+            self.loss = torch.nn.BCEWithLogitsLoss()
         else:
             self.loss = pair_hinge_loss
 
