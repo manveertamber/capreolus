@@ -157,7 +157,7 @@ class EmbedText(Extractor):
         negdoc = parsed_example["negdoc"]
         query = parsed_example["query"]
         query_idf = parsed_example["query_idf"]
-        label = tf.sparse.to_dense(parsed_example["label"])
+        label = parsed_example["label"]
 
         return (posdoc, negdoc, query, query_idf), label
 
