@@ -63,7 +63,8 @@ class KerasModel(tf.keras.Model):
         posdoc, negdoc, query, additional = x[0], x[1], x[2], x[3:]
 
         def score_pos():
-            return self.model((posdoc, query, ) + tuple(additional))
+            score = self.model((posdoc, query, ) + tuple(additional))
+            return tf.stack([score, tf.zeros_like(score)], axis=1)
 
         def score_pos_and_neg():
             pos_score = self.model((posdoc, query) + tuple(additional))

@@ -2,8 +2,15 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import torch
 from tensorflow.keras.layers import Layer
+from tensorflow.python.keras.losses import BinaryCrossentropy
 
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
+
+
+class TFBinaryCrossentropy(BinaryCrossentropy):
+    def call(self, ytrue, ypred):
+        # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
+        return super(TFBinaryCrossentropy, self).call(ytrue[:, 0], ypred)
 
 
 def pair_softmax_loss(pos_neg_scores, *args, **kwargs):

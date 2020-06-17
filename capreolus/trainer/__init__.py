@@ -26,6 +26,7 @@ from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
+from reranker.common import TFBinaryCrossentropy
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
@@ -511,7 +512,10 @@ class TensorFlowTrainer(Trainer):
         try:
             loss = tfr.keras.losses.get(loss_name)
         except ValueError:
-            loss = tf.keras.losses.get(loss_name)
+            if loss_name == "binary_crossentropy":
+                loss = TFBinaryCrossentropy
+            else:
+                loss = tf.keras.losses.get(loss_name)
 
         return loss
 
@@ -529,7 +533,6 @@ class TensorFlowTrainer(Trainer):
         logger.info("starting training from iteration %s/%s", initial_iter, self.config["niters"])
 
         strategy_scope = self.strategy.scope()
-        tf.config.experimental_run_functions_eagerly(True)
         with strategy_scope:
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)

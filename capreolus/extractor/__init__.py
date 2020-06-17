@@ -468,7 +468,7 @@ class BertPassage(Extractor):
             "negdoc": tf.io.FixedLenFeature([], tf.string),
             "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
             "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
-            "label": tf.io.VarLenFeature(tf.float32)
+            "label": tf.io.FixedLenFeature([2], tf.float32)
         }
 
         return feature_description
