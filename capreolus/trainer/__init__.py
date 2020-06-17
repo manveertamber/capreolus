@@ -102,10 +102,11 @@ class PytorchTrainer(Trainer):
         batches_per_epoch = (self.config["itersize"] // self.config["batch"]) or 1
         batches_per_step = self.config["gradacc"]
 
+        scoring_fn = reranker.score if self.sampler.name == "triplet" else reranker.test
         for bi, batch in tqdm(enumerate(train_dataloader), desc="Iter progression"):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
             batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
-            doc_scores = reranker.score(batch)
+            doc_scores =  scoring_fn(batch)
             loss = self.loss(doc_scores)
             iter_loss.append(loss)
             loss.backward()
