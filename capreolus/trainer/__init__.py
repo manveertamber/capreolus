@@ -428,7 +428,7 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
 
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
             # Pytrec_eval has problems with high precision floats
-            pred_dict[qid][docid] = predictions[i].astype(np.float16).item()
+            pred_dict[qid][docid] = predictions[i][0].astype(np.float16).item()
 
         return dict(pred_dict)
 
@@ -717,8 +717,9 @@ class TensorFlowTrainer(Trainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            wrapped_model = self.get_model(reranker.model)
             pred_records = self.get_tf_dev_records(reranker, pred_data)
-            predictions = reranker.model.predict(pred_records)
+            predictions = wrapped_model.predict(pred_records)
             trec_preds = TrecCheckpointCallback.get_preds_in_trec_format(predictions, pred_data)
 
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
