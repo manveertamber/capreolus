@@ -557,9 +557,6 @@ class BertPassage(Extractor):
         if self.exist():
             return
 
-        if self.config["maxseqlen"] < self.config["passagelen"] + self.config["maxqlen"] + 3:
-            raise ValueError("maxseqlen is too short")
-
         self.index.create_index()
         self.qid2toks = defaultdict(list)
         self.docid2passages = None
