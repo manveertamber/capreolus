@@ -1,5 +1,6 @@
 import tensorflow as tf
 from profane import ConfigOption, Dependency
+from tensorflow.python.keras.engine import data_adapter
 from transformers import TFBertForSequenceClassification
 
 from capreolus.reranker import Reranker
@@ -43,6 +44,11 @@ class TFVanillaBert_Class(tf.keras.Model):
         )[0][:, 0]
 
         return posdoc_score
+
+    def predict_step(self, data):
+        data = data_adapter.expand_1d(data)
+        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
+        return self.score(x)
 
     def score(self, x, **kwargs):
         pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]

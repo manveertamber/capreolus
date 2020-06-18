@@ -435,8 +435,10 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
     reranker.bm25_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainTripletSampler(train_run, benchmark.qrels, reranker.extractor)
-    dev_dataset = PredSampler(train_run, benchmark.qrels, reranker.extractor)
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(train_run, benchmark.qrels, reranker.extractor)
+    dev_dataset = PredSampler()
+    dev_dataset.prepare(train_run, benchmark.qrels, reranker.extractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, "map"
     )

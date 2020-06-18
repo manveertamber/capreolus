@@ -428,7 +428,7 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
 
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
             # Pytrec_eval has problems with high precision floats
-            pred_dict[qid][docid] = predictions[i][0].astype(np.float16).item()
+            pred_dict[qid][docid] = predictions[i].astype(np.float16).item()
 
         return dict(pred_dict)
 

@@ -1,5 +1,6 @@
 import tensorflow as tf
 from profane import ConfigOption, Dependency
+from tensorflow.python.keras.engine import data_adapter
 
 from capreolus.reranker import Reranker
 from capreolus.reranker.common import RbfKernelBankTF, similarity_matrix_tf
@@ -43,6 +44,11 @@ class TFKNRM_Class(tf.keras.Model):
 
         return score
 
+    def predict_step(self, data):
+        data = data_adapter.expand_1d(data)
+        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
+        return self.score(x)
+
     def score(self, x, **kwargs):
         posdoc, negdoc, query, query_idf = x
 
@@ -52,6 +58,7 @@ class TFKNRM_Class(tf.keras.Model):
         posdoc, negdoc, query, query_idf = x
 
         return tf.stack([self.call((posdoc, query, query_idf)), self.call((negdoc, query, query_idf))], axis=1)
+
 
 @Reranker.register
 class TFKNRM(Reranker):
