@@ -409,7 +409,6 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20})
     trainer = TensorFlowTrainer(
         {
-            "_name": "tensorflow",
             "maxdoclen": 800,
             "maxqlen": 4,
             "batch": 1,
@@ -429,13 +428,13 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
             "loss": "approx_ndcg_loss",
         }
     )
-    reranker.modules["trainer"] = trainer
-    reranker.modules["extractor"] = BertPassage({"_name": "bertpassage", "maxqlen": 4, "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100})
-    extractor = reranker.modules["extractor"]
-    extractor.modules["index"] = dummy_index
+    reranker.trainer = trainer
+    reranker.extractor = BertPassage({"_name": "bertpassage", "maxqlen": 4, "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100})
+    extractor = reranker.extractor
+    extractor.index = dummy_index
     tok_cfg = {"_name": "berttokenizer", "pretrained": "bert-base-uncased"}
     tokenizer = BertTokenizer(tok_cfg)
-    extractor.modules["tokenizer"] = tokenizer
+    extractor.tokenizer = tokenizer
     metric = "map"
     benchmark = DummyBenchmark({"fold": "s1", "rundocsonly": True})
 
@@ -445,9 +444,10 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
     train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
     dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
-    reranker["trainer"].train(
+    reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
+
 
 def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20})
@@ -473,13 +473,13 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
             "loss": "binary_crossentrop",
         }
     )
-    reranker.modules["trainer"] = trainer
-    reranker.modules["extractor"] = BertPassage({"_name": "bertpassage", "maxqlen": 4, "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100})
-    extractor = reranker.modules["extractor"]
-    extractor.modules["index"] = dummy_index
+    reranker.trainer = trainer
+    reranker.extractor = BertPassage({"_name": "bertpassage", "maxqlen": 4, "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100})
+    extractor = reranker.extractor
+    extractor.index = dummy_index
     tok_cfg = {"_name": "berttokenizer", "pretrained": "bert-base-uncased"}
     tokenizer = BertTokenizer(tok_cfg)
-    extractor.modules["tokenizer"] = tokenizer
+    extractor.tokenizer = tokenizer
     metric = "map"
     benchmark = DummyBenchmark({"fold": "s1", "rundocsonly": True})
 
@@ -489,6 +489,6 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
     train_dataset = TrainPairSampler(train_run, benchmark.qrels, extractor)
     dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
-    reranker["trainer"].train(
+    reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
