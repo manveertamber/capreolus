@@ -9,7 +9,7 @@ from capreolus.utils.loginit import get_logger
 logger = get_logger(__name__)
 
 
-class TFBERTMaxP_Class(tf.keras.Model):
+class TFBERTMaxP_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFBERTMaxP_Class, self).__init__(*args, **kwargs)
         self.extractor = extractor

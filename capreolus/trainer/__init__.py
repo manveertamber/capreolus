@@ -399,7 +399,7 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
 
     def save_model(self):
         # self.model.model because TFTrainer always uses a wrapped model (i.e KerasPairedModel or KerasTripletModel)
-        self.model.model.save_weights("{0}/dev.best".format(self.output_path))
+        self.model.save_weights("{0}/dev.best".format(self.output_path))
 
     def on_epoch_begin(self, epoch, logs=None):
         self.iter_start_time = time.time()
@@ -499,7 +499,10 @@ class TensorFlowTrainer(Trainer):
                 self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
             )
 
-        reranker.model.load_weights("{0}/dev.best".format(train_output_path))
+        wrapped_model = self.get_model(reranker.model)
+        wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
+
+        return wrapped_model.model
 
     def apply_gradients(self, weights, grads):
         self.optimizer.apply_gradients(zip(grads, weights))

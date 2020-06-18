@@ -6,7 +6,7 @@ from capreolus.reranker import Reranker
 from capreolus.reranker.common import RbfKernelBankTF, similarity_matrix_tf
 
 
-class TFKNRM_Class(tf.keras.Model):
+class TFKNRM_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, **kwargs):
         super(TFKNRM_Class, self).__init__(**kwargs)
         self.config = config
