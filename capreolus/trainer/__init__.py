@@ -103,18 +103,13 @@ class PytorchTrainer(Trainer):
         batches_per_epoch = (self.config["itersize"] // self.config["batch"]) or 1
         batches_per_step = self.config["gradacc"]
 
-        def reshaped_score_fn(_batch):
-            result = reranker.test(_batch)
-            result = result.reshape((self.config["batch"], 1))
-            return result
-
         def get_label(batch_label):
             if self.config["loss"] == "binary_crossentropy":
                 return batch_label[:, 0]
 
             return batch_label
 
-        scoring_fn = reshaped_score_fn if self.config["loss"] == "binary_crossentropy" else reranker.score
+        scoring_fn = reranker.test if self.config["loss"] == "binary_crossentropy" else reranker.score
         for bi, batch in tqdm(enumerate(train_dataloader), desc="Iter progression"):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
             batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
