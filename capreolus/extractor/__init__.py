@@ -509,19 +509,25 @@ class BertPassage(Extractor):
         feature_description = self.get_tf_feature_description()
         parsed_example = tf.io.parse_example(example_proto, feature_description)
 
-        def parse_tensor(x):
+        def parse_tensor_as_int(x):
             parsed_tensor = tf.io.parse_tensor(x, tf.int64)
             parsed_tensor.set_shape([self.config["numpassages"], self.config["maxseqlen"]])
 
             return parsed_tensor
 
-        posdoc = tf.map_fn(parse_tensor, parsed_example["posdoc"], dtype=tf.int64)
-        posdoc_mask = tf.map_fn(parse_tensor, parsed_example["posdoc_mask"], dtype=tf.int64)
-        posdoc_seg = tf.map_fn(parse_tensor, parsed_example["posdoc_seg"], dtype=tf.int64)
-        negdoc = tf.map_fn(parse_tensor, parsed_example["negdoc"], dtype=tf.int64)
-        negdoc_mask = tf.map_fn(parse_tensor, parsed_example["negdoc_mask"], dtype=tf.int64)
-        negdoc_seg = tf.map_fn(parse_tensor, parsed_example["negdoc_seg"], dtype=tf.int64)
-        label = tf.map_fn(parse_tensor, parsed_example["label"], dtype=tf.float32)
+        def parse_label_tensor(x):
+            parsed_tensor = tf.io.parse_tensor(x, tf.float32)
+            parsed_tensor.set_shape([self.config["numpassages"], 2])
+
+            return parsed_tensor
+
+        posdoc = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
+        posdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
+        posdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
+        negdoc = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
+        negdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
+        negdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
+        label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (posdoc, posdoc_mask, posdoc_seg, negdoc, negdoc_mask, negdoc_seg), label
 
@@ -603,7 +609,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "label": np.repeat(np.array([label]), self.config["numpassages"], 0)
+            "label": np.repeat(np.array([label], dtype=np.float32), self.config["numpassages"], 0)
         }
 
         if negid:
