@@ -3,6 +3,7 @@ import tensorflow.keras.backend as K
 import torch
 from tensorflow.keras.layers import Layer
 from tensorflow.python.keras.losses import BinaryCrossentropy
+from tensorflow_ranking.python.keras.losses import PairwiseHingeLoss
 
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
 
@@ -32,14 +33,23 @@ class KerasTripletModel(tf.keras.Model):
         return self.model.predict_step(data)
 
 
-class TFBinaryCrossentropy(BinaryCrossentropy):
+class TFPairwiseHingeLoss(PairwiseHingeLoss):
+    def call(self, y_true, y_pred):
+        batch_size = tf.shape(y_true)[0]
+        y_true = tf.reshape(y_true, [batch_size, -1])
+        y_pred = tf.reshape(y_pred, [batch_size, -1])
+
+        return super(TFPairwiseHingeLoss, self).call(y_true, y_pred)
+
+
+class TFBinaryCrossentropyLoss(BinaryCrossentropy):
     def call(self, ytrue, ypred):
         # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
         batch_size = tf.shape(ytrue)[0]
         ytrue = tf.reshape(ytrue, [batch_size, -1])
         ypred = tf.reshape(ypred, [batch_size, -1])
-        
-        return super(TFBinaryCrossentropy, self).call(ytrue[:, 0], ypred[:, 0])
+
+        return super(TFBinaryCrossentropyLoss, self).call(ytrue[:, 0], ypred[:, 0])
 
 
 def pair_softmax_loss(pos_neg_scores, *args, **kwargs):

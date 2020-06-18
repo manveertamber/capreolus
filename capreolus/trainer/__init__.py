@@ -26,7 +26,7 @@ from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
-from capreolus.reranker.common import TFBinaryCrossentropy, KerasPairModel, KerasTripletModel
+from capreolus.reranker.common import TFBinaryCrossentropyLoss, KerasPairModel, KerasTripletModel
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
@@ -514,7 +514,7 @@ class TensorFlowTrainer(Trainer):
             loss = tfr.keras.losses.get(loss_name)
         except ValueError:
             if loss_name == "binary_crossentropy":
-                loss = TFBinaryCrossentropy()
+                loss = TFBinaryCrossentropyLoss()
             else:
                 loss = tf.keras.losses.get(loss_name)
 

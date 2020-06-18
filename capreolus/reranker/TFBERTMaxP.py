@@ -35,8 +35,7 @@ class TFBERTMaxP_Class(tf.keras.Model):
     def predict_step(self, data):
         data = data_adapter.expand_1d(data)
         x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
-        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
-        passage_scores = self((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)
+        passage_scores = self.score(x, training=False)
 
         return tf.math.reduce_max(passage_scores, axis=1)
 
