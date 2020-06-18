@@ -516,7 +516,7 @@ class TensorFlowTrainer(Trainer):
     def get_loss(self, loss_name):
         try:
             if loss_name == "binary_crossentropy":
-                loss = TFBinaryCrossentropyLoss()
+                loss = TFBinaryCrossentropyLoss(from_logits=True)
             elif loss_name == "pairwise_hinge_loss":
                 loss = TFPairwiseHingeLoss()
             else:
