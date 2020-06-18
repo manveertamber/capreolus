@@ -406,7 +406,7 @@ def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 # Deliberately commented out. This unit test will pass only if you have tons of RAM
 def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20, "mode": "maxp"})
+    reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20})
     trainer = TensorFlowTrainer(
         {
             "_name": "tensorflow",
@@ -450,7 +450,7 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     )
 
 def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20, "mode": "maxp"})
+    reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20})
     trainer = TensorFlowTrainer(
         {
             "_name": "tensorflow",
