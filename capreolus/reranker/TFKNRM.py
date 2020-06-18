@@ -38,22 +38,20 @@ class TFKNRM_Class(tf.keras.Model):
         return tf.reshape(scores, [batch_size])
 
     def call(self, x, **kwargs):
-        """
-        During training, both posdoc and negdoc are passed
-        During eval, both posdoc and negdoc are passed but negdoc would be a zero tensor
-        Whether negdoc is a legit doc tensor or a dummy zero tensor is determined by which sampler is used
-        (eg: sampler.TrainDataset) as well as the extractor (eg: EmbedText)
+        doc, query, query_idf = x[0], x[1], x[2]
+        score = self.get_score(doc, query, query_idf)
 
-        Unlike the pytorch KNRM model, KNRMTF accepts both the positive and negative document in its forward pass.
-        It scores them separately and returns the score difference (i.e posdoc_score - negdoc_score).
-        """
-        posdoc, negdoc, query, query_idf = x[0], x[1], x[2], x[3]
-        posdoc_score, negdoc_score = self.get_score(posdoc, query, query_idf), self.get_score(negdoc, query, query_idf)
+        return score
 
-        # During eval, the negdoc_score would be a zero tensor
-        # TODO: Verify that negdoc_score is indeed always zero whenever a zero negdoc tensor is passed into it
-        return tf.stack([posdoc_score, negdoc_score], axis=1)
+    def score(self, x, **kwargs):
+        posdoc, negdoc, query, query_idf = x
 
+        return self.call((posdoc, query, query_idf))
+
+    def score_pair(self, x, **kwargs):
+        posdoc, negdoc, query, query_idf = x
+
+        return tf.stack([self.call((posdoc, query, query_idf)), self.call((negdoc, query, query_idf))], axis=1)
 
 @Reranker.register
 class TFKNRM(Reranker):
@@ -69,4 +67,5 @@ class TFKNRM(Reranker):
 
     def build_model(self):
         self.model = TFKNRM_Class(self.extractor, self.config)
+
         return self.model

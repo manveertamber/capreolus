@@ -5,7 +5,7 @@ import numpy as np
 
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor import EmbedText
-from capreolus.sampler import TrainDataset, PredDataset
+from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
 
 
@@ -13,7 +13,7 @@ def test_train_sampler(monkeypatch, tmpdir):
     benchmark = DummyBenchmark()
     extractor = EmbedText({"tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection})
     training_judgments = benchmark.qrels.copy()
-    train_dataset = TrainDataset(training_judgments, training_judgments, extractor)
+    train_dataset = TrainTripletSampler(training_judgments, training_judgments, extractor)
 
     def mock_id2vec(*args, **kwargs):
         return {"query": np.array([1, 2, 3, 4]), "posdoc": np.array([1, 1, 1, 1]), "negdoc": np.array([2, 2, 2, 2])}
@@ -40,7 +40,7 @@ def test_pred_sampler(monkeypatch, tmpdir):
     benchmark = DummyBenchmark()
     extractor = EmbedText({"tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection})
     search_run = {"301": {"LA010189-0001": 50, "LA010189-0002": 100}}
-    pred_dataset = PredDataset(search_run, extractor)
+    pred_dataset = PredSampler(search_run, extractor)
 
     def mock_id2vec(*args, **kwargs):
         return {"query": np.array([1, 2, 3, 4]), "posdoc": np.array([1, 1, 1, 1])}

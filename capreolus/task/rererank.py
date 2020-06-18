@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from profane import ModuleBase, Dependency, ConfigOption, constants
 
-from capreolus.sampler import TrainDataset, PredDataset
+from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
 from capreolus import evaluator
@@ -82,7 +82,7 @@ class ReRerankTask(Task):
             test_run = {
                 qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]
             }
-            test_dataset = PredDataset(qid_docid_to_rank=test_run, extractor=self.reranker.extractor)
+            test_dataset = PredSampler(qid_docid_to_rank=test_run, extractor=self.reranker.extractor)
 
             test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 

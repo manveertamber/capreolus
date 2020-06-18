@@ -26,6 +26,7 @@ from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
+from capreolus.reranker.common import TFBinaryCrossentropy, KerasPairModel, KerasTripletModel
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
@@ -58,7 +59,7 @@ class PytorchTrainer(Trainer):
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
         ConfigOption("lr", 0.001, "learning rate"),
-        ConfigOption("softmaxloss", False, "True to use softmax loss (over pairs) or False to use hinge loss"),
+        ConfigOption("loss", "pairwise_hinge", "Loss function name"),
         ConfigOption("fastforward", False),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
@@ -102,11 +103,17 @@ class PytorchTrainer(Trainer):
         batches_per_epoch = (self.config["itersize"] // self.config["batch"]) or 1
         batches_per_step = self.config["gradacc"]
 
+        def reshaped_score_fn(_batch):
+            result = reranker.test(_batch)
+            result = result.reshape((self.config["batch"], 1))
+            return result
+
+        scoring_fn = reshaped_score_fn if self.config["loss"] == "binary_crossentropy" else reranker.score
         for bi, batch in tqdm(enumerate(train_dataloader), desc="Iter progression"):
             # TODO make sure _prepare_batch_with_strings equivalent is happening inside the sampler
             batch = {k: v.to(self.device) if not isinstance(v, list) else v for k, v in batch.items()}
-            doc_scores = reranker.score(batch)
-            loss = self.loss(doc_scores)
+            doc_scores = scoring_fn(batch)
+            loss = self.loss(doc_scores, batch["label"])
             iter_loss.append(loss)
             loss.backward()
 
@@ -211,10 +218,14 @@ class PytorchTrainer(Trainer):
         model = reranker.model.to(self.device)
         self.optimizer = torch.optim.Adam(filter(lambda param: param.requires_grad, model.parameters()), lr=self.config["lr"])
 
-        if self.config["softmaxloss"]:
+        if self.config["loss"] == "pairwise_softmax":
             self.loss = pair_softmax_loss
-        else:
+        elif self.config["loss"] == "binary_crossentropy":
+            self.loss = torch.nn.BCEWithLogitsLoss()
+        elif self.config["loss"] == "pairwise_hinge":
             self.loss = pair_hinge_loss
+        else:
+            raise ValueError("Unknown loss function name")
 
         dev_best_weight_fn, weights_output_path, info_output_path, loss_fn = self.get_paths_for_early_stopping(
             train_output_path, dev_output_path
@@ -387,7 +398,8 @@ class TrecCheckpointCallback(tf.keras.callbacks.Callback):
         self.relevance_level = relevance_level
 
     def save_model(self):
-        self.model.save_weights("{0}/dev.best".format(self.output_path))
+        # self.model.model because TFTrainer always uses a wrapped model (i.e KerasPairedModel or KerasTripletModel)
+        self.model.model.save_weights("{0}/dev.best".format(self.output_path))
 
     def on_epoch_begin(self, epoch, logs=None):
         self.iter_start_time = time.time()
@@ -497,6 +509,23 @@ class TensorFlowTrainer(Trainer):
         
         return min(self.config["lr"] * ((epoch+1)/warmup_steps), self.config["lr"])
 
+    def get_loss(self, loss_name):
+        try:
+            loss = tfr.keras.losses.get(loss_name)
+        except ValueError:
+            if loss_name == "binary_crossentropy":
+                loss = TFBinaryCrossentropy()
+            else:
+                loss = tf.keras.losses.get(loss_name)
+
+        return loss
+
+    def get_model(self, model):
+        if self.config["loss"] == "binary_crossentropy":
+            return KerasPairModel(model)
+
+        return KerasTripletModel(model)
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         # summary_writer = tf.summary.create_file_writer("{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"]))
 
@@ -512,6 +541,8 @@ class TensorFlowTrainer(Trainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            reranker.build_model()  # TODO needed here?
+            wrapped_model = self.get_model(reranker.model)
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)
             trec_callback = TrecCheckpointCallback(qrels, dev_data, dev_records, train_output_path, metric, validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
@@ -519,14 +550,13 @@ class TensorFlowTrainer(Trainer):
             tensorboard_callback = tf.keras.callbacks.TensorBoard(
                 log_dir="{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"])
             )
-            reranker.build_model()  # TODO needed here?
 
             self.optimizer = self.get_optimizer()
-            loss = tfr.keras.losses.get(self.config["loss"])
-            reranker.model.compile(optimizer=self.optimizer, loss=loss)
+            loss = self.get_loss(self.config["loss"])
+            wrapped_model.compile(optimizer=self.optimizer, loss=loss)
 
             train_start_time = time.time()
-            reranker.model.fit(
+            wrapped_model.fit(
                 train_records.prefetch(tf.data.experimental.AUTOTUNE),
                 epochs=self.config["niters"],
                 steps_per_epoch=self.config["itersize"],
@@ -687,8 +717,9 @@ class TensorFlowTrainer(Trainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            wrapped_model = self.get_model(reranker.model)
             pred_records = self.get_tf_dev_records(reranker, pred_data)
-            predictions = reranker.model.predict(pred_records)
+            predictions = wrapped_model.predict(pred_records)
             trec_preds = TrecCheckpointCallback.get_preds_in_trec_format(predictions, pred_data)
 
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)

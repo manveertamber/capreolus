@@ -1,4 +1,5 @@
 import os
+import tensorflow as tf
 import pickle
 
 from profane import ConfigOption, Dependency, ModuleBase
@@ -45,3 +46,4 @@ class Reranker(ModuleBase):
         optimizer_fn = weights_fn.as_posix() + ".optimizer"
         with open(optimizer_fn, "rb") as f:
             optimizer.load_state_dict(pickle.load(f))
+

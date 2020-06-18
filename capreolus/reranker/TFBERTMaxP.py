@@ -2,7 +2,7 @@ import tensorflow as tf
 from transformers import TFBertForSequenceClassification
 
 from profane import ConfigOption, Dependency
-from capreolus.reranker import Reranker
+from capreolus.reranker.base import Reranker
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -11,36 +11,36 @@ logger = get_logger(__name__)
 class TFBERTMaxP_Class(tf.keras.Model):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFBERTMaxP_Class, self).__init__(*args, **kwargs)
-        # self.clsidx = extractor.clsidx  # The index of the CLS token
-        # self.sepidx = extractor.sepidx  # The index of the SEP token
         self.extractor = extractor
         self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
         self.config = config
 
     def call(self, x, **kwargs):
-        posdoc_input, posdoc_mask, posdoc_seg, negdoc_input, negdoc_mask, negdoc_seg = x
+        doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
 
-        batch_size = tf.shape(posdoc_input)[0]
+        batch_size = tf.shape(doc_bert_input)[0]
         num_passages = self.extractor.config["numpassages"]
         maxseqlen = self.extractor.config["maxseqlen"]
 
-        posdoc_input = tf.reshape(posdoc_input, [batch_size * num_passages, maxseqlen])
-        posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
-        posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
+        doc_bert_input = tf.reshape(doc_bert_input, [batch_size * num_passages, maxseqlen])
+        doc_mask = tf.reshape(doc_mask, [batch_size * num_passages, maxseqlen])
+        doc_seg = tf.reshape(doc_seg, [batch_size * num_passages, maxseqlen])
 
-        pos_passage_scores = self.bert(posdoc_input, attention_mask=posdoc_mask, token_type_ids=posdoc_seg)[0][:, 0]
-        pos_passage_scores = tf.reshape(pos_passage_scores, [batch_size, num_passages])
-        posdoc_scores = tf.math.reduce_max(pos_passage_scores, axis=1)
+        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0][:, 0]
+        passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
+        scores = tf.math.reduce_max(passage_scores, axis=1)
 
-        negdoc_input = tf.reshape(negdoc_input, [batch_size * num_passages, maxseqlen])
-        negdoc_mask = tf.reshape(negdoc_mask, [batch_size * num_passages, maxseqlen])
-        negdoc_seg = tf.reshape(negdoc_seg, [batch_size * num_passages, maxseqlen])
+        return scores
 
-        neg_passage_scores = self.bert(negdoc_input, attention_mask=negdoc_mask, token_type_ids=negdoc_seg)[0][:, 0]
-        neg_passage_scores = tf.reshape(neg_passage_scores, [batch_size, num_passages])
-        negdoc_scores = tf.math.reduce_max(neg_passage_scores, axis=1)
+    def score(self, x, **kwargs):
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
 
-        return tf.stack([posdoc_scores, negdoc_scores], axis=1)
+        return self.call((posdoc_bert_input, posdoc_mask, posdoc_seg))
+
+    def score_pair(self, x, **kwargs):
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
+
+        return tf.stack([self.call((posdoc_bert_input, posdoc_mask, posdoc_seg)), self.call((negdoc_bert_input, negdoc_mask, negdoc_seg))], axis=1)
 
     # def call(self, x, **kwargs):
     #     pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
