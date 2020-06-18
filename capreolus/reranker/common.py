@@ -36,9 +36,9 @@ class KerasTripletModel(tf.keras.Model):
 class TFPairwiseHingeLoss(PairwiseHingeLoss):
     def call(self, y_true, y_pred):
         batch_size = tf.shape(y_true)[0]
-        y_true = tf.reshape(y_true, [batch_size, -1])
-        y_pred = tf.reshape(y_pred, [batch_size, -1])
-
+        y_true = tf.reshape(y_true, [-1, 2])
+        y_pred = tf.reshape(y_pred, [-1, 2])
+        
         return super(TFPairwiseHingeLoss, self).call(y_true, y_pred)
 
 

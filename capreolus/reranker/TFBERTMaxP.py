@@ -51,8 +51,7 @@ class TFBERTMaxP_Class(tf.keras.Model):
         neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg))
         batch_size = tf.shape(pos_score)[0]
 
-        stacked_score = tf.stack([pos_score, neg_score], axis=1)
-        stacked_score = tf.reshape(stacked_score, [batch_size, -1])
+        stacked_score = tf.stack([pos_score, neg_score], axis=2)
         return stacked_score
 
     # def call(self, x, **kwargs):
