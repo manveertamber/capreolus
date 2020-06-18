@@ -511,14 +511,14 @@ class TensorFlowTrainer(Trainer):
 
     def get_loss(self, loss_name):
         try:
-            loss = tfr.keras.losses.get(loss_name)
-        except ValueError:
             if loss_name == "binary_crossentropy":
                 loss = TFBinaryCrossentropyLoss()
             elif loss_name == "pairwise_hinge_loss":
                 loss = TFPairwiseHingeLoss()
             else:
-                loss = tf.keras.losses.get(loss_name)
+                loss = tfr.keras.losses.get(loss_name)
+        except ValueError:
+            loss = tf.keras.losses.get(loss_name)
 
         return loss
 
