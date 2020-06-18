@@ -146,20 +146,21 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
         return "pair_{0}".format(key)
 
     def generate_samples(self):
-        all_pairs = [(qid, docid) for qid in sorted(self.qid_to_reldocs) for docid in self.qid_to_docids[qid]]
-        if len(all_pairs) == 0:
+        all_qids = sorted(self.qid_to_reldocs)
+        if len(all_qids) == 0:
             raise RuntimeError("TrainDataset has no valid training pairs")
 
         random.seed(self.config["seed"])
 
         while True:
-            random.shuffle(all_pairs)
-            for qid, docid in all_pairs:
-                label = 1 if docid in self.qid_to_reldocs[qid] else 0
-                try:
-                    yield self.extractor.id2vec(qid, docid, negid=None, label=[label, 0])
-                except MissingDocError:
-                    logger.warning("Missing doc for query: {} while generating training pair, docid: {}".format(qid, docid))
+            random.shuffle(all_qids)
+            for qid in all_qids:
+                for docid in self.qid_to_reldocs[qid]:
+                    try:
+                        yield self.extractor.id2vec(qid, docid, negid=None, label=[1, 0])
+                        yield self.extractor.id2vec(qid, random.choice(self.qid_to_negdocs[qid]), negid=None, label=[0, 0])
+                    except MissingDocError:
+                        logger.warning("Missing doc for query: {} while generating training pair, docid: {}".format(qid, docid))
 
     def __iter__(self):
         return iter(self.generate_samples())
