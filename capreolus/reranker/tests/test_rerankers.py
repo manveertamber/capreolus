@@ -444,8 +444,51 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.bm25_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
     train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
-    dev_dataset = PredSampler(train_run, benchmark.qrelsx, extractor)
+    dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
     reranker["trainer"].train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
 
+def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
+    reranker = TFBERTMaxP({"pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20, "mode": "maxp"})
+    trainer = TensorFlowTrainer(
+        {
+            "_name": "tensorflow",
+            "maxdoclen": 800,
+            "maxqlen": 4,
+            "batch": 1,
+            "niters": 1,
+            "itersize": 2,
+            "gradacc": 1,
+            "lr": 0.001,
+            "softmaxloss": True,
+            "interactive": False,
+            "fastforward": True,
+            "validatefreq": 1,
+            "usecache": False,
+            "tpuname": None,
+            "tpuzone": None,
+            "storage": None,
+            "boardname": "default",
+            "loss": "binary_crossentrop",
+        }
+    )
+    reranker.modules["trainer"] = trainer
+    reranker.modules["extractor"] = BertPassage({"_name": "bertpassage", "maxqlen": 4, "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100})
+    extractor = reranker.modules["extractor"]
+    extractor.modules["index"] = dummy_index
+    tok_cfg = {"_name": "berttokenizer", "pretrained": "bert-base-uncased"}
+    tokenizer = BertTokenizer(tok_cfg)
+    extractor.modules["tokenizer"] = tokenizer
+    metric = "map"
+    benchmark = DummyBenchmark({"fold": "s1", "rundocsonly": True})
+
+    extractor.create(["301"], ["LA010189-0001", "LA010189-0002"], benchmark.topics[benchmark.query_type])
+    reranker.build()
+    reranker.bm25_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
+    train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
+    train_dataset = TrainPairSampler(train_run, benchmark.qrels, extractor)
+    dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
+    reranker["trainer"].train(
+        reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
+    )

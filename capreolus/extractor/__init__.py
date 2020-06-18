@@ -473,7 +473,7 @@ class BertPassage(Extractor):
             "negdoc": tf.io.FixedLenFeature([], tf.string),
             "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
             "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
-            "label": tf.io.FixedLenFeature([2], tf.float32)
+            "label": tf.io.FixedLenFeature([], tf.string)
         }
 
         return feature_description
@@ -500,7 +500,7 @@ class BertPassage(Extractor):
             "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
             "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)), 
             "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
-            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
+            "label": _bytes_feature(tf.io.serialize_tensor(label)),
         }
 
         return feature
@@ -521,7 +521,7 @@ class BertPassage(Extractor):
         negdoc = tf.map_fn(parse_tensor, parsed_example["negdoc"], dtype=tf.int64)
         negdoc_mask = tf.map_fn(parse_tensor, parsed_example["negdoc_mask"], dtype=tf.int64)
         negdoc_seg = tf.map_fn(parse_tensor, parsed_example["negdoc_seg"], dtype=tf.int64)
-        label = parsed_example["label"]
+        label = tf.map_fn(parse_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (posdoc, posdoc_mask, posdoc_seg, negdoc, negdoc_mask, negdoc_seg), label
 
@@ -603,7 +603,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "label": np.array(label)
+            "label": np.repeat(np.array([label]), self.config["numpassages"], 0)
         }
 
         if negid:

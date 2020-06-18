@@ -16,6 +16,9 @@ class KerasPairModel(tf.keras.Model):
         score = self.model.score(x, **kwargs)
         return tf.stack([score, tf.zeros_like(score)], axis=1)
 
+    def predict_step(self, data):
+        return self.model.predict_step(data)
+
 
 class KerasTripletModel(tf.keras.Model):
     def __init__(self, model, *args, **kwargs):
@@ -24,6 +27,9 @@ class KerasTripletModel(tf.keras.Model):
 
     def call(self, x, **kwargs):
         return self.model.score_pair(x, **kwargs)
+
+    def predict_step(self, data):
+        return self.model.predict_step(data)
 
 
 class TFBinaryCrossentropy(BinaryCrossentropy):

@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.keras.engine import data_adapter
 from transformers import TFBertForSequenceClassification
 
 from profane import ConfigOption, Dependency
@@ -28,9 +29,14 @@ class TFBERTMaxP_Class(tf.keras.Model):
 
         passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0][:, 0]
         passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
-        scores = tf.math.reduce_max(passage_scores, axis=1)
 
-        return scores
+        return passage_scores
+
+    def predict_step(self, data):
+        data = data_adapter.expand_1d(data)
+        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
+        passage_scores = self(x, training=False)
+        return tf.math.reduce_max(passage_scores, axis=1)
 
     def score(self, x, **kwargs):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
