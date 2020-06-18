@@ -35,6 +35,10 @@ class KerasTripletModel(tf.keras.Model):
 class TFBinaryCrossentropy(BinaryCrossentropy):
     def call(self, ytrue, ypred):
         # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
+        batch_size = tf.shape(ytrue)[0]
+        ytrue = tf.reshape(ytrue, [batch_size, -1])
+        ypred = tf.reshape(ypred, [batch_size, -1])
+        
         return super(TFBinaryCrossentropy, self).call(ytrue[:, 0], ypred[:, 0])
 
 
