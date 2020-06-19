@@ -129,7 +129,7 @@ class EmbedText(Extractor):
             "query_idf": tf.io.FixedLenFeature([self.config["maxqlen"]], tf.float32),
             "posdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            "label": tf.io.FixedLenFeature([2], tf.float32)
         }
 
         return feature_description
@@ -139,12 +139,13 @@ class EmbedText(Extractor):
         sample - output from self.id2vec()
         return - a tensorflow feature
         """
-        query, query_idf, posdoc, negdoc = (sample["query"], sample["query_idf"], sample["posdoc"], sample["negdoc"])
+        query, query_idf, posdoc, negdoc, label = (sample["query"], sample["query_idf"], sample["posdoc"], sample["negdoc"], sample["label"])
         feature = {
             "query": tf.train.Feature(int64_list=tf.train.Int64List(value=query)),
             "query_idf": tf.train.Feature(float_list=tf.train.FloatList(value=query_idf)),
             "posdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=posdoc)),
             "negdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc)),
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
@@ -231,7 +232,9 @@ class EmbedText(Extractor):
         # return [self.embeddings[self.stoi[tok]] for tok in toks]
         return [self.stoi[tok] for tok in toks]
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         query = self.qid2toks[qid]
 
         # TODO find a way to calculate qlen/doclen stats earlier, so we can log them and check sanity of our values
@@ -254,6 +257,7 @@ class EmbedText(Extractor):
             "query_idf": np.array(idfs, dtype=np.float32),
             "negdocid": "",
             "negdoc": np.zeros(self.config["maxdoclen"], dtype=np.long),
+            "label": np.array(label, dtype=np.float32)
         }
 
         if negid:
@@ -310,7 +314,7 @@ class BertText(Extractor):
             "posdoc_mask": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
             "negdoc_mask": tf.io.FixedLenFeature([self.config["maxdoclen"]], tf.int64),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            "label": tf.io.FixedLenFeature([2], tf.float32)
         }
 
         return feature_description
@@ -322,6 +326,7 @@ class BertText(Extractor):
         """
         query, posdoc, negdoc, negdoc_id = sample["query"], sample["posdoc"], sample["negdoc"], sample["negdocid"]
         query_mask, posdoc_mask, negdoc_mask = sample["query_mask"], sample["posdoc_mask"], sample["negdoc_mask"]
+        label = sample["label"]
 
         feature = {
             "query": tf.train.Feature(int64_list=tf.train.Int64List(value=query)),
@@ -330,6 +335,7 @@ class BertText(Extractor):
             "posdoc_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=posdoc_mask)),
             "negdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc)),
             "negdoc_mask": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc_mask)),
+            "label": tf.train.Feature(float_list=tf.train.FloatList(value=label))
         }
 
         return feature
@@ -375,7 +381,9 @@ class BertText(Extractor):
 
         self._build_vocab(qids, docids, topics)
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         tokenizer = self.tokenizer
         qlen, doclen = self.config["maxqlen"], self.config["maxdoclen"]
 
@@ -399,6 +407,7 @@ class BertText(Extractor):
             "negdocid": "",
             "negdoc": np.zeros(doclen, dtype=np.long),
             "negdoc_mask": np.zeros(doclen, dtype=np.long),
+            "label": np.array(label)
         }
 
         if negid:
@@ -424,6 +433,7 @@ class BertText(Extractor):
         mask = [1 for _ in s] + [0 for _ in range(padlen)]
         return mask
 
+
 @Extractor.register
 class BertPassage(Extractor):
     module_name = "bertpassage"
@@ -436,7 +446,7 @@ class BertPassage(Extractor):
     pad_tok = " "
 
     config_spec = [
-        ConfigOption("maxqlen", 8, "Max query length"), ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
+        ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("stride", 100, "Stride"),
@@ -464,7 +474,7 @@ class BertPassage(Extractor):
             "negdoc": tf.io.FixedLenFeature([], tf.string),
             "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
             "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
-            "label": tf.io.FixedLenFeature([2], tf.float32, default_value=tf.convert_to_tensor([1, 0], dtype=tf.float32)),
+            "label": tf.io.FixedLenFeature([], tf.string)
         }
 
         return feature_description
@@ -476,6 +486,7 @@ class BertPassage(Extractor):
         """
         posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = sample["posdoc_mask"], sample["posdoc_seg"], sample["negdoc_mask"], sample["negdoc_seg"]
+        label = sample["label"]
 
         def _bytes_feature(value):
             """Returns a bytes_list from a string / byte."""
@@ -490,6 +501,7 @@ class BertPassage(Extractor):
             "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
             "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)), 
             "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
+            "label": _bytes_feature(tf.io.serialize_tensor(label)),
         }
 
         return feature
@@ -498,19 +510,25 @@ class BertPassage(Extractor):
         feature_description = self.get_tf_feature_description()
         parsed_example = tf.io.parse_example(example_proto, feature_description)
 
-        def parse_tensor(x):
+        def parse_tensor_as_int(x):
             parsed_tensor = tf.io.parse_tensor(x, tf.int64)
             parsed_tensor.set_shape([self.config["numpassages"], self.config["maxseqlen"]])
 
             return parsed_tensor
 
-        posdoc = tf.map_fn(parse_tensor, parsed_example["posdoc"], dtype=tf.int64)
-        posdoc_mask = tf.map_fn(parse_tensor, parsed_example["posdoc_mask"], dtype=tf.int64)
-        posdoc_seg = tf.map_fn(parse_tensor, parsed_example["posdoc_seg"], dtype=tf.int64)
-        negdoc = tf.map_fn(parse_tensor, parsed_example["negdoc"], dtype=tf.int64)
-        negdoc_mask = tf.map_fn(parse_tensor, parsed_example["negdoc_mask"], dtype=tf.int64)
-        negdoc_seg = tf.map_fn(parse_tensor, parsed_example["negdoc_seg"], dtype=tf.int64)
-        label = parsed_example["label"]
+        def parse_label_tensor(x):
+            parsed_tensor = tf.io.parse_tensor(x, tf.float32)
+            parsed_tensor.set_shape([self.config["numpassages"], 2])
+
+            return parsed_tensor
+
+        posdoc = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
+        posdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
+        posdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
+        negdoc = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
+        negdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
+        negdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
+        label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (posdoc, posdoc_mask, posdoc_seg, negdoc, negdoc_mask, negdoc_seg), label
 
@@ -529,13 +547,12 @@ class BertPassage(Extractor):
                 # Naive tokenization based on white space
                 doc = get_doc(docid).split()
                 passages = []
-                for i in range(0, self.config["numpassages"]):
+                for i in range(0, self.config["numpassages"] * self.config["passagelen"], self.config["stride"]):
                     if i >= len(doc):
                         passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
                         start = i * self.config["passagelen"]
                         end = start + self.config["passagelen"]
-                        # print(i, start, end)
                         passage = padlist(doc[start: end], padlen=self.config["passagelen"], pad_token=self.pad_tok)
 
                     # N.B: The passages are not bert tokenized.
@@ -554,16 +571,15 @@ class BertPassage(Extractor):
         if self.exist():
             return
 
-        if self.config["maxseqlen"] < self.config["passagelen"] + self.config["maxqlen"] + 3:
-            raise ValueError("maxseqlen is too short")
-
         self.index.create_index()
         self.qid2toks = defaultdict(list)
         self.docid2passages = None
 
         self._build_vocab(qids, docids, topics)
 
-    def id2vec(self, qid, posid, negid=None):
+    def id2vec(self, qid, posid, negid=None, label=None):
+        assert label is not None
+
         tokenizer = self.tokenizer
         maxseqlen = self.config["maxseqlen"]
 
@@ -596,7 +612,7 @@ class BertPassage(Extractor):
             "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-
+            "label": np.repeat(np.array([label], dtype=np.float32), self.config["numpassages"], 0)
         }
 
         if negid:

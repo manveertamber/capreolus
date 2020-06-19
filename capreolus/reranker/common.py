@@ -2,16 +2,62 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import torch
 from tensorflow.keras.layers import Layer
+from tensorflow.python.keras.losses import BinaryCrossentropy
+from tensorflow_ranking.python.keras.losses import PairwiseHingeLoss
 
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
 
 
-def pair_softmax_loss(pos_neg_scores):
+class KerasPairModel(tf.keras.Model):
+    def __init__(self, model, *args, **kwargs):
+        super(KerasPairModel, self).__init__(*args, **kwargs)
+        self.model = model
+
+    def call(self, x, **kwargs):
+        score = self.model.score(x, **kwargs)
+        return tf.stack([score, tf.zeros_like(score)], axis=1)
+
+    def predict_step(self, data):
+        return self.model.predict_step(data)
+
+
+class KerasTripletModel(tf.keras.Model):
+    def __init__(self, model, *args, **kwargs):
+        super(KerasTripletModel, self).__init__(*args, **kwargs)
+        self.model = model
+
+    def call(self, x, **kwargs):
+        return self.model.score_pair(x, **kwargs)
+
+    def predict_step(self, data):
+        return self.model.predict_step(data)
+
+
+class TFPairwiseHingeLoss(PairwiseHingeLoss):
+    def call(self, y_true, y_pred):
+        batch_size = tf.shape(y_true)[0]
+        y_true = tf.reshape(y_true, [-1, 2])
+        y_pred = tf.reshape(y_pred, [-1, 2])
+        
+        return super(TFPairwiseHingeLoss, self).call(y_true, y_pred)
+
+
+class TFBinaryCrossentropyLoss(BinaryCrossentropy):
+    def call(self, ytrue, ypred):
+        # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
+        batch_size = tf.shape(ytrue)[0]
+        ytrue = tf.reshape(ytrue, [batch_size, -1])
+        ypred = tf.reshape(ypred, [batch_size, -1])
+
+        return super(TFBinaryCrossentropyLoss, self).call(ytrue[:, 0], ypred[:, 0])
+
+
+def pair_softmax_loss(pos_neg_scores, *args, **kwargs):
     scores = torch.stack(pos_neg_scores, dim=1)
     return torch.mean(1.0 - scores.softmax(dim=1)[:, 0])
 
 
-def pair_hinge_loss(pos_neg_scores):
+def pair_hinge_loss(pos_neg_scores, *args, **kwargs):
     label = torch.ones_like(pos_neg_scores[0])  # , dtype=torch.int)
     return _hinge_loss(pos_neg_scores[0], pos_neg_scores[1], label)
 

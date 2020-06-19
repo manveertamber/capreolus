@@ -4,7 +4,7 @@ import os
 import tensorflow as tf
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor import EmbedText
-from capreolus.sampler import TrainDataset
+from capreolus.sampler import TrainTripletSampler
 from capreolus.trainer import TensorFlowTrainer
 
 
@@ -14,7 +14,7 @@ def test_tf_get_tf_dataset(monkeypatch):
         {"maxdoclen": 4, "maxqlen": 4, "tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection}
     )
     training_judgments = benchmark.qrels.copy()
-    train_dataset = TrainDataset(training_judgments, training_judgments, extractor)
+    train_dataset = TrainTripletSampler(training_judgments, training_judgments, extractor)
 
     reranker = collections.namedtuple("reranker", "extractor")(extractor=extractor)
 

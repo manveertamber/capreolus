@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from profane import ModuleBase, Dependency, ConfigOption, constants
 
-from capreolus.sampler import TrainDataset, PredDataset
+from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
 from capreolus import evaluator
@@ -26,6 +26,7 @@ class RerankTask(Task):
         Dependency(key="benchmark", module="benchmark", name="wsdm20demo", provide_this=True, provide_children=["collection"]),
         Dependency(key="rank", module="task", name="rank"),
         Dependency(key="reranker", module="reranker", name="KNRM"),
+        Dependency(key="sampler", module="sampler", name="triplet")
     ]
 
     commands = ["train", "evaluate", "traineval"] + Task.help_commands
@@ -63,13 +64,15 @@ class RerankTask(Task):
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
         dev_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]}
 
-        train_dataset = TrainDataset(
-            qid_docid_to_rank=train_run,
-            qrels=self.benchmark.qrels,
-            extractor=self.reranker.extractor,
-            relevance_level=self.benchmark.relevance_level,
+        # Depending on the sampler chosen, the dataset may generate triplets or pairs
+        train_dataset = self.sampler
+        train_dataset.prepare(
+            train_run, self.benchmark.qrels,self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
         )
-        dev_dataset = PredDataset(qid_docid_to_rank=dev_run, extractor=self.reranker.extractor)
+        dev_dataset = PredSampler()
+        dev_dataset.prepare(
+            dev_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+        )
 
         self.reranker.trainer.train(
             self.reranker,
@@ -87,14 +90,18 @@ class RerankTask(Task):
         dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
 
         test_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
-        test_dataset = PredDataset(qid_docid_to_rank=test_run, extractor=self.reranker.extractor)
+        test_dataset = PredSampler()
+        test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level)
         test_output_path = train_output_path / "pred" / "test" / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
         preds = {"dev": dev_preds, "test": test_preds}
 
         if include_train:
-            train_dataset = PredDataset(qid_docid_to_rank=train_run, extractor=self.reranker.extractor)
+            train_dataset = PredSampler(
+                train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+            )
+
             train_output_path = train_output_path / "pred" / "train" / "best"
             train_preds = self.reranker.trainer.predict(self.reranker, train_dataset, train_output_path)
             preds["train"] = train_preds
@@ -127,7 +134,8 @@ class RerankTask(Task):
             test_run = {
                 qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]
             }
-            test_dataset = PredDataset(qid_docid_to_rank=test_run, extractor=self.reranker.extractor)
+            test_dataset = PredSampler()
+            test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor)
 
             test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
