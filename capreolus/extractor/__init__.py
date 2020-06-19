@@ -551,7 +551,7 @@ class BertPassage(Extractor):
                     if i >= len(doc):
                         passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
-                        start = i * self.config["passagelen"]
+                        start = i * self.config["stride"]
                         end = start + self.config["passagelen"]
                         passage = padlist(doc[start: end], padlen=self.config["passagelen"], pad_token=self.pad_tok)
 
