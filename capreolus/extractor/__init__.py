@@ -548,12 +548,13 @@ class BertPassage(Extractor):
                 doc = get_doc(docid).split()
                 passages = []
                 for i in range(0, self.config["numpassages"] * self.config["passagelen"], self.config["stride"]):
+                    if len(passages) >= self.config["numpassages"]:
+                        break
+
                     if i >= len(doc):
                         passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
-                        start = i * self.config["stride"]
-                        end = start + self.config["passagelen"]
-                        passage = padlist(doc[start: end], padlen=self.config["passagelen"], pad_token=self.pad_tok)
+                        passage = padlist(doc[i: i + self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
 
                     # N.B: The passages are not bert tokenized.
                     passages.append(tokenize(" ".join(passage)))
