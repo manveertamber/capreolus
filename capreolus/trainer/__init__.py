@@ -623,6 +623,12 @@ class TensorFlowTrainer(Trainer):
 
         tf_features = [reranker.extractor.create_tf_feature(sample) for sample in dataset]
 
+        if len(tf_features) % self.config["batch"]:
+            num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config)
+            element_to_copy = tf_features[-1]
+            for i in range(num_elements_to_add):
+                tf_features.append(copy(element_to_copy))
+
         return [self.write_tf_record_to_file(dir_name, tf_features)]
 
     def convert_to_tf_train_record(self, reranker, dataset):
@@ -693,11 +699,11 @@ class TensorFlowTrainer(Trainer):
         2. Else, converts the dataset into tf records, writes them to disk, and returns them
         """
         if self.config["usecache"] and self.cache_exists(dataset):
-            return self.load_cached_tf_records(reranker, dataset, 1)
+            return self.load_cached_tf_records(reranker, dataset, self.config["batch"])
         else:
             tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
             # TODO use actual batch size here. see issue #52
-            return self.load_tf_records_from_file(reranker, tf_record_filenames, 1)  # self.config["batch"])
+            return self.load_tf_records_from_file(reranker, tf_record_filenames, self.config["batch"])
 
     def get_tf_train_records(self, reranker, dataset):
         """
