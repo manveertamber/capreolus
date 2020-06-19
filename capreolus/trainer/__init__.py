@@ -623,6 +623,8 @@ class TensorFlowTrainer(Trainer):
 
         tf_features = [reranker.extractor.create_tf_feature(sample) for sample in dataset]
 
+        # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
+        # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
         if len(tf_features) % self.config["batch"]:
             num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config)
             element_to_copy = tf_features[-1]
