@@ -626,7 +626,7 @@ class TensorFlowTrainer(Trainer):
         # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
         # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
         if len(tf_features) % self.config["batch"]:
-            num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config)
+            num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config["batch"])
             element_to_copy = tf_features[-1]
             for i in range(num_elements_to_add):
                 tf_features.append(copy(element_to_copy))
