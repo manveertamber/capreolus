@@ -559,6 +559,7 @@ class BertPassage(Extractor):
                     # N.B: The passages are not bert tokenized.
                     passages.append(tokenize(" ".join(passage)))
 
+                assert len(passages) == self.config["numpassages"]
                 self.docid2passages[docid] = passages
 
             self.qid2toks = {qid: tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
