@@ -488,11 +488,11 @@ class TensorFlowTrainer(Trainer):
 
     def get_optimizer(self):
         # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
-        # return AdamMultilr(
-        #     learning_rate=self.config["lr"],
-        #     pattern_lrs=[{"patterns": [r"/bert/"], "lr": self.config["bertlr"]}])
+        return AdamMultilr(
+            learning_rate=self.config["lr"],
+            pattern_lrs=[{"patterns": [r"/bert/"], "lr": self.config["bertlr"]}])
 
-        return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
+        # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
 
     def fastforward_training(self, reranker, weights_path, loss_fn):
         # TODO: Fix fast forwarding
