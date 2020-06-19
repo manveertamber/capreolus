@@ -6,8 +6,6 @@ from profane import ConfigOption, Dependency
 from capreolus.reranker.base import Reranker
 from capreolus.utils.loginit import get_logger
 
-from capreolus.reranker import Reranker
-
 
 class TFBERTMaxP_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
@@ -126,8 +124,7 @@ class TFBERTMaxP(Reranker):
         ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),
         ConfigOption("passagelen", 100, "Passage length"),
         ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
-        ConfigOption("stride", 20, "Stride"),
-        ConfigOption("mode", "maxp",),
+        ConfigOption("stride", 20, "Stride")
     ]
 
     def build_model(self):
