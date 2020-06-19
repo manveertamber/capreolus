@@ -443,17 +443,9 @@ class BertPassage(Extractor):
         ConfigOption("numpassages", 16, "Number of passages per document")
     ]
 
-    @staticmethod
-    def config():
-        maxseqlen = 256
-        numpassages = 16
-        maxqlen = 8
-        passagelen = 150
-        stride = 100
-        usecache = False
-
     def load_state(self, qids, docids):
-        with open(self.get_state_cache_file_path(qids, docids), "rb") as f:
+        cache_fn = self.get_state_cache_file_path(qids, docids)
+        with open(cache_fn, "rb") as f:
             state_dict = pickle.load(f)
             self.qid2toks = state_dict["qid2toks"]
             self.docid2passages = state_dict["docid2passages"]
@@ -541,7 +533,10 @@ class BertPassage(Extractor):
                     if i >= len(doc):
                         passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
-                        passage = padlist(doc[i: i+self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
+                        start = i * self.config["passagelen"]
+                        end = start + self.config["passagelen"]
+                        # print(i, start, end)
+                        passage = padlist(doc[start: end], padlen=self.config["passagelen"], pad_token=self.pad_tok)
 
                     # N.B: The passages are not bert tokenized.
                     passages.append(tokenize(" ".join(passage)))
