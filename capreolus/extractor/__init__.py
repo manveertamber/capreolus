@@ -546,7 +546,7 @@ class BertPassage(Extractor):
                 # Naive tokenization based on white space
                 doc = get_doc(docid).split()
                 passages = []
-                for i in range(0, self.config["numpassages"]):
+                for i in range(0, self.config["numpassages"] * self.config["passagelen"], self.config["stride"]):
                     if i >= len(doc):
                         passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
                     else:
