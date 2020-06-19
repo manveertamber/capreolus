@@ -1,3 +1,4 @@
+import sys
 import tensorflow as tf
 from profane import ConfigOption, Dependency
 from transformers import TFBertForSequenceClassification, BertConfig
