@@ -1,7 +1,5 @@
 from profane import import_all_modules
 
-# import_all_modules(__file__, __package__)
-
 import hashlib
 import math
 import os
@@ -24,6 +22,7 @@ from tqdm import tqdm
 from capreolus.reranker.common import pair_hinge_loss, pair_softmax_loss
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
+from capreolus.utils.keras_support import AdamMultilr
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
 from capreolus.reranker.common import TFBinaryCrossentropyLoss, KerasPairModel, KerasTripletModel, TFPairwiseHingeLoss
@@ -443,6 +442,7 @@ class TensorFlowTrainer(Trainer):
         ConfigOption("niters", 20, "number of iterations to train for"),
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         # ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
+        ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
         ConfigOption("lr", 0.001, "learning rate"),
         ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
         # ConfigOption("fastforward", False),
@@ -487,7 +487,10 @@ class TensorFlowTrainer(Trainer):
             raise ValueError("For TPU utilization, the storage config should start with 'gs://'")
 
     def get_optimizer(self):
-        return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
+        # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
+        return AdamMultilr(
+            learning_rate=self.config["lr"],
+            pattern_lrs=[{"patterns": [r"/bert/"], "lr": self.config["bertlr"]}])
 
     def fastforward_training(self, reranker, weights_path, loss_fn):
         # TODO: Fix fast forwarding

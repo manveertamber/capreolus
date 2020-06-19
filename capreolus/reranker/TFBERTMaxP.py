@@ -6,7 +6,7 @@ from profane import ConfigOption, Dependency
 from capreolus.reranker.base import Reranker
 from capreolus.utils.loginit import get_logger
 
-logger = get_logger(__name__)
+from capreolus.reranker import Reranker
 
 
 class TFBERTMaxP_Class(tf.keras.layers.Layer):
@@ -113,6 +113,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
     #     negdoc_scores = tf.math.reduce_max(neg_passage_scores.stack(), axis=0)
     #     return tf.stack([posdoc_scores, negdoc_scores], axis=1)
 
+
 @Reranker.register
 class TFBERTMaxP(Reranker):
     module_name = "TFBERTMaxP"
@@ -126,6 +127,7 @@ class TFBERTMaxP(Reranker):
         ConfigOption("passagelen", 100, "Passage length"),
         ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
         ConfigOption("stride", 20, "Stride"),
+        ConfigOption("mode", "maxp",),
     ]
 
     def build_model(self):
