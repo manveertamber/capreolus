@@ -28,7 +28,7 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.training import training_ops
-from tensorflow.python.util.tf_export import keras_export
+from tensorflow.python.keras.optimizer_v2 import learning_rate_schedule
 
 
 class AdamMultilr(optimizer_v2.OptimizerV2):
@@ -110,7 +110,7 @@ class AdamMultilr(optimizer_v2.OptimizerV2):
                beta_2=0.999,
                epsilon=1e-7,
                amsgrad=False,
-               name='Adam',
+               name="AdamMultilr",
                pattern_lrs=None,
                **kwargs):
     super(AdamMultilr, self).__init__(name, **kwargs)
@@ -133,11 +133,27 @@ class AdamMultilr(optimizer_v2.OptimizerV2):
       for var in var_list:
         self.add_slot(var, 'vhat')
 
+
+  def _decayed_multi_lr(self, lr, var_dtype):
+    """Get decayed learning rate as a Tensor with dtype=var_dtype."""
+    # lr_t = self._get_hyper("learning_rate", var_dtype)
+    lr_t = lr
+    if isinstance(lr_t, learning_rate_schedule.LearningRateSchedule):
+      local_step = math_ops.cast(self.iterations, var_dtype)
+      lr_t = math_ops.cast(lr_t(local_step), var_dtype)
+    if self._initial_decay > 0.:
+      local_step = math_ops.cast(self.iterations, var_dtype)
+      decay_t = self._get_hyper("decay", var_dtype)
+      lr_t = lr_t / (1. + decay_t * local_step)
+    return lr_t
+
+
   def _prepare_local(self, var_device, var_dtype, apply_state):
     super(AdamMultilr, self)._prepare_local(var_device, var_dtype, apply_state)
     if self.pattern_lrs:
         for i, pair in enumerate(self.pattern_lrs):
-            apply_state[(var_device, var_dtype)][f"lr-{i}_t"] = pair["lr"]
+            lr_t = array_ops.identity(self._decayed_multi_lr(pair["lr"]))
+            apply_state[(var_device, var_dtype)][f"lr-{i}_t"] = lr_t
 
     local_step = math_ops.cast(self.iterations + 1, var_dtype)
     beta_1_t = array_ops.identity(self._get_hyper('beta_1', var_dtype))
@@ -294,6 +310,7 @@ class AdamMultilr(optimizer_v2.OptimizerV2):
         'beta_2': self._serialize_hyperparameter('beta_2'),
         'epsilon': self.epsilon,
         'amsgrad': self.amsgrad,
+        'pattern_lrs': self.pattern_lrs,
     })
     return config
 
