@@ -152,7 +152,7 @@ class AdamMultilr(optimizer_v2.OptimizerV2):
     super(AdamMultilr, self)._prepare_local(var_device, var_dtype, apply_state)
     if self.pattern_lrs:
         for i, pair in enumerate(self.pattern_lrs):
-            lr_t = array_ops.identity(self._decayed_multi_lr(pair["lr"]))
+            lr_t = array_ops.identity(self._decayed_multi_lr(pair["lr"], var_dtype))
             apply_state[(var_device, var_dtype)][f"lr-{i}_t"] = lr_t
 
     local_step = math_ops.cast(self.iterations + 1, var_dtype)
