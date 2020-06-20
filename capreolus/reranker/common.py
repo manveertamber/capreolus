@@ -43,12 +43,17 @@ class TFPairwiseHingeLoss(PairwiseHingeLoss):
 
 class TFBinaryCrossentropyLoss(BinaryCrossentropy):
     def call(self, ytrue, ypred):
+        """
+        :param ytrue: (2, num_passage, 2)
+        :param ypred: (2, 2, num_passage)
+        :return:
+        """
         # Because we need only one label, while the BertPassage extractor always gives 2 labels (the second one is just 0 always)
         batch_size = tf.shape(ytrue)[0]
-        ytrue = tf.reshape(ytrue, [batch_size, -1])
-        ypred = tf.reshape(ypred, [batch_size, -1])
+        ytrue = tf.reshape(ytrue[:, :, 0], [batch_size, -1])
+        ypred = tf.reshape(ypred[:, 0, :], [batch_size, -1])
 
-        return super(TFBinaryCrossentropyLoss, self).call(ytrue[:, 0], ypred[:, 0])
+        return super(TFBinaryCrossentropyLoss, self).call(ytrue, ypred)
 
 
 def pair_softmax_loss(pos_neg_scores, *args, **kwargs):
