@@ -444,8 +444,9 @@ class TensorFlowTrainer(Trainer):
         # ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
         ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
         ConfigOption("lr", 0.001, "learning rate"),
-        ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
+        ConfigOption("decay", 0.0, "learning rate decay"),
         ConfigOption("warmupsteps", 10),
+        ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
         ConfigOption("usecache", False),
@@ -486,7 +487,9 @@ class TensorFlowTrainer(Trainer):
             raise ValueError("For TPU utilization, the storage config should start with 'gs://'")
 
     def get_optimizer(self):
+        # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
         return AdamMultilr(
+            decay=self.config["decay"],
             learning_rate=self.config["lr"],
             pattern_lrs=[{"patterns": [r"/bert/"], "lr": self.config["bertlr"]}])
 
