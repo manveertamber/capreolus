@@ -513,3 +513,11 @@ def test_deeptiles_create(monkeypatch, tmpdir, dummy_index):
         "space": 8,
         "lessdummy": 9,
     }
+
+
+def test_bertpassage_build_vocab(monkeypatch):
+    pass
+
+
+def test_bertpassage_id2vec(monkeypatch):
+    pass
