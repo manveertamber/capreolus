@@ -438,10 +438,10 @@ class BertText(Extractor):
 @Extractor.register
 class BertPassage(Extractor):
     module_name = "bertpassage"
-    dependencies = {
+    dependencies = [
         Dependency(key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
-    }
+    ]
 
     pad = 0
     pad_tok = "[PAD]"
