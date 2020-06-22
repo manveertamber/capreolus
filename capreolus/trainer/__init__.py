@@ -444,9 +444,9 @@ class TensorFlowTrainer(Trainer):
         # ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
         ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
         ConfigOption("lr", 0.001, "learning rate"),
-        ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
-        # ConfigOption("fastforward", False),
+        ConfigOption("decay", 0.0, "learning rate decay"),
         ConfigOption("warmupsteps", 10),
+        ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
         ConfigOption("usecache", False),
@@ -489,10 +489,9 @@ class TensorFlowTrainer(Trainer):
     def get_optimizer(self):
         # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
         return AdamMultilr(
+            decay=self.config["decay"],
             learning_rate=self.config["lr"],
             pattern_lrs=[{"patterns": [r"/bert/"], "lr": self.config["bertlr"]}])
-
-        # return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
 
     def fastforward_training(self, reranker, weights_path, loss_fn):
         # TODO: Fix fast forwarding
@@ -556,7 +555,9 @@ class TensorFlowTrainer(Trainer):
             wrapped_model = self.get_model(reranker.model)
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)
-            trec_callback = TrecCheckpointCallback(qrels, dev_data, dev_records, train_output_path, metric, validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
+            trec_callback = TrecCheckpointCallback(
+                qrels, dev_data, dev_records, train_output_path, metric,
+                validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
             learning_rate_callback = tf.keras.callbacks.LearningRateScheduler(self.do_warmup)
             tensorboard_callback = tf.keras.callbacks.TensorBoard(
                 log_dir="{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"])

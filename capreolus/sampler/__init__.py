@@ -82,7 +82,7 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
     config_spec = [
         ConfigOption("seed", 1234),
     ]
-    dependencies = {}
+    dependencies = []
 
     def __hash__(self):
         return self.get_hash()
@@ -137,7 +137,7 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
     config_spec = [
         ConfigOption("seed", 1234),
     ]
-    dependencies = {}
+    dependencies = []
 
     def get_hash(self):
         sorted_rep = sorted([(qid, docids) for qid, docids in self.qid_to_docids.items()])
@@ -153,6 +153,7 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
         random.seed(self.config["seed"])
 
         while True:
+            # TODO: two documents does not necessarily come from same query
             random.shuffle(all_qids)
             for qid in all_qids:
                 for docid in self.qid_to_reldocs[qid]:

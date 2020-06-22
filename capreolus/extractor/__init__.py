@@ -7,6 +7,7 @@ from collections import defaultdict
 import tensorflow as tf
 
 import os
+import random
 import numpy as np
 import hashlib
 from pymagnitude import Magnitude, MagnitudeUtils
@@ -437,13 +438,13 @@ class BertText(Extractor):
 @Extractor.register
 class BertPassage(Extractor):
     module_name = "bertpassage"
-    dependencies = {
+    dependencies = [
         Dependency(key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
-    }
+    ]
 
     pad = 0
-    pad_tok = " "
+    pad_tok = "[PAD]"
 
     config_spec = [
         ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
@@ -454,7 +455,8 @@ class BertPassage(Extractor):
     ]
 
     def load_state(self, qids, docids):
-        with open(self.get_state_cache_file_path(qids, docids), "rb") as f:
+        cache_fn = self.get_state_cache_file_path(qids, docids)
+        with open(cache_fn, "rb") as f:
             state_dict = pickle.load(f)
             self.qid2toks = state_dict["qid2toks"]
             self.docid2passages = state_dict["docid2passages"]
@@ -546,18 +548,29 @@ class BertPassage(Extractor):
                 # Naive tokenization based on white space
                 doc = get_doc(docid).split()
                 passages = []
-                for i in range(0, self.config["numpassages"] * self.config["passagelen"], self.config["stride"]):
-                    if len(passages) >= self.config["numpassages"]:
+                numpassages = self.config["numpassages"]
+                for i in range(0, numpassages * self.config["stride"], self.config["stride"]):
+                    if len(passages) >= numpassages:
                         break
 
                     if i >= len(doc):
-                        passage = padlist([], padlen=self.config["passagelen"], pad_token=self.pad_tok)
+                        assert len(passages) > 0, f"no passage can be built from empty document {doc}"
+                        logger.warning(f"document failed to fill {numpassages} passages, got {len(passages)} only")
+                        break
                     else:
-                        passage = padlist(doc[i: i + self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
+                        # passage = padlist(doc[i: i + self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
+                        passage = doc[i: i + self.config["passagelen"]]
 
                     # N.B: The passages are not bert tokenized.
                     passages.append(tokenize(" ".join(passage)))
 
+                n_actual_passages = len(passages)
+                for _ in range(numpassages - n_actual_passages):
+                    # randomly use one of previous passages when the document is exhausted
+                    idx = random.randint(0, n_actual_passages - 1)
+                    passages.append(passages[idx])
+
+                assert len(passages) == self.config["numpassages"]
                 self.docid2passages[docid] = passages
 
             self.qid2toks = {qid: tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
