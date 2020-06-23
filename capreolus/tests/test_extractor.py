@@ -1,4 +1,5 @@
 from collections import defaultdict
+import tensorflow as tf
 
 import nltk
 from nltk import TextTilingTokenizer
@@ -15,6 +16,7 @@ from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
 from capreolus.utils.exceptions import MissingDocError
 from capreolus.extractor.bagofwords import BagOfWords
 from capreolus.extractor.deeptileextractor import DeepTileExtractor
+from capreolus.extractor import BertPassage
 
 MAXQLEN = 8
 MAXDOCLEN = 7
@@ -84,7 +86,7 @@ def test_embedtext_id2vec(monkeypatch):
     extractor.preprocess(qids, docids, benchmark.topics[benchmark.query_type])
 
     docid1, docid2 = docids[0], docids[1]
-    data = extractor.id2vec(qid, docid1, docid2)
+    data = extractor.id2vec(qid, docid1, docid2, label=[1, 0])
     q, d1, d2, idf = [data[k] for k in ["query", "posdoc", "negdoc", "idfs"]]
 
     assert q.shape[0] == idf.shape[0]
@@ -104,7 +106,7 @@ def test_embedtext_id2vec(monkeypatch):
     # check MissDocError
     error_thrown = False
     try:
-        extractor.id2vec(qid, "0000000", "111111")
+        extractor.id2vec(qid, "0000000", "111111", label=[1, 0])
     except MissingDocError as err:
         error_thrown = True
         assert err.related_qid == qid
@@ -516,8 +518,153 @@ def test_deeptiles_create(monkeypatch, tmpdir, dummy_index):
 
 
 def test_bertpassage_build_vocab(monkeypatch):
-    pass
+    extractor = BertPassage({
+        "numpassages": 4,
+        "passagelen": 5,
+        "stride": 3,
+        "index": {
+            "collection": {"name": "dummy"}
+        }
+    })
+
+    def get_doc(*args, **kwargs):
+        return (
+            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
+            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
+            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
+            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
+            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
+            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
+            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
+            "the world"
+        )
+
+    monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
+    topics = {
+        "301": "scooby dooby doo where are you"
+    }
+
+    extractor._build_vocab(["301"], ["some_docid"], topics)
+
+    assert len(extractor.docid2passages["some_docid"]) == 4
+
+    assert extractor.docid2passages["some_docid"] == [
+        ["o", "that", "we", "now", "had"],
+        ["now", "had", "here", "but", "one"],
+        ["but", "one", "ten", "thousand", "of"],
+        ["thousand", "of", "those", "men", "in"]
+    ]
+
+    assert extractor.qid2toks["301"] == ['sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you']
 
 
 def test_bertpassage_id2vec(monkeypatch):
-    pass
+    extractor = BertPassage({
+        "numpassages": 4,
+        "passagelen": 5,
+        "maxseqlen": 15,
+        "stride": 3,
+        "index": {
+            "collection": {"name": "dummy"}
+        }
+    })
+
+    def get_doc(*args, **kwargs):
+        return (
+            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
+            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
+            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
+            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
+            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
+            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
+            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
+            "the world"
+        )
+
+    monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
+    topics = {
+        "301": "scooby dooby doo where are you"
+    }
+
+    extractor._build_vocab(["301"], ["some_docid"], topics)
+    data = extractor.id2vec("301", "some_docid", negid="some_docid", label=[1, 0])
+
+    tokenizer = extractor.tokenizer.bert_tokenizer
+
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "[SEP]"]
+
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "[SEP]"]
+
+
+def test_bertpassage_id2vec_with_pad(monkeypatch):
+    extractor = BertPassage({
+        "numpassages": 4,
+        "passagelen": 5,
+        "maxseqlen": 20,
+        "stride": 3,
+        "index": {
+            "collection": {"name": "dummy"}
+        }
+    })
+
+    def get_doc(*args, **kwargs):
+        return (
+            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
+            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
+            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
+            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
+            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
+            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
+            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
+            "the world"
+        )
+
+    monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
+    topics = {
+        "301": "scooby dooby doo where are you"
+    }
+
+    extractor._build_vocab(["301"], ["some_docid"], topics)
+    data = extractor.id2vec("301", "some_docid", negid="some_docid", label=[1, 0])
+
+    tokenizer = extractor.tokenizer.bert_tokenizer
+
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "now", "had", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["posdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["posdoc_seg"][0], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "but", "one", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["posdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["posdoc_seg"][1], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "thousand", "of", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["posdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["posdoc_seg"][2], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "men", "in", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["posdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["posdoc_seg"][3], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "now", "had", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["negdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["negdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "but", "one", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["negdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["negdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "thousand", "of", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["negdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["negdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "men", "in", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
+    tf.debugging.assert_equal(data["negdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
+    tf.debugging.assert_equal(data["negdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+
+
