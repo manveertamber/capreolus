@@ -794,7 +794,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         def test_step(inputs):
             data, labels = inputs
-            predictions = wrapped_model(data, training=False)
+            predictions = wrapped_model.predice_step(data, training=False)
 
             return predictions
 
@@ -820,9 +820,13 @@ class TPUTrainer(TensorFlowTrainer):
             train_loss = total_loss / num_batches
             if (epoch + 1) % self.config["validatefreq"] == 0:
                 # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
-                predictions = [distributed_test_step(x) for x in dev_dist_dataset]
-                flattened_predictions = [pred for sublist in predictions for per_replica_predictions in sublist for pred in per_replica_predictions.values]
-                trec_preds = self.get_preds_in_trec_format(flattened_predictions, dev_data)
+                predictions = []
+                for x in dev_dist_dataset:
+                    pred_batch = distributed_test_step(x)
+                    for p in pred_batch.values:
+                       predictions.append(p)
+
+                trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
                 metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                 logger.info("dev metrics: %s",
                             " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
@@ -832,3 +836,17 @@ class TPUTrainer(TensorFlowTrainer):
 
             logger.info("Loss for epoch {0} is {1}".format(epoch, train_loss))
 
+    @staticmethod
+    def get_preds_in_trec_format(predictions, dev_data):
+        """
+        Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
+        As a side effect, also writes the predictions into a file in the trec format
+        """
+        logger.debug("There are {} predictions".format(len(predictions)))
+        pred_dict = defaultdict(lambda: dict())
+
+        for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
+            # Pytrec_eval has problems with high precision floats
+            pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
+
+        return dict(pred_dict)

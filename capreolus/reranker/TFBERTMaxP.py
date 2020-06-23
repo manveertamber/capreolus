@@ -35,7 +35,9 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
     def predict_step(self, data):
         data = data_adapter.expand_1d(data)
         x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
-        passage_scores = self.score(x, training=False)
+        passage_scores = self.score(x, training=False)[:, :, 0]
+        batch_size = tf.shape(passage_scores)[0]
+        passage_scores = tf.reshape(passage_scores, [batch_size, self.extractor.config["numpassages"]])
 
         return tf.math.reduce_max(passage_scores, axis=1)
 
