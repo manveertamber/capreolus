@@ -754,6 +754,9 @@ class TensorFlowTrainer(Trainer):
 class TPUTrainer(TensorFlowTrainer):
     module_name = "tputrainer"
 
+    def get_optimizer(self):
+        return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
             train_output_path = "{0}/{1}/{2}".format(
@@ -769,12 +772,11 @@ class TPUTrainer(TensorFlowTrainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
-            test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-                name='test_accuracy')
             reranker.build_model()
             wrapped_model = self.get_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
             optimizer = self.get_optimizer()
+            checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=wrapped_model)
 
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
@@ -832,7 +834,7 @@ class TPUTrainer(TensorFlowTrainer):
                             " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                 if metrics[metric] > best_metric:
                     best_metric = metrics[metric]
-                    wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+                    checkpoint.save(train_output_path, "ckpt")
 
             logger.info("Loss for epoch {0} is {1}".format(epoch, train_loss))
 
@@ -850,3 +852,17 @@ class TPUTrainer(TensorFlowTrainer):
             pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
 
         return dict(pred_dict)
+
+    def load_best_model(self, reranker, train_output_path):
+        # TODO: Do the train_output_path modification at one place?
+        if self.tpu:
+            train_output_path = "{0}/{1}/{2}".format(
+                self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
+            )
+
+        wrapped_model = self.get_model(reranker.model)
+        new_optimizer = self.get_optimizer()
+        checkpoint = tf.train.Checkpoint(optimizer=new_optimizer, model=wrapped_model)
+        checkpoint.restore(tf.train.latest_checkpoint(train_output_path))
+
+        return wrapped_model.model
