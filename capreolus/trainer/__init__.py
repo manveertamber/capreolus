@@ -834,7 +834,7 @@ class TPUTrainer(TensorFlowTrainer):
                             " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                 if metrics[metric] > best_metric:
                     best_metric = metrics[metric]
-                    checkpoint.save(train_output_path, "ckpt")
+                    checkpoint.save(train_output_path)
 
             logger.info("Loss for epoch {0} is {1}".format(epoch, train_loss))
 
