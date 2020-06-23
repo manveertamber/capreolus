@@ -33,19 +33,6 @@ class KerasTripletModel(tf.keras.Model):
         return self.model.predict_step(data)
 
 
-class TFBertPassageHingeLoss(PairwiseHingeLoss):
-    def __init__(self, num_passages,  *args, **kwargs):
-        self.num_passages = num_passages
-        super(TFBertPassageHingeLoss, self).__init__(*args, **kwargs)
-
-    def call(self, y_true, y_pred):
-        batch_size = tf.shape(y_true)[0]
-
-        assert tf.shape(y_pred)[0] == batch_size
-        assert tf.shape(y_pred)[1] == self.num_passages
-        assert tf.shape(y_pred)[2] == 2
-
-
 class TFPairwiseHingeLoss(PairwiseHingeLoss):
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1, 2])

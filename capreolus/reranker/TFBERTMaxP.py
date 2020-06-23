@@ -121,7 +121,7 @@ class TFBERTMaxP(Reranker):
 
     dependencies = [
         Dependency(key="extractor", module="extractor", name="bertpassage"),
-        Dependency(key="trainer", module="trainer", name="tensorflow"),
+        Dependency(key="trainer", module="trainer", name="tputrainer"),
     ]
     config_spec = [
         ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),

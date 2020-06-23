@@ -521,9 +521,9 @@ class TensorFlowTrainer(Trainer):
     def get_loss(self, loss_name):
         try:
             if loss_name == "pairwise_hinge_loss":
-                loss = TFPairwiseHingeLoss()
+                loss = TFPairwiseHingeLoss(reduction=tf.keras.losses.Reduction.NONE)
             elif loss_name == "crossentropy":
-                loss = TFCategoricalCrossEntropyLoss(from_logits=True)
+                loss = TFCategoricalCrossEntropyLoss(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
             else:
                 loss = tfr.keras.losses.get(loss_name)
         except ValueError:
@@ -748,3 +748,73 @@ class TensorFlowTrainer(Trainer):
         Searcher.write_trec_run(trec_preds, pred_fn)
 
         return trec_preds
+
+
+@Trainer.register
+class TPUTrainer(TensorFlowTrainer):
+    module_name = "tputrainer"
+
+    def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
+        if self.tpu:
+            train_output_path = "{0}/{1}/{2}".format(
+                self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
+            )
+
+        os.makedirs(dev_output_path, exist_ok=True)
+
+        train_records = self.get_tf_train_records(reranker, train_dataset)
+        dev_records = self.get_tf_dev_records(reranker, dev_data)
+        train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
+        dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
+
+        strategy_scope = self.strategy.scope()
+        with strategy_scope:
+            #create_model
+            reranker.build_model()
+            wrapped_model = self.get_model(reranker.model)
+            loss_object = self.get_loss(self.config["loss"])
+            optimizer = self.get_optimizer()
+
+            def compute_loss(labels, predictions):
+                per_example_loss = loss_object(labels, predictions)
+                return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.config["batch"])
+
+        def train_step(inputs):
+            data, labels = inputs
+
+            with tf.GradientTape() as tape:
+                predictions = wrapped_model(data, training=True)
+                loss = compute_loss(labels, predictions)
+
+            gradients = tape.gradient(loss, wrapped_model.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, wrapped_model.trainable_variables))
+
+            return loss
+
+        def test_step(inputs):
+            data, labels = inputs
+
+            predictions = wrapped_model(data, training=False)
+            t_loss = loss_object(labels, predictions)
+
+        @tf.function
+        def distributed_train_step(dataset_inputs):
+            per_replica_losses = self.strategy.run(train_step, args=(dataset_inputs,))
+
+            return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
+        @tf.function
+        def distributed_test_step(dataset_inputs):
+            return self.strategy.run(test_step, args=(dataset_inputs,))
+
+        for epoch in tqdm(range(self.config["niters"]), desc="custom train"):
+            total_loss = 0.0
+            num_batches = 0
+
+            for x in train_dist_dataset:
+                total_loss += distributed_train_step(x)
+                num_batches += 1
+
+            train_loss = total_loss / num_batches
+            if (epoch + 1) % self.config["validatefreq"] == 0:
+                distributed_test_step(x)
