@@ -775,8 +775,10 @@ class TPUTrainer(TensorFlowTrainer):
             reranker.build_model()
             wrapped_model = self.get_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
-            optimizer = self.get_optimizer()
-            checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=wrapped_model)
+            optimizer_1 = self.get_optimizer()
+            optimizer_2 = tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"])
+
+            checkpoint = tf.train.Checkpoint(optimizer=optimizer_1, model=wrapped_model)
 
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
@@ -790,7 +792,10 @@ class TPUTrainer(TensorFlowTrainer):
                 loss = compute_loss(labels, predictions)
 
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, wrapped_model.trainable_variables))
+            bert_variables = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'bert' in variable.name]
+            classifier_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'classifier' in variable.name]
+            optimizer_1.apply_gradients(classifier_vars)
+            optimizer_2.apply_gradients(bert_variables)
 
             return loss
 
