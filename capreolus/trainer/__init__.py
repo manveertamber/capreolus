@@ -796,10 +796,7 @@ class TPUTrainer(TensorFlowTrainer):
             data, labels = inputs
             predictions = wrapped_model(data, training=False)
 
-            if self.strategy.num_replicas_in_sync > 1:
-                return predictions.values
-            else:
-                return predictions
+            return predictions
 
         @tf.function
         def distributed_train_step(dataset_inputs):
@@ -824,7 +821,7 @@ class TPUTrainer(TensorFlowTrainer):
             if (epoch + 1) % self.config["validatefreq"] == 0:
                 # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
                 predictions = [distributed_test_step(x) for x in dev_dist_dataset]
-                flattened_predictions = [pred for sublist in predictions for per_replica_predictions in sublist for pred in per_replica_predictions]
+                flattened_predictions = [pred for sublist in predictions for per_replica_predictions in sublist for pred in per_replica_predictions.values]
                 trec_preds = self.get_preds_in_trec_format(flattened_predictions, dev_data)
                 metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                 logger.info("dev metrics: %s",
