@@ -794,7 +794,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         def test_step(inputs):
             data, labels = inputs
-            predictions = wrapped_model.predict_step(data, training=False)
+            predictions = wrapped_model.predict_step(data)
 
             return predictions
 
