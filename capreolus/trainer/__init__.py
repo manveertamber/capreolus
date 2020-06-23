@@ -769,6 +769,8 @@ class TPUTrainer(TensorFlowTrainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
+                name='test_accuracy')
             reranker.build_model()
             wrapped_model = self.get_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
@@ -794,7 +796,10 @@ class TPUTrainer(TensorFlowTrainer):
             data, labels = inputs
             predictions = wrapped_model(data, training=False)
 
-            return predictions
+            if self.strategy.num_replicas_in_sync > 1:
+                return predictions.values
+            else:
+                return predictions
 
         @tf.function
         def distributed_train_step(dataset_inputs):
@@ -819,7 +824,7 @@ class TPUTrainer(TensorFlowTrainer):
             if (epoch + 1) % self.config["validatefreq"] == 0:
                 # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
                 predictions = [distributed_test_step(x) for x in dev_dist_dataset]
-                flattened_predictions = [item for sublist in predictions for item in sublist]
+                flattened_predictions = [pred for sublist in predictions for per_replica_predictions in sublist for pred in per_replica_predictions]
                 trec_preds = self.get_preds_in_trec_format(flattened_predictions, dev_data)
                 metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                 logger.info("dev metrics: %s",
