@@ -520,9 +520,7 @@ class TensorFlowTrainer(Trainer):
 
     def get_loss(self, loss_name):
         try:
-            if loss_name == "binary_crossentropy":
-                loss = TFBinaryCrossentropyLoss(from_logits=True)
-            elif loss_name == "pairwise_hinge_loss":
+            if loss_name == "pairwise_hinge_loss":
                 loss = TFPairwiseHingeLoss()
             elif loss_name == "crossentropy":
                 loss = TFCategoricalCrossEntropyLoss(from_logits=True)
@@ -534,7 +532,7 @@ class TensorFlowTrainer(Trainer):
         return loss
 
     def get_model(self, model):
-        if self.config["loss"] == "binary_crossentropy" or self.config["loss"] == "crossentropy":
+        if self.config["loss"] == "crossentropy":
             return KerasPairModel(model)
 
         return KerasTripletModel(model)
