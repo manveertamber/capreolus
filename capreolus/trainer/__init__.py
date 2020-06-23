@@ -866,3 +866,34 @@ class TPUTrainer(TensorFlowTrainer):
         checkpoint.restore(tf.train.latest_checkpoint(train_output_path))
 
         return wrapped_model.model
+
+    def predict(self, reranker, pred_data, pred_fn):
+        pred_records = self.get_tf_dev_records(reranker, pred_data)
+        pred_dist_dataset = self.strategy.experimental_distribute_dataset(pred_records)
+
+        strategy_scope = self.strategy.scope()
+
+        with strategy_scope:
+            wrapped_model = self.get_model(reranker.model)
+
+        def test_step(inputs):
+            data, labels = inputs
+            predictions = wrapped_model.predict_step(data)
+
+            return predictions
+
+        @tf.function
+        def distributed_test_step(dataset_inputs):
+            return self.strategy.run(test_step, args=(dataset_inputs,))
+
+        predictions = []
+        for x in pred_dist_dataset:
+            pred_batch = distributed_test_step(x)
+            for p in pred_batch.values:
+                predictions.append(p)
+
+        trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
+        os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
+        Searcher.write_trec_run(trec_preds, pred_fn)
+
+        return trec_preds
