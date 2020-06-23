@@ -465,6 +465,7 @@ def test_bertmaxp_binary_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
             "storage": None,
             "boardname": "default",
             "loss": "binary_crossentropy",
+            "eager": True
         }
     })
 
@@ -488,12 +489,12 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
         "pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20,
         "extractor": {
             "name": "bertpassage",
-            "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100,
+            "usecache": False, "maxseqlen": 128, "numpassages": 16, "passagelen": 150, "stride": 100,
             "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}}
         },
         "trainer": {
             "name": "tensorflow",
-            "batch": 1,
+            "batch": 4,
             "niters": 1,
             "itersize": 2,
             "lr": 0.001,
@@ -504,6 +505,7 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
             "storage": None,
             "boardname": "default",
             "loss": "crossentropy",
+            "eager": False 
         }
     })
 

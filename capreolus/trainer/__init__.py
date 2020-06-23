@@ -453,6 +453,7 @@ class TensorFlowTrainer(Trainer):
         ConfigOption("tpuname", None),
         ConfigOption("tpuzone", None),
         ConfigOption("storage", None),
+        ConfigOption("eager", False)
     ]
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
@@ -551,6 +552,7 @@ class TensorFlowTrainer(Trainer):
         initial_iter = self.fastforward_training(reranker, dev_output_path, None)
         logger.info("starting training from iteration %s/%s", initial_iter, self.config["niters"])
 
+        tf.config.experimental_run_functions_eagerly(self.config["eager"])
         strategy_scope = self.strategy.scope()
         with strategy_scope:
             reranker.build_model()  # TODO needed here?

@@ -71,7 +71,9 @@ class TFBinaryCrossentropyLoss(BinaryCrossentropy):
 
 class TFCategoricalCrossEntropyLoss(CategoricalCrossentropy):
     def call(self, ytrue, ypred):
-        assert tf.shape(ytrue) == tf.shape(ypred)
+        batch_size = tf.shape(ytrue)[0]
+        tf.debugging.assert_equal(tf.shape(ytrue), tf.shape(ypred))
+        
         return super(TFCategoricalCrossEntropyLoss, self).call(ytrue, ypred)
 
 

@@ -26,10 +26,9 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         doc_mask = tf.reshape(doc_mask, [batch_size * num_passages, maxseqlen])
         doc_seg = tf.reshape(doc_seg, [batch_size * num_passages, maxseqlen])
 
-        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0][:, 0]
-        assert tf.shape(passage_scores) == (batch_size, num_passages, 2)
+        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
 
-        # passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
+        passage_scores = tf.reshape(passage_scores, [batch_size, num_passages, 2])
 
         return passage_scores
 
@@ -48,11 +47,12 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
     def score_pair(self, x, **kwargs):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
 
-        pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg))
-        neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg))
+        pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg))[:, :, 0]
+        neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg))[:, :, 0]
         batch_size = tf.shape(pos_score)[0]
 
         stacked_score = tf.stack([pos_score, neg_score], axis=2)
+
         return stacked_score
 
     # def call(self, x, **kwargs):
