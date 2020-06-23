@@ -25,7 +25,7 @@ from capreolus.utils.loginit import get_logger
 from capreolus.utils.keras_support import AdamMultilr
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
-from capreolus.reranker.common import TFBinaryCrossentropyLoss, KerasPairModel, KerasTripletModel, TFPairwiseHingeLoss, TFCategoricalCrossEntropyLoss
+from capreolus.reranker.common import KerasPairModel, KerasTripletModel, TFPairwiseHingeLoss, TFCategoricalCrossEntropyLoss
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
