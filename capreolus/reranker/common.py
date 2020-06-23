@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import torch
 from tensorflow.keras.layers import Layer
-from tensorflow.python.keras.losses import BinaryCrossentropy
+from tensorflow.python.keras.losses import BinaryCrossentropy, CategoricalCrossentropy
 from tensorflow_ranking.python.keras.losses import PairwiseHingeLoss
 
 _hinge_loss = torch.nn.MarginRankingLoss(margin=1, reduction="mean")
@@ -15,7 +15,7 @@ class KerasPairModel(tf.keras.Model):
 
     def call(self, x, **kwargs):
         score = self.model.score(x, **kwargs)
-        return tf.stack([score, tf.zeros_like(score)], axis=1)
+        return score
 
     def predict_step(self, data):
         return self.model.predict_step(data)
@@ -46,7 +46,6 @@ class TFBertPassageHingeLoss(PairwiseHingeLoss):
         assert tf.shape(y_pred)[2] == 2
 
 
-
 class TFPairwiseHingeLoss(PairwiseHingeLoss):
     def call(self, y_true, y_pred):
         y_true = tf.reshape(y_true, [-1, 2])
@@ -68,6 +67,12 @@ class TFBinaryCrossentropyLoss(BinaryCrossentropy):
         ypred = tf.reshape(ypred[:, 0, :], [batch_size, -1])
 
         return super(TFBinaryCrossentropyLoss, self).call(ytrue, ypred)
+
+
+class TFCategoricalCrossEntropyLoss(CategoricalCrossentropy):
+    def call(self, ytrue, ypred):
+        assert tf.shape(ytrue) == tf.shape(ypred)
+        return super(TFCategoricalCrossEntropyLoss, self).call(ytrue, ypred)
 
 
 def pair_softmax_loss(pos_neg_scores, *args, **kwargs):

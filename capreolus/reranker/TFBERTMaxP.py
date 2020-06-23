@@ -27,7 +27,9 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         doc_seg = tf.reshape(doc_seg, [batch_size * num_passages, maxseqlen])
 
         passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0][:, 0]
-        passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
+        assert tf.shape(passage_scores) == (batch_size, num_passages, 2)
+
+        # passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
 
         return passage_scores
 

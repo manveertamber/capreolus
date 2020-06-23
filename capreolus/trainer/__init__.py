@@ -26,6 +26,7 @@ from capreolus.utils.keras_support import AdamMultilr
 from capreolus.utils.common import plot_metrics, plot_loss
 from capreolus import evaluator
 from capreolus.reranker.common import TFBinaryCrossentropyLoss, KerasPairModel, KerasTripletModel, TFPairwiseHingeLoss
+from reranker.common import TFCategoricalCrossEntropyLoss
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 RESULTS_BASE_PATH = constants["RESULTS_BASE_PATH"]
@@ -523,6 +524,8 @@ class TensorFlowTrainer(Trainer):
                 loss = TFBinaryCrossentropyLoss(from_logits=True)
             elif loss_name == "pairwise_hinge_loss":
                 loss = TFPairwiseHingeLoss()
+            elif loss_name == "crossentropy":
+                loss = TFCategoricalCrossEntropyLoss(from_logits=True)
             else:
                 loss = tfr.keras.losses.get(loss_name)
         except ValueError:
@@ -531,7 +534,7 @@ class TensorFlowTrainer(Trainer):
         return loss
 
     def get_model(self, model):
-        if self.config["loss"] == "binary_crossentropy":
+        if self.config["loss"] == "binary_crossentropy" or self.config["loss"] == "crossentropy":
             return KerasPairModel(model)
 
         return KerasTripletModel(model)
