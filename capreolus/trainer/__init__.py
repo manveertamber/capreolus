@@ -794,7 +794,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         def test_step(inputs):
             data, labels = inputs
-            predictions = wrapped_model.predice_step(data, training=False)
+            predictions = wrapped_model.predict_step(data, training=False)
 
             return predictions
 
@@ -824,7 +824,7 @@ class TPUTrainer(TensorFlowTrainer):
                 for x in dev_dist_dataset:
                     pred_batch = distributed_test_step(x)
                     for p in pred_batch.values:
-                       predictions.append(p)
+                        predictions.append(p)
 
                 trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
                 metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
