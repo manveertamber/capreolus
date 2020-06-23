@@ -769,7 +769,6 @@ class TPUTrainer(TensorFlowTrainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
-            #create_model
             reranker.build_model()
             wrapped_model = self.get_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
@@ -793,9 +792,9 @@ class TPUTrainer(TensorFlowTrainer):
 
         def test_step(inputs):
             data, labels = inputs
-
             predictions = wrapped_model(data, training=False)
-            t_loss = loss_object(labels, predictions)
+
+            return predictions
 
         @tf.function
         def distributed_train_step(dataset_inputs):
@@ -807,6 +806,7 @@ class TPUTrainer(TensorFlowTrainer):
         def distributed_test_step(dataset_inputs):
             return self.strategy.run(test_step, args=(dataset_inputs,))
 
+        best_metric = -np.inf
         for epoch in tqdm(range(self.config["niters"]), desc="custom train"):
             total_loss = 0.0
             num_batches = 0
@@ -817,4 +817,16 @@ class TPUTrainer(TensorFlowTrainer):
 
             train_loss = total_loss / num_batches
             if (epoch + 1) % self.config["validatefreq"] == 0:
-                distributed_test_step(x)
+                # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
+                predictions = [distributed_test_step(x) for x in dev_dist_dataset]
+                flattened_predictions = [item for sublist in predictions for item in sublist]
+                trec_preds = self.get_preds_in_trec_format(flattened_predictions, dev_data)
+                metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                logger.info("dev metrics: %s",
+                            " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
+                if metrics[metric] > best_metric:
+                    best_metric = metrics[metric]
+                    wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+
+            logger.info("Loss for epoch {0} is {1}".format(epoch, train_loss))
+
