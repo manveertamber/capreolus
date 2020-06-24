@@ -821,7 +821,7 @@ class TPUTrainer(TensorFlowTrainer):
         total_loss = 0
         iter_bar = tqdm(total=self.config["itersize"])
 
-        for sample_idx, x in train_dist_dataset:
+        for x in train_dist_dataset:
             total_loss += distributed_train_step(x)
             train_loss = total_loss / num_batches
             num_batches += 1
