@@ -16,6 +16,7 @@ import numpy as np
 import torch
 from keras import Sequential, layers
 from keras.layers import Dense
+from tensorflow.python.keras import backend as K
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
@@ -753,9 +754,23 @@ class TensorFlowTrainer(Trainer):
 @Trainer.register
 class TPUTrainer(TensorFlowTrainer):
     module_name = "tputrainer"
+    config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96)]
 
     def get_optimizer(self):
         return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
+
+    def change_lr(self, epoch):
+        """
+        Apply warm up or decay depending on the current epoch
+        """
+
+        warmup_steps = self.config["warmupsteps"]
+        if epoch <= warmup_steps:
+            return min(self.config["bertlr"] * ((epoch + 1) / warmup_steps), self.config["lr"])
+        else:
+            # Exponential decay
+            return self.config["bertlr"] * self.config["decay"] ** ((epoch - warmup_steps) / self.config["decaystep"])
+
 
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
@@ -821,6 +836,9 @@ class TPUTrainer(TensorFlowTrainer):
         total_loss = 0
         iter_bar = tqdm(total=self.config["itersize"])
 
+        initial_lr = self.change_lr(epoch)
+        K.set_value(optimizer_2.lr, K.get_value(initial_lr))
+        
         for x in train_dist_dataset:
             total_loss += distributed_train_step(x)
             train_loss = total_loss / num_batches
@@ -829,6 +847,11 @@ class TPUTrainer(TensorFlowTrainer):
 
             if num_batches % self.config["itersize"] == 0:
                 epoch += 1
+
+                # Do warmup
+                new_lr = self.change_lr(epoch)
+                K.set_value(optimizer_2.lr, K.get_value(new_lr))
+
                 iter_bar.close()
                 iter_bar = tqdm(total=self.config["itersize"])
                 logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
