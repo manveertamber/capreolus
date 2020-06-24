@@ -820,7 +820,7 @@ class TPUTrainer(TensorFlowTrainer):
             total_loss = 0.0
             num_batches = 0
 
-            for x in train_dist_dataset:
+            for x in tqdm(train_dist_dataset, desc="epoch progression"):
                 total_loss += distributed_train_step(x)
                 num_batches += 1
 
@@ -828,7 +828,7 @@ class TPUTrainer(TensorFlowTrainer):
             if (epoch + 1) % self.config["validatefreq"] == 0:
                 # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
                 predictions = []
-                for x in dev_dist_dataset:
+                for x in tqdm(dev_dist_dataset, desc="validation"):
                     pred_batch = distributed_test_step(x).values
                     for p in pred_batch:
                         predictions.extend(p)
