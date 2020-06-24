@@ -816,17 +816,25 @@ class TPUTrainer(TensorFlowTrainer):
             return self.strategy.run(test_step, args=(dataset_inputs,))
 
         best_metric = -np.inf
-        for epoch in tqdm(range(self.config["niters"]), desc="custom train"):
-            total_loss = 0.0
-            num_batches = 0
+        epoch = 0
+        num_batches = 0
+        total_loss = 0
+        iter_bar = tqdm(total=self.config["itersize"])
 
-            for x in tqdm(train_dist_dataset, desc="epoch progression"):
-                total_loss += distributed_train_step(x)
-                num_batches += 1
-
+        for sample_idx, x in train_dist_dataset:
+            total_loss += distributed_train_step(x)
             train_loss = total_loss / num_batches
-            if (epoch + 1) % self.config["validatefreq"] == 0:
-                # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
+            num_batches += 1
+            iter_bar.update(1)
+
+            if num_batches % self.config["itersize"] == 0:
+                epoch += 1
+                iter_bar.close()
+                iter_bar = tqdm(total=self.config["itersize"])
+                logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
+                train_loss = 0
+
+            if epoch % self.config["validatefreq"] == 0:
                 predictions = []
                 for x in tqdm(dev_dist_dataset, desc="validation"):
                     pred_batch = distributed_test_step(x).values
@@ -840,8 +848,6 @@ class TPUTrainer(TensorFlowTrainer):
                 if metrics[metric] > best_metric:
                     best_metric = metrics[metric]
                     checkpoint.save(train_output_path)
-
-            logger.info("Loss for epoch {0} is {1}".format(epoch, train_loss))
 
     @staticmethod
     def get_preds_in_trec_format(predictions, dev_data):
