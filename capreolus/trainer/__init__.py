@@ -829,7 +829,7 @@ class TPUTrainer(TensorFlowTrainer):
                 # TODO: Verify that the order is maintained (and is deterministic) when distributing datasets
                 predictions = []
                 for x in dev_dist_dataset:
-                    pred_batch = distributed_test_step(x)
+                    pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else distributed_test_step(x).numpy()
                     for p in pred_batch.values:
                         predictions.append(p)
 
