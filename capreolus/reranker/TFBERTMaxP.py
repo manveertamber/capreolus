@@ -33,11 +33,13 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         return passage_scores
 
     def predict_step(self, data):
-        passage_scores = self.score(data, training=False)[:, :, 0]
+        passage_scores = self.score(data)[:, :, 0]
         batch_size = tf.shape(passage_scores)[0]
         passage_scores = tf.reshape(passage_scores, [batch_size, self.extractor.config["numpassages"]])
 
-        return tf.math.reduce_max(passage_scores, axis=1)
+        passage_scores = tf.math.reduce_max(passage_scores, axis=1)
+
+        return passage_scores
 
     def score(self, x, **kwargs):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x

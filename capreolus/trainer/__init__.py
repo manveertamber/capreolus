@@ -831,7 +831,7 @@ class TPUTrainer(TensorFlowTrainer):
                 for x in dev_dist_dataset:
                     pred_batch = distributed_test_step(x)
                     for p in pred_batch.values:
-                        predictions.append(p)
+                        predictions.extend(p)
 
                 trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
                 metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
@@ -895,7 +895,7 @@ class TPUTrainer(TensorFlowTrainer):
         for x in pred_dist_dataset:
             pred_batch = distributed_test_step(x)
             for p in pred_batch.values:
-                predictions.append(p)
+                predictions.extend(p)
 
         trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
