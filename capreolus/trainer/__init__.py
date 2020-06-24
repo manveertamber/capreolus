@@ -834,20 +834,20 @@ class TPUTrainer(TensorFlowTrainer):
                 logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
                 train_loss = 0
 
-            if epoch % self.config["validatefreq"] == 0:
-                predictions = []
-                for x in tqdm(dev_dist_dataset, desc="validation"):
-                    pred_batch = distributed_test_step(x).values
-                    for p in pred_batch:
-                        predictions.extend(p)
+                if epoch % self.config["validatefreq"] == 0:
+                    predictions = []
+                    for x in tqdm(dev_dist_dataset, desc="validation"):
+                        pred_batch = distributed_test_step(x).values
+                        for p in pred_batch:
+                            predictions.extend(p)
 
-                trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
-                metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
-                logger.info("dev metrics: %s",
-                            " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
-                if metrics[metric] > best_metric:
-                    best_metric = metrics[metric]
-                    checkpoint.save(train_output_path)
+                    trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
+                    metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                    logger.info("dev metrics: %s",
+                                " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
+                    if metrics[metric] > best_metric:
+                        best_metric = metrics[metric]
+                        checkpoint.save(train_output_path)
 
     @staticmethod
     def get_preds_in_trec_format(predictions, dev_data):
