@@ -555,7 +555,7 @@ class BertPassage(Extractor):
 
                     if i >= len(doc):
                         assert len(passages) > 0, f"no passage can be built from empty document {doc}"
-                        logger.warning(f"document failed to fill {numpassages} passages, got {len(passages)} only")
+                        # logger.warning(f"document failed to fill {numpassages} passages, got {len(passages)} only")
                         break
                     else:
                         # passage = padlist(doc[i: i + self.config["passagelen"]], padlen=self.config["passagelen"], pad_token=self.pad_tok)
