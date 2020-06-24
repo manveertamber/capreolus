@@ -838,7 +838,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         initial_lr = self.change_lr(epoch)
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
-        
+
         for x in train_dist_dataset:
             total_loss += distributed_train_step(x)
             train_loss = total_loss / num_batches
@@ -870,7 +870,7 @@ class TPUTrainer(TensorFlowTrainer):
                                 " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
                         best_metric = metrics[metric]
-                        checkpoint.save(train_output_path)
+                        wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
 
     @staticmethod
     def get_preds_in_trec_format(predictions, dev_data):
@@ -886,20 +886,6 @@ class TPUTrainer(TensorFlowTrainer):
             pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
 
         return dict(pred_dict)
-
-    def load_best_model(self, reranker, train_output_path):
-        # TODO: Do the train_output_path modification at one place?
-        if self.tpu:
-            train_output_path = "{0}/{1}/{2}".format(
-                self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
-            )
-
-        wrapped_model = self.get_model(reranker.model)
-        new_optimizer = self.get_optimizer()
-        checkpoint = tf.train.Checkpoint(optimizer=new_optimizer, model=wrapped_model)
-        checkpoint.restore(tf.train.latest_checkpoint(train_output_path))
-
-        return wrapped_model.model
 
     def predict(self, reranker, pred_data, pred_fn):
         pred_records = self.get_tf_dev_records(reranker, pred_data)
@@ -922,8 +908,8 @@ class TPUTrainer(TensorFlowTrainer):
 
         predictions = []
         for x in pred_dist_dataset:
-            pred_batch = distributed_test_step(x)
-            for p in pred_batch.values:
+            pred_batch = distributed_test_step(x).values
+            for p in pred_batch:
                 predictions.extend(p)
 
         trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
