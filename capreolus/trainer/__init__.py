@@ -847,8 +847,10 @@ class TPUTrainer(TensorFlowTrainer):
 
             if num_batches % self.config["itersize"] == 0:
                 epoch += 1
+                if epoch > self.config["niters"]:
+                    break
 
-                # Do warmup
+                # Do warmup and decay
                 new_lr = self.change_lr(epoch)
                 K.set_value(optimizer_2.lr, K.get_value(new_lr))
 
@@ -856,6 +858,7 @@ class TPUTrainer(TensorFlowTrainer):
                 iter_bar = tqdm(total=self.config["itersize"])
                 logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
                 train_loss = 0
+                total_loss = 0
 
                 if epoch % self.config["validatefreq"] == 0:
                     predictions = []
