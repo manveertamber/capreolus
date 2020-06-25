@@ -50,8 +50,10 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
 
         pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)[:, :, 0]
-        neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, :, 0]
         batch_size = tf.shape(pos_score)[0]
+        pos_score = tf.reshape(pos_score, [batch_size, self.extractor.config["numpassages"]])
+        neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, :, 0]
+        neg_score = tf.reshape(neg_score, [batch_size, self.extractor.config["numpassages"]])
 
         stacked_score = tf.stack([pos_score, neg_score], axis=2)
 
