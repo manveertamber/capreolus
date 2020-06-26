@@ -809,6 +809,8 @@ class TPUTrainer(TensorFlowTrainer):
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
             bert_variables = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'bert' in variable.name]
             classifier_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'classifier' in variable.name]
+            other_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'bert' not in variable.name and 'classifier' not in variable.name]
+            assert len(other_vars) == 0
             optimizer_1.apply_gradients(classifier_vars)
             optimizer_2.apply_gradients(bert_variables)
 
