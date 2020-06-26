@@ -753,8 +753,13 @@ class TensorFlowTrainer(Trainer):
 
 @Trainer.register
 class TPUTrainer(TensorFlowTrainer):
+    """
+    TODO: Contains code specific to TFBERTMaxP (eg: uses two optimizers)
+    Need work before this can be used for all rerankers
+    """
+
     module_name = "tputrainer"
-    config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96)]
+    config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96), ConfigOption("decaytype", "exponential")]
 
     def get_optimizer(self):
         return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
@@ -769,7 +774,10 @@ class TPUTrainer(TensorFlowTrainer):
             return min(self.config["bertlr"] * ((epoch + 1) / warmup_steps), self.config["lr"])
         else:
             # Exponential decay
-            return self.config["bertlr"] * self.config["decay"] ** ((epoch - warmup_steps) / self.config["decaystep"])
+            if self.config["decaytype"] == "exponential":
+                return self.config["bertlr"] * self.config["decay"] ** ((epoch - warmup_steps) / self.config["decaystep"])
+            elif self.config["decaytype"] == "linear":
+                return self.config["bertlr"] * (1 / (1 + self.config["decay"] * epoch))
 
 
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
@@ -793,8 +801,6 @@ class TPUTrainer(TensorFlowTrainer):
             optimizer_1 = self.get_optimizer()
             optimizer_2 = tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"])
 
-            checkpoint = tf.train.Checkpoint(optimizer=optimizer_1, model=wrapped_model)
-
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
                 return tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.config["batch"])
@@ -810,7 +816,9 @@ class TPUTrainer(TensorFlowTrainer):
             bert_variables = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'bert' in variable.name]
             classifier_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'classifier' in variable.name]
             other_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if 'bert' not in variable.name and 'classifier' not in variable.name]
+            # Making sure that we did not miss any variables
             assert len(other_vars) == 0
+            
             optimizer_1.apply_gradients(classifier_vars)
             optimizer_2.apply_gradients(bert_variables)
 
