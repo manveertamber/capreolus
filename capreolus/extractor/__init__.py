@@ -480,7 +480,40 @@ class BertPassage(Extractor):
 
         return feature_description
 
-    def create_tf_feature(self, sample):
+    def create_tf_train_feature(self, sample):
+        num_passages = self.config["numpassages"]
+
+        def _bytes_feature(value):
+            """Returns a bytes_list from a string / byte."""
+            if isinstance(value, type(tf.constant(0))):  # if value ist tensor
+                value = value.numpy()  # get value of tensor
+            return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+
+
+        posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
+        posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = sample["posdoc_mask"], sample["posdoc_seg"], sample["negdoc_mask"], sample["negdoc_seg"]
+        label = sample["label"]
+        features = []
+
+        for i in range(num_passages):
+            # Always use the first passage, then sample from the remaining passages
+            if i > 0 and random.random() > 0.1:
+                continue
+
+            feature = {
+                "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
+                "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
+                "posdoc_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg[i])),
+                "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc[i])),
+                "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask[i])),
+                "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg[i])),
+                "label": _bytes_feature(tf.io.serialize_tensor(label[i])),
+            }
+            features.append(feature)
+
+        return features
+
+    def create_tf_dev_feature(self, sample):
         """
         sample - output from self.id2vec()
         return - a tensorflow feature

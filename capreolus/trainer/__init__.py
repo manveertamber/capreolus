@@ -779,6 +779,51 @@ class TPUTrainer(TensorFlowTrainer):
             elif self.config["decaytype"] == "linear":
                 return self.config["bertlr"] * (1 / (1 + self.config["decay"] * epoch))
 
+    def convert_to_tf_dev_record(self, reranker, dataset):
+        """
+        Similar to self.convert_to_tf_train_record(), but won't result in multiple files
+        """
+        dir_name = self.get_tf_record_cache_path(dataset)
+
+        tf_features = [reranker.extractor.create_tf_dev_feature(sample) for sample in dataset]
+
+        # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
+        # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
+        if len(tf_features) % self.config["batch"]:
+            num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config["batch"])
+            element_to_copy = tf_features[-1]
+            for i in range(num_elements_to_add):
+                tf_features.append(copy(element_to_copy))
+
+        return [self.write_tf_record_to_file(dir_name, tf_features)]
+
+    def convert_to_tf_train_record(self, reranker, dataset):
+        """
+        Tensorflow works better if the input data is fed in as tfrecords
+        Takes in a dataset,  iterates through it, and creates multiple tf records from it.
+        The exact structure of the tfrecords is defined by reranker.extractor. For example, see EmbedText.get_tf_feature()
+        """
+        dir_name = self.get_tf_record_cache_path(dataset)
+
+        total_samples = dataset.get_total_samples()
+        tf_features = []
+        tf_record_filenames = []
+
+        for niter in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
+            for sample_idx, sample in enumerate(dataset):
+                tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
+
+                if len(tf_features) > 20000:
+                    tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+                    tf_features = []
+
+                if sample_idx + 1 >= self.config["itersize"] * self.config["batch"]:
+                    break
+
+        if len(tf_features):
+            tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+
+        return tf_record_filenames
 
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
@@ -788,7 +833,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         os.makedirs(dev_output_path, exist_ok=True)
 
-        train_records = self.get_tf_train_records(reranker, train_dataset)
+        train_records = self.get_tf_train_records(reranker, train_dataset).shuffle(self.config["niters"] * self.conifg["itersize"] * self.config["batch"])
         dev_records = self.get_tf_dev_records(reranker, dev_data)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
