@@ -784,8 +784,14 @@ class TPUTrainer(TensorFlowTrainer):
         Similar to self.convert_to_tf_train_record(), but won't result in multiple files
         """
         dir_name = self.get_tf_record_cache_path(dataset)
+        tf_features = []
+        tf_record_filenames = []
 
-        tf_features = [reranker.extractor.create_tf_dev_feature(sample) for sample in dataset]
+        for sample in dataset:
+            tf_features.append(reranker.extractor.create_tf_dev_feature(sample))
+            if len(tf_features) > 20000:
+                tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+                tf_features = []
 
         # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
         # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
@@ -796,7 +802,10 @@ class TPUTrainer(TensorFlowTrainer):
             for i in range(num_elements_to_add):
                 tf_features.append(copy(element_to_copy))
 
-        return [self.write_tf_record_to_file(dir_name, tf_features)]
+        if len(tf_features):
+            tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+
+        return tf_record_filenames
 
     def convert_to_tf_train_record(self, reranker, dataset):
         """
