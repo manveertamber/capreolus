@@ -825,6 +825,62 @@ class TPUTrainer(TensorFlowTrainer):
 
         return tf_record_filenames
 
+    def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
+        raw_dataset = tf.data.TFRecordDataset(filenames)
+        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
+            reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
+        )
+
+        return tf_records_dataset
+
+    def load_cached_tf_train_records(self, reranker, dataset, batch_size):
+        logger.info("Loading TF records from cache")
+        cache_dir = self.get_tf_record_cache_path(dataset)
+        filenames = tf.io.gfile.listdir(cache_dir)
+        filenames = ["{0}/{1}".format(cache_dir, name) for name in filenames]
+
+        return self.load_tf_train_records_from_file(reranker, filenames, batch_size)
+
+    def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
+        raw_dataset = tf.data.TFRecordDataset(filenames)
+        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
+            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
+        )
+
+        return tf_records_dataset
+
+    def load_cached_tf_dev_records(self, reranker, dataset, batch_size):
+        logger.info("Loading TF records from cache")
+        cache_dir = self.get_tf_record_cache_path(dataset)
+        filenames = tf.io.gfile.listdir(cache_dir)
+        filenames = ["{0}/{1}".format(cache_dir, name) for name in filenames]
+
+        return self.load_tf_records_from_file(reranker, filenames, batch_size)
+
+    def get_tf_dev_records(self, reranker, dataset):
+        """
+        1. Returns tf records from cache (disk) if applicable
+        2. Else, converts the dataset into tf records, writes them to disk, and returns them
+        """
+        if self.config["usecache"] and self.cache_exists(dataset):
+            return self.load_cached_tf_dev_records(reranker, dataset, self.config["batch"])
+        else:
+            tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
+            # TODO use actual batch size here. see issue #52
+            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
+
+    def get_tf_train_records(self, reranker, dataset):
+        """
+        1. Returns tf records from cache (disk) if applicable
+        2. Else, converts the dataset into tf records, writes them to disk, and returns them
+        """
+
+        if self.config["usecache"] and self.cache_exists(dataset):
+            return self.load_cached_tf_train_records(reranker, dataset, self.config["batch"])
+        else:
+            tf_record_filenames = self.convert_to_tf_train_record(reranker, dataset)
+            return self.load_tf_train_records_from_file(reranker, tf_record_filenames, self.config["batch"])
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
             train_output_path = "{0}/{1}/{2}".format(

@@ -540,7 +540,33 @@ class BertPassage(Extractor):
 
         return feature
 
-    def parse_tf_example(self, example_proto):
+    def parse_tf_train_example(self, example_proto):
+        feature_description = self.get_tf_feature_description()
+        parsed_example = tf.io.parse_example(example_proto, feature_description)
+
+        def parse_tensor_as_int(x):
+            parsed_tensor = tf.io.parse_tensor(x, tf.int64)
+            parsed_tensor.set_shape([self.config["maxseqlen"]])
+
+            return parsed_tensor
+
+        def parse_label_tensor(x):
+            parsed_tensor = tf.io.parse_tensor(x, tf.float32)
+            parsed_tensor.set_shape([2])
+
+            return parsed_tensor
+
+        posdoc = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
+        posdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
+        posdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
+        negdoc = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
+        negdoc_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
+        negdoc_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
+        label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
+
+        return (posdoc, posdoc_mask, posdoc_seg, negdoc, negdoc_mask, negdoc_seg), label
+
+    def parse_tf_dev_example(self, example_proto):
         feature_description = self.get_tf_feature_description()
         parsed_example = tf.io.parse_example(example_proto, feature_description)
 
