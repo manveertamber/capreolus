@@ -889,7 +889,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         os.makedirs(dev_output_path, exist_ok=True)
 
-        train_records = self.get_tf_train_records(reranker, train_dataset).shuffle(self.config["niters"] * self.conifg["itersize"] * self.config["batch"])
+        train_records = self.get_tf_train_records(reranker, train_dataset).shuffle(self.config["niters"] * self.config["itersize"] * self.config["batch"])
         dev_records = self.get_tf_dev_records(reranker, dev_data)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
