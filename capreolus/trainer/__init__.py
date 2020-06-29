@@ -791,6 +791,7 @@ class TPUTrainer(TensorFlowTrainer):
         # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
         if len(tf_features) % self.config["batch"]:
             num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config["batch"])
+            logger.debug("Number of elements to add in the last batch: {}".format(num_elements_to_add))
             element_to_copy = tf_features[-1]
             for i in range(num_elements_to_add):
                 tf_features.append(copy(element_to_copy))
