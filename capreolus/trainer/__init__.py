@@ -855,7 +855,7 @@ class TPUTrainer(TensorFlowTrainer):
         filenames = tf.io.gfile.listdir(cache_dir)
         filenames = ["{0}/{1}".format(cache_dir, name) for name in filenames]
 
-        return self.load_tf_records_from_file(reranker, filenames, batch_size)
+        return self.load_tf_dev_records_from_file(reranker, filenames, batch_size)
 
     def get_tf_dev_records(self, reranker, dataset):
         """
