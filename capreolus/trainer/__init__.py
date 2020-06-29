@@ -896,6 +896,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            reranker.build_model()
             wrapped_model = self.get_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
             optimizer_1 = self.get_optimizer()
