@@ -974,7 +974,7 @@ class TPUTrainer(TensorFlowTrainer):
                 if epoch % self.config["validatefreq"] == 0:
                     predictions = []
                     for x in tqdm(dev_dist_dataset, desc="validation"):
-                        pred_batch = distributed_test_step(x).values
+                        pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
                         for p in pred_batch:
                             predictions.extend(p)
 
