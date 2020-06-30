@@ -495,11 +495,13 @@ class BertPassage(Extractor):
         label = sample["label"]
         features = []
 
+        selected_idx = []
         for i in range(num_passages):
             # Always use the first passage, then sample from the remaining passages
-            if i > 0 and random.random() > 0.1:
+            if i > 0 and random.random() > 0.2:
                 continue
 
+            selected_idx.append(i)
             feature = {
                 "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
                 "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
@@ -510,6 +512,8 @@ class BertPassage(Extractor):
                 "label": _bytes_feature(tf.io.serialize_tensor(label[i])),
             }
             features.append(feature)
+
+        logger.debug("created {} passages from one sample: {}".format(len(features), selected_idx))
 
         return features
 
