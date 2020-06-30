@@ -837,7 +837,7 @@ class TPUTrainer(TensorFlowTrainer):
 
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
-        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
+        tf_records_dataset = raw_dataset.shuffle(self.config["niters"] * self.config["itersize"] * self.config["batch"]).batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
         )
 
@@ -899,7 +899,7 @@ class TPUTrainer(TensorFlowTrainer):
 
         os.makedirs(dev_output_path, exist_ok=True)
 
-        train_records = self.get_tf_train_records(reranker, train_dataset).shuffle(self.config["niters"] * self.config["itersize"] * self.config["batch"])
+        train_records = self.get_tf_train_records(reranker, train_dataset)
         dev_records = self.get_tf_dev_records(reranker, dev_data)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)

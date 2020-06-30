@@ -501,7 +501,14 @@ class BertPassage(Extractor):
             if i > 0 and random.random() > 0.2:
                 continue
 
-            selected_idx.append(i)
+            bert_input_line = posdoc[i]
+            bert_input_line = " ".join(self.tokenizer.bert_tokenizer.convert_ids_to_tokens(list(bert_input_line)))
+            passage = bert_input_line.split("[SEP]")[-2]
+            
+            # Ignore empty passages as well 
+            if passage.strip() == "[PAD]":
+                continue
+
             feature = {
                 "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
                 "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
@@ -513,7 +520,6 @@ class BertPassage(Extractor):
             }
             features.append(feature)
 
-        logger.debug("created {} passages from one sample: {}".format(len(features), selected_idx))
 
         return features
 
@@ -630,8 +636,7 @@ class BertPassage(Extractor):
                 n_actual_passages = len(passages)
                 for _ in range(numpassages - n_actual_passages):
                     # randomly use one of previous passages when the document is exhausted
-                    idx = random.randint(0, n_actual_passages - 1)
-                    passages.append(passages[idx])
+                    passages.append(["[PAD]"])
 
                 assert len(passages) == self.config["numpassages"]
                 self.docid2passages[docid] = passages
