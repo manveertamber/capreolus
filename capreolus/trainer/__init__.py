@@ -506,6 +506,7 @@ class TensorFlowTrainer(Trainer):
                 self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
             )
 
+        reranker.build_model()
         wrapped_model = self.get_model(reranker.model)
         wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
 
