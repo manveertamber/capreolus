@@ -993,6 +993,7 @@ class TPUTrainer(TensorFlowTrainer):
                     logger.info("dev metrics: %s",
                                 " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
+                        logger.info("Writing checkpoint")
                         best_metric = metrics[metric]
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
 

@@ -32,7 +32,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
         posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
 
-        passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg))[:, 0]
+        passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 0]
         tf.debugging.assert_equal(tf.shape(passage_scores), (batch_size * num_passages))
         passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
         passage_scores = tf.math.reduce_max(passage_scores, axis=1)
