@@ -108,6 +108,28 @@ class RerankTask(Task):
 
         return preds
 
+    def predict(self):
+        fold = self.config["fold"]
+        self.rank.search()
+        rank_results = self.rank.evaluate()
+        best_search_run_path = rank_results["path"][fold]
+        best_search_run = Searcher.load_trec_run(best_search_run_path)
+
+        train_output_path = self.get_results_path()
+        self.reranker.trainer.load_best_model(self.reranker, train_output_path)
+
+        test_run = {qid: docs for qid, docs in best_search_run.items() if
+                    qid in self.benchmark.folds[fold]["predict"]["test"]}
+        test_dataset = PredSampler()
+        test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor,
+                             relevance_level=self.benchmark.relevance_level)
+        test_output_path = train_output_path / "pred" / "test" / "best"
+        test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
+
+        preds = {"test": test_preds}
+
+        return preds
+
     def evaluate(self):
         fold = self.config["fold"]
         train_output_path = self.get_results_path()
