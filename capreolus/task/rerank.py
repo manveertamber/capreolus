@@ -1,5 +1,6 @@
 import random
 import os
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -64,7 +65,15 @@ class RerankTask(Task):
         self.reranker.searcher_scores = best_search_run
 
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
-        dev_run = {qid: list(docs[:threshold]) for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]}
+        # For each qid, select the top 100 (defined by config["threshold") docs to be used in validation
+        dev_run = defaultdict(dict)
+        # This is possible because best_search_run is an OrderedDict
+        for qid, docs in best_search_run.items():
+            if qid in self.benchmark.folds[fold]["predict"]["dev"]:
+                for idx, (docid, score) in enumerate(docs.items()):
+                    if idx >= threshold:
+                        break
+                    dev_run[qid][docid] = score
 
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         train_dataset = self.sampler
@@ -91,7 +100,15 @@ class RerankTask(Task):
         dev_output_path = train_output_path / "pred" / "dev" / "best"
         dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
 
-        test_run = {qid: list(docs[:threshold]) for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
+        test_run = defaultdict(dict)
+        # This is possible because best_search_run is an OrderedDict
+        for qid, docs in best_search_run.items():
+            if qid in self.benchmark.folds[fold]["predict"]["test"]:
+                for idx, (docid, score) in enumerate(docs.items()):
+                    if idx >= threshold:
+                        break
+                    test_run[qid][docid] = score
+
         test_dataset = PredSampler()
         test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level)
         test_output_path = train_output_path / "pred" / "test" / "best"
@@ -141,6 +158,7 @@ class RerankTask(Task):
         if os.path.exists(test_output_path):
             test_preds = Searcher.load_trec_run(test_output_path)
         else:
+            threshold = self.config["threshold"]
             self.rank.search()
             rank_results = self.rank.evaluate()
             best_search_run_path = rank_results["path"][fold]
@@ -155,9 +173,15 @@ class RerankTask(Task):
 
             self.reranker.trainer.load_best_model(self.reranker, train_output_path)
 
-            test_run = {
-                qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]
-            }
+            test_run = defaultdict(dict)
+            # This is possible because best_search_run is an OrderedDict
+            for qid, docs in best_search_run.items():
+                if qid in self.benchmark.folds[fold]["predict"]["test"]:
+                    for idx, (docid, score) in enumerate(docs.items()):
+                        if idx >= threshold:
+                            break
+                        test_run[qid][docid] = score
+                        
             test_dataset = PredSampler()
             test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor)
 
