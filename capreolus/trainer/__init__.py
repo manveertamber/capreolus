@@ -760,7 +760,7 @@ class TPUTrainer(TensorFlowTrainer):
     """
 
     module_name = "tputrainer"
-    config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96), ConfigOption("decaytype", "exponential")]
+    config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96), ConfigOption("decaytype", "exponential"), ConfigOption("epochs", 3)]
 
     def get_optimizer(self):
         return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
@@ -838,7 +838,7 @@ class TPUTrainer(TensorFlowTrainer):
 
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
-        tf_records_dataset = raw_dataset.shuffle(self.config["niters"] * self.config["itersize"] * self.config["batch"]).batch(batch_size, drop_remainder=True).map(
+        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
         )
 
@@ -961,42 +961,45 @@ class TPUTrainer(TensorFlowTrainer):
         initial_lr = self.change_lr(epoch)
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
 
-        for x in train_dist_dataset:
-            total_loss += distributed_train_step(x)
-            train_loss = total_loss / num_batches
-            num_batches += 1
-            iter_bar.update(1)
+        for i in range(self.config["epochs"]):
+            logger.info("Starting epoch: {}".format(i))
+            train_dist_dataset = train_dist_dataset.shuffle(10000)
+            for x in train_dist_dataset:
+                total_loss += distributed_train_step(x)
+                train_loss = total_loss / num_batches
+                num_batches += 1
+                iter_bar.update(1)
 
-            if num_batches % self.config["itersize"] == 0:
-                epoch += 1
-                if epoch > self.config["niters"]:
-                    break
+                if num_batches % self.config["itersize"] == 0:
+                    epoch += 1
+                    if epoch > self.config["niters"]:
+                        break
 
-                # Do warmup and decay
-                new_lr = self.change_lr(epoch)
-                K.set_value(optimizer_2.lr, K.get_value(new_lr))
+                    # Do warmup and decay
+                    new_lr = self.change_lr(epoch)
+                    K.set_value(optimizer_2.lr, K.get_value(new_lr))
 
-                iter_bar.close()
-                iter_bar = tqdm(total=self.config["itersize"])
-                logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
-                train_loss = 0
-                total_loss = 0
+                    iter_bar.close()
+                    iter_bar = tqdm(total=self.config["itersize"])
+                    logger.info("train_loss for epoch {} is {}".format(epoch, train_loss))
+                    train_loss = 0
+                    total_loss = 0
 
-                if epoch % self.config["validatefreq"] == 0:
-                    predictions = []
-                    for x in tqdm(dev_dist_dataset, desc="validation"):
-                        pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
-                        for p in pred_batch:
-                            predictions.extend(p)
+                    if epoch % self.config["validatefreq"] == 0:
+                        predictions = []
+                        for x in tqdm(dev_dist_dataset, desc="validation"):
+                            pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
+                            for p in pred_batch:
+                                predictions.extend(p)
 
-                    trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
-                    metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
-                    logger.info("dev metrics: %s",
-                                " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
-                    if metrics[metric] > best_metric:
-                        logger.info("Writing checkpoint")
-                        best_metric = metrics[metric]
-                        wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+                        trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
+                        metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                        logger.info("dev metrics: %s",
+                                    " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
+                        if metrics[metric] > best_metric:
+                            logger.info("Writing checkpoint")
+                            best_metric = metrics[metric]
+                            wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
 
     @staticmethod
     def get_preds_in_trec_format(predictions, dev_data):

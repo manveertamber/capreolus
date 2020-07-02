@@ -181,7 +181,7 @@ class RerankTask(Task):
                         if idx >= threshold:
                             break
                         test_run[qid][docid] = score
-                        
+
             test_dataset = PredSampler()
             test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor)
 
