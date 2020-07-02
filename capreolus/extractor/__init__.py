@@ -451,7 +451,8 @@ class BertPassage(Extractor):
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("stride", 100, "Stride"),
-        ConfigOption("numpassages", 16, "Number of passages per document")
+        ConfigOption("numpassages", 16, "Number of passages per document"),
+        ConfigOption("prob", 0.1, "The probability that a passage from the document will be used for training (the first passage is always used)")
     ]
 
     def load_state(self, qids, docids):
@@ -495,10 +496,9 @@ class BertPassage(Extractor):
         label = sample["label"]
         features = []
 
-        selected_idx = []
         for i in range(num_passages):
             # Always use the first passage, then sample from the remaining passages
-            if i > 0 and random.random() > 0.2:
+            if i > 0 and random.random() > self.config["prob"]:
                 continue
 
             bert_input_line = posdoc[i]
@@ -519,7 +519,6 @@ class BertPassage(Extractor):
                 "label": _bytes_feature(tf.io.serialize_tensor(label[i])),
             }
             features.append(feature)
-
 
         return features
 
@@ -618,10 +617,7 @@ class BertPassage(Extractor):
                 doc = get_doc(docid).split()
                 passages = []
                 numpassages = self.config["numpassages"]
-                for i in range(0, numpassages * self.config["stride"], self.config["stride"]):
-                    if len(passages) >= numpassages:
-                        break
-
+                for i in range(0, len(doc), self.config["stride"]):
                     if i >= len(doc):
                         assert len(passages) > 0, f"no passage can be built from empty document {doc}"
                         # logger.warning(f"document failed to fill {numpassages} passages, got {len(passages)} only")
@@ -634,9 +630,14 @@ class BertPassage(Extractor):
                     passages.append(tokenize(" ".join(passage)))
 
                 n_actual_passages = len(passages)
-                for _ in range(numpassages - n_actual_passages):
-                    # randomly use one of previous passages when the document is exhausted
-                    passages.append(["[PAD]"])
+
+                # hard-coded condition from original bert maxp paper
+                if n_actual_passages > numpassages:
+                    passages = [passages[0]] + random.sample(passages[1:-1], numpassages-2) + [passages[-1]]
+                else:
+                    for _ in range(numpassages - n_actual_passages):
+                        # randomly use one of previous passages when the document is exhausted
+                        passages.append(["[PAD]"])
 
                 assert len(passages) == self.config["numpassages"]
                 self.docid2passages[docid] = passages
