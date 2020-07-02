@@ -64,7 +64,7 @@ class RerankTask(Task):
         self.reranker.searcher_scores = best_search_run
 
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
-        dev_run = {qid: docs[:threshold] for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]}
+        dev_run = {qid: list(docs[:threshold]) for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]}
 
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         train_dataset = self.sampler
@@ -91,7 +91,7 @@ class RerankTask(Task):
         dev_output_path = train_output_path / "pred" / "dev" / "best"
         dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
 
-        test_run = {qid: docs[:threshold] for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
+        test_run = {qid: list(docs[:threshold]) for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
         test_dataset = PredSampler()
         test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level)
         test_output_path = train_output_path / "pred" / "test" / "best"
