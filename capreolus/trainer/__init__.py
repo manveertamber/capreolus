@@ -959,11 +959,11 @@ class TPUTrainer(TensorFlowTrainer):
 
         initial_lr = self.change_lr(epoch)
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
+        train_records = train_records.shuffle(10000).repeat(count=3)
+        train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
 
         for i in range(self.config["epochs"]):
             logger.info("Starting epoch: {}".format(i))
-            train_records = train_records.shuffle(10000)
-            train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
 
             for x in train_dist_dataset:
                 total_loss += distributed_train_step(x)
