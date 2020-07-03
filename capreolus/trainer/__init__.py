@@ -902,7 +902,6 @@ class TPUTrainer(TensorFlowTrainer):
 
         train_records = self.get_tf_train_records(reranker, train_dataset)
         dev_records = self.get_tf_dev_records(reranker, dev_data)
-        train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
 
         strategy_scope = self.strategy.scope()
@@ -963,7 +962,9 @@ class TPUTrainer(TensorFlowTrainer):
 
         for i in range(self.config["epochs"]):
             logger.info("Starting epoch: {}".format(i))
-            train_dist_dataset = train_dist_dataset.shuffle(10000)
+            train_records = train_records.shuffle(10000)
+            train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
+
             for x in train_dist_dataset:
                 total_loss += distributed_train_step(x)
                 train_loss = total_loss / num_batches
