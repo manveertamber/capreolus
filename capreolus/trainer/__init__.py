@@ -970,8 +970,8 @@ class TPUTrainer(TensorFlowTrainer):
 
             if num_batches % self.config["itersize"] == 0:
                 epoch += 1
-                if epoch > self.config["niters"]:
-                    break
+                # if epoch > self.config["niters"]:
+                #     break
 
                 # Do warmup and decay
                 new_lr = self.change_lr(epoch)
