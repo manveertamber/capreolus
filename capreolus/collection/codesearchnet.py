@@ -1,7 +1,10 @@
+import json
 import pickle
 from zipfile import ZipFile
+from collections import OrderedDict
 
 from tqdm import tqdm
+from nirtools.text import preprocess
 
 from capreolus import ConfigOption, constants
 from capreolus.utils.common import download_file, remove_newline
@@ -25,43 +28,110 @@ class CodeSearchNet(Collection):
     url = "https://s3.amazonaws.com/code-search-net/CodeSearchNet/v2"
     collection_type = "TrecCollection"  # TODO: any other supported type?
     generator_type = "DefaultLuceneDocumentGenerator"
-    config_spec = [ConfigOption("lang", "ruby", "CSN language dataset to use")]
 
-    def download_if_missing(self):
-        cachedir = self.get_cache_path()
-        document_dir = cachedir / "documents"
-        coll_filename = document_dir / ("csn-" + self.config["lang"] + "-collection.txt")
+    config_spec = [
+        ConfigOption("lang", "ruby", "CSN language dataset to use"),
+        ConfigOption("tokenizecode", True, "Whether to tokenize camelCase and snake_case in docstring and code"),
+        ConfigOption("removekeywords", True, "Whether to remove reserved words in each programming language"),
+        ConfigOption("removeunichar", True, "Whether to remove single-letter character"),
+    ]
 
-        if coll_filename.exists():
-            return document_dir
+    @property
+    def docmap(self):
+        if not hasattr(self, "_docmap"):
+            self.download_if_missing()
+        return self._docmap
 
-        zipfile = self.config["lang"] + ".zip"
-        lang_url = f"{self.url}/{zipfile}"
-        tmp_dir = cachedir / "tmp"
-        zip_path = tmp_dir / zipfile
+    @staticmethod
+    def process_text(sent, remove_keywords=True, tokenize_code=True, remove_unichar=True, lang=None):
+        sents = OrderedDict()
+
+        sent = " ".join(sent.split())  # remove consecutive whitespace, \t, \n
+        sents["raw"] = sent
+
+        if remove_keywords:
+            reserved_words = preprocess.get_lang_reserved_words(lang)  # it may raise ValueError
+            sent = " ".join([word for word in sent.split() if word not in reserved_words])
+            sents["no_reserved_word"] = sent
+
+        sent = sent.lower()  # should not lowercase the sentence before since there might be uppercase in the reserved words
+        if tokenize_code:
+            sent = preprocess.code_tokenize(sent, return_str=True)
+            sents["code_tokenized"] = sent
+
+        sent = preprocess.remove_non_alphabet(sent, return_str=True)
+        sents["no_nonalphabet"] = sent
+
+        if remove_unichar:
+            sent = preprocess.remove_unicharacter(sent, return_str=True)
+            sents["no_unichar"] = sent
+
+        sents["final"] = sent
+        return sents
+
+    def download_raw(self, lang, tmp_dir):
+        zip_file = "%s.zip" % lang
+        zip_path = tmp_dir / zip_file
+        lang_url = f"{self.url}/{zip_file}"
 
         if zip_path.exists():
-            logger.info(f"{zipfile} already exist under directory {tmp_dir}, skip downloaded")
+            logger.info(f"{zip_file} already exist under directory {tmp_dir}, skip downloaded")
         else:
             tmp_dir.mkdir(exist_ok=True, parents=True)
             download_file(lang_url, zip_path)
 
-        document_dir.mkdir(exist_ok=True, parents=True)  # tmp
         with ZipFile(zip_path, "r") as zipobj:
             zipobj.extractall(tmp_dir)
 
-        pkl_path = tmp_dir / (self.config["lang"] + "_dedupe_definitions_v2.pkl")
-        self._pkl2trec(pkl_path, coll_filename)
+        return tmp_dir
+
+    def download_if_missing(self):
+        cachedir = self.get_cache_path()
+        tmp_dir, document_dir = cachedir / "tmp", cachedir / "documents"
+        coll_filename = document_dir / ("csn-%s-collection.txt" % self.config["lang"])
+        docmap_filename = tmp_dir / "docmap.json"
+
+        if coll_filename.exists() and docmap_filename.exists():
+            self._docmap = json.load(open(docmap_filename, "r"))
+            return document_dir
+
+        document_dir.mkdir(exist_ok=True, parents=True)
+        raw_dir = self.download_raw(lang=self.config["lang"], tmp_dir=tmp_dir)
+
+        pkl_path = raw_dir / (self.config["lang"] + "_dedupe_definitions_v2.pkl")
+        self._docmap = self.parse_pkl(pkl_path, coll_filename)
+        json.dump(self._docmap, open(docmap_filename, "w", encoding="utf-8"))
         return document_dir
 
-    def _pkl2trec(self, pkl_path, trec_path):
+    def parse_pkl(self, pkl_path, trec_path):
+        """
+        prepare trec-format collection file and prepare document2id mapping
+        :param pkl_path:
+        :param trec_path:
+        :return:
+        """
         lang = self.config["lang"]
         with open(pkl_path, "rb") as f:
             codes = pickle.load(f)
 
+        id, docmap = 0, {}
         fout = open(trec_path, "w", encoding="utf-8")
-        for i, code in tqdm(enumerate(codes), desc=f"Preparing the {lang} collection file"):
-            docno = f"{lang}-FUNCTION-{i}"
-            doc = remove_newline(" ".join(code["function_tokens"]))
-            fout.write(document_to_trectxt(docno, doc))
+        for code in tqdm(codes, desc=f"Preparing the {lang} collection file"):
+            docno = f"{lang}-FUNCTION-{id}"
+            docs = self.process_text(
+                " ".join(code["function_tokens"]),
+                lang=lang,
+                remove_keywords=self.config["removekeywords"],
+                tokenize_code=self.config["tokenizecode"],
+                remove_unichar=self.config["removeunichar"])
+            raw_doc, final_doc = docs["raw"], docs["final"]
+            fout.write(document_to_trectxt(docno, final_doc))
+
+            if raw_doc in docmap:
+                logger.warning(f"duplicate code: current code snippet {code['url']} duplicate the document "
+                               f"{docmap[raw_doc]}}")
+            else:
+                docmap[raw_doc] = docno
+                id += 1
         fout.close()
+        return docmap
