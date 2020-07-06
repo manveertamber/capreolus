@@ -34,7 +34,7 @@ def test_csn_corpus_benchmark_downloadifmissing():
         benchmark.download_if_missing()
 
         assert os.path.exists(benchmark.docid_map_file)
-        assert os.path.exists(benchmark.qid_map_file)
+        assert os.path.exists(benchmark.query_map_file)
 
         assert os.path.exists(benchmark.topic_dir / f"{lang}.txt")
         assert os.path.exists(benchmark.qrel_dir / f"{lang}.txt")

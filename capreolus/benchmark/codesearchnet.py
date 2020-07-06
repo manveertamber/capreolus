@@ -27,29 +27,17 @@ class CodeSearchNetCorpus(Benchmark):
 
     module_name = "codesearchnet_corpus"
     dependencies = [Dependency(key="collection", module="collection", name="codesearchnet")]
-    url = "https://s3.amazonaws.com/code-search-net/CodeSearchNet/v2"
     query_type = "title"
-
     file_fn = PACKAGE_PATH / "data" / "csn_corpus"
 
-    qrel_dir = file_fn / "qrels"
-    topic_dir = file_fn / "topics"
-    fold_dir = file_fn / "folds"
-
-    qidmap_dir = file_fn / "qidmap"
-    docidmap_dir = file_fn / "docidmap"
-
-    config_spec = [ConfigOption("lang", "ruby", "CSN language dataset to use")]
-
     def build(self):
-        lang = self.config["lang"]
+        config = self.collection.config
+        lang = config["lang"]
 
-        self.qid_map_file = self.qidmap_dir / f"{lang}.json"
-        self.docid_map_file = self.docidmap_dir / f"{lang}.json"
-
-        self.qrel_file = self.qrel_dir / f"{lang}.txt"
-        self.topic_file = self.topic_dir / f"{lang}.txt"
-        self.fold_file = self.fold_dir / f"{lang}.json"
+        self.query_map_file = self.file_fn / lang / "querymap.json"
+        self.qrel_file = self.file_fn / lang / "qrels.txt"
+        self.fold_file = self.file_fn / lang / "fold.json"
+        self.topic_file = self.get_cache_path() / "topic.txt"
 
         for file in [var for var in vars(self) if var.endswith("file")]:
             getattr(self, file).parent.mkdir(exist_ok=True, parents=True)
@@ -57,50 +45,16 @@ class CodeSearchNetCorpus(Benchmark):
         self.download_if_missing()
 
     @property
-    def qid_map(self):
-        if not hasattr(self, "_qid_map"):
-            if not self.qid_map_file.exists():
-                self.download_if_missing()
+    def query_map(self):
+        if not hasattr(self, "_query_map"):
+            self.download_if_missing()
 
-            self._qid_map = json.load(open(self.qid_map_file, "r"))
-        return self._qid_map
-
-    @property
-    def docid_map(self):
-        if not hasattr(self, "_docid_map"):
-            if not self.docid_map_file.exists():
-                self.download_if_missing()
-
-            self._docid_map = json.load(open(self.docid_map_file, "r"))
-        return self._docid_map
+        return self._query_map
 
     def download_if_missing(self):
-        files = [self.qid_map_file, self.docid_map_file, self.qrel_file, self.topic_file, self.fold_file]
+        files = [self.query_map_file, self.qrel_file, self.topic_file, self.fold_file]
         if all([f.exists() for f in files]):
             return
-
-        lang = self.config["lang"]
-
-        tmp_dir = Path("/tmp")
-        zip_fn = tmp_dir / f"{lang}.zip"
-        if not zip_fn.exists():
-            download_file(f"{self.url}/{lang}.zip", zip_fn)
-
-        with ZipFile(zip_fn, "r") as zipobj:
-            zipobj.extractall(tmp_dir)
-
-        # prepare docid-url mapping from dedup.pkl
-        pkl_fn = tmp_dir / f"{lang}_dedupe_definitions_v2.pkl"
-        doc_objs = pickle.load(open(pkl_fn, "rb"))
-        self._docid_map = self._prep_docid_map(doc_objs)
-        assert self._get_n_docid() == len(doc_objs)
-
-        # prepare folds, qrels, topics, docstring2qid  # TODO: shall we add negative samples?
-        qrels, self._qid_map = defaultdict(dict), {}
-        qids = {s: [] for s in ["train", "valid", "test"]}
-
-        topic_file = open(self.topic_file, "w", encoding="utf-8")
-        qrel_file = open(self.qrel_file, "w", encoding="utf-8")
 
         def gen_doc_from_gzdir(dir):
             """ generate parsed dict-format doc from all jsonl.gz files under given directory """
@@ -109,72 +63,59 @@ class CodeSearchNetCorpus(Benchmark):
                 for doc in f:
                     yield json.loads(doc)
 
+        lang = self.config["lang"]
+        raw_dir = self.collection.download_raw()
+
+        # prepare folds, qrels, topics, docstring2qid  # TODO: shall we add negative samples?
+        qrels, self._query_map = defaultdict(dict), {}
+        qids = {s: [] for s in ["train", "valid", "test"]}
+
+        topic_file = open(self.topic_file, "w", encoding="utf-8")
+        qrel_file = open(self.qrel_file, "w", encoding="utf-8")
+
         for set_name in qids:
-            set_path = tmp_dir / lang / "final" / "jsonl" / set_name
+            set_path = raw_dir / lang / "final" / "jsonl" / set_name
             for doc in gen_doc_from_gzdir(set_path):
-                code = remove_newline(" ".join(doc["code_tokens"]))
-                docstring = remove_newline(" ".join(doc["docstring_tokens"]))
-                n_words_in_docstring = len(docstring.split())
+                code_dict = self.collection.process_text(
+                    sent=" ".join(doc["code_tokens"]),
+                    lang=lang,
+                    remove_keywords=self.config["removekeywords"],
+                    tokenize_code=self.config["tokenizecode"],
+                    remove_unichar=self.config["removeunichar"])
+                docstring_dict = self.collection.process_text(
+                    sent=" ".join(doc["docstring_tokens"]),
+                    lang=lang,
+                    remove_keywords=False,
+                    tokenize_code=self.config["tokenizecode"],
+                    remove_unichar=self.config["removeunichar"])
+
+                n_words_in_docstring = len(docstring_dict["final"].split())
                 if n_words_in_docstring >= 1024:
                     logger.warning(
                         f"chunk query to first 1000 words otherwise TooManyClause would be triggered "
-                        f"at lucene at search stage, "
-                    )
-                    docstring = " ".join(docstring.split()[:1020])  # for TooManyClause
+                        f"at lucene at search stage, ")
+                    docstring_dict["final"] = " ".join(docstring_dict["final"].split()[:1020])  # for TooManyClause Exception
 
-                docid = self.get_docid(doc["url"], code)
-                qid = self._qid_map.get(docstring, str(len(self._qid_map)))
+                docid = self.collection.get_docid(doc["url"], code_dict["raw"])
+                qid = self._query_map.get(docstring_dict["raw"], str(len(self._query_map)))
                 qrel_file.write(f"{qid} Q0 {docid} 1\n")
 
-                if docstring not in self._qid_map:
-                    self._qid_map[docstring] = qid
+                if docstring_dict["raw"] not in self._query_map:
+                    self._query_map[docstring_dict["raw"]] = qid
                     qids[set_name].append(qid)
-                    topic_file.write(topic_to_trectxt(qid, docstring))
+                    topic_file.write(topic_to_trectxt(qid, docstring_dict["final"]))
 
         topic_file.close()
         qrel_file.close()
 
         # write to qid_map.json, docid_map, fold.json
-        json.dump(self._qid_map, open(self.qid_map_file, "w"))
-        json.dump(self._docid_map, open(self.docid_map_file, "w"))
+        json.dump(self._query_map, open(self.query_map_file, "w"))
         json.dump(
             {"s1": {"train_qids": qids["train"], "predict": {"dev": qids["valid"], "test": qids["test"]}}},
             open(self.fold_file, "w"),
         )
 
-    def _prep_docid_map(self, doc_objs):
-        """
-        construct a nested dict to map each doc into a unique docid
-        which follows the structure: {url: {" ".join(code_tokens): docid, ...}}
-
-        For all the lanugage datasets the url uniquely maps to a code_tokens yet it's not the case for but js and php
-        which requires a second-level mapping from raw_doc to docid
-
-        :param doc_objs: a list of dict having keys ["nwo", "url", "sha", "identifier", "arguments"
-            "function", "function_tokens", "docstring", "doctring_tokens",],
-        :return:
-        """
-        # TODO: any way to avoid the twice traversal of all url and make the return dict structure consistent
-        lang = self.config["lang"]
-        url2docid = defaultdict(dict)
-        for i, doc in tqdm(enumerate(doc_objs), desc=f"Preparing the {lang} docid_map"):
-            url, code_tokens = doc["url"], remove_newline(" ".join(doc["function_tokens"]))
-            url2docid[url][code_tokens] = f"{lang}-FUNCTION-{i}"
-
-        # remove the code_tokens for the unique url-docid mapping
-        for url, docids in tqdm(url2docid.items(), desc=f"Compressing the {lang} docid_map"):
-            url2docid[url] = list(docids.values()) if len(docids) == 1 else docids  # {code_tokens: docid} -> [docid]
-        return url2docid
-
-    def _get_n_docid(self):
-        """ calculate the number of document ids contained in the nested docid map """
-        lens = [len(docs) for url, docs in self._docid_map.items()]
-        return sum(lens)
-
-    def get_docid(self, url, code_tokens):
-        """ retrieve the doc id according to the doc dict """
-        docids = self.docid_map[url]
-        return docids[0] if len(docids) == 1 else docids[code_tokens]
+        assert all([f.exists() for f in files])
 
 
 @Benchmark.register
