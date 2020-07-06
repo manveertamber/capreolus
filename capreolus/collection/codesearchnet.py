@@ -155,3 +155,8 @@ class CodeSearchNet(Collection):
         if not docid:
             raise ValueError(f"Cannot code snippet with raw document {raw_doc}")
         return docid
+
+    def get_num_docs(self):
+        """ calculate the number of document ids contained in the nested docid map """
+        lens = [len(docs) for url, docs in self.docmap.items()]
+        return sum(lens)
