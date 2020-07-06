@@ -142,3 +142,16 @@ class CodeSearchNet(Collection):
             docmap[url] = list(docids.values()) if len(docids) == 1 else docids  # {code_tokens: docid} -> [docid]
         fout.close()
         return docmap
+
+    def get_docid(self, url, raw_doc):
+        """ provide the url and the raw document (code) to retrieve the corresponding doc id """
+        docs = self.docmap.get(url, None)
+        if not docs:
+            raise ValueError(f"Cannot code snippet with url {url}")
+        if len(docs) == 1:
+            return docs[0]
+
+        docid = docs.get(raw_doc, None)
+        if not docid:
+            raise ValueError(f"Cannot code snippet with raw document {raw_doc}")
+        return docid
