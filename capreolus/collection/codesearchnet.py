@@ -136,11 +136,13 @@ class CodeSearchNet(Collection):
                 # raise ValueError()
             elif url in docmap:
                 docmap[url][raw_doc] = docno
+        fout.close()
 
         # remove the code_tokens for the unique url-docid mapping
         for url, docids in tqdm(docmap.items(), desc=f"Compressing the {lang} docid_map"):
             docmap[url] = list(docids.values()) if len(docids) == 1 else docids  # {code_tokens: docid} -> [docid]
-        fout.close()
+
+        assert sum([len(docs) for url, docs in self.docmap.items()]) == len(codes)
         return docmap
 
     def get_docid(self, url, raw_doc):
