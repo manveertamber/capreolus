@@ -223,7 +223,10 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
         ConfigOption("fields", "title"),
     ]
 
-    def _query_from_file(self, topicsfn, output_path, config):
+    def query_from_file(self, topicsfn, output_path, rerank=False, run_fn=""):
+        return self._query_from_file(topicsfn, output_path, self.config, rerank=rerank, run_fn=run_fn)
+
+    def _query_from_file(self, topicsfn, output_path, config, rerank=False, run_fn=""):
         hits = str(config["hits"])
 
         anserini_param_str = (
@@ -233,7 +236,7 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
             + " ".join(f"-bm25.{k} {list2str(config[k], ' ')}" for k in ["k1", "b"])
             + f" -hits {hits}"
         )
-        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, config["fields"])
+        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, config["fields"], rerank=rerank, run_fn=run_fn)
 
         return output_path
 
