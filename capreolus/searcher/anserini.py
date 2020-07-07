@@ -229,11 +229,12 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
     def _query_from_file(self, topicsfn, output_path, config, rerank=False, run_fn=""):
         hits = str(config["hits"])
 
+        suffix = ".multi" if rerank else ""
         anserini_param_str = (
             "-rm3 "
-            + " ".join(f"-rm3.{k} {list2str(config[k], ' ')}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
+            + " ".join(f"-rm3.{k}{suffix} {list2str(config[k], ' ')}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
             + " -bm25 "
-            + " ".join(f"-bm25.{k} {list2str(config[k], ' ')}" for k in ["k1", "b"])
+            + " ".join(f"-bm25.{k}{suffix} {list2str(config[k], ' ')}" for k in ["k1", "b"])
             + f" -hits {hits}"
         )
         self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, config["fields"], rerank=rerank, run_fn=run_fn)
