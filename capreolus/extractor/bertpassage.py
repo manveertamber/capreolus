@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 from capreolus.extractor import Extractor
 from capreolus import get_logger
-from utils.common import padlist
-from utils.exceptions import MissingDocError
+from capreolus.utils.common import padlist
+from capreolus.utils.exceptions import MissingDocError
 
 logger = get_logger(__name__)
 
