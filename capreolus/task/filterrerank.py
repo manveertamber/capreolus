@@ -39,7 +39,7 @@ class FilterRankTask(RankTask):
                 self.benchmark.topic_file, self.get_results_path(), best_search_run)
         elif self.searcher.module_name == "BM25RM3":
             search_results_folder = self.searcher.query_from_file(
-                self.benmark.topic_file, self.get_results_path(), rerank=True, run_fn=best_search_run_path)
+                self.benchmark.topic_file, self.get_results_path(), rerank=True, run_fn=best_search_run_path)
         else:
             raise ValueError(f"Unsupported seearcher: {self.searcher.name}")
 
