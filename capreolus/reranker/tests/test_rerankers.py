@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
@@ -104,9 +105,14 @@ def test_knrm_tf(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        vectors = np.zeros((8, 32))
+        stoi = defaultdict(lambda x: 0)
+        itos = defaultdict(lambda x: 'dummy')
 
+        return vectors, stoi, itos
 
+    monkeypatch.setattr(capreolus.extractor.common, "load_pretrained_embeddings", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
     reranker = TFKNRM(
         {
             "gradkernels": True,
