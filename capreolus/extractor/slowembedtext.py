@@ -62,7 +62,7 @@ class SlowEmbedText(Extractor):
 
         return feature_description
 
-    def create_tf_train_feature(self, sample):
+    def create_tf_feature(self, sample):
         """
         sample - output from self.id2vec()
         return - a tensorflow feature
@@ -75,12 +75,12 @@ class SlowEmbedText(Extractor):
             "negdoc": tf.train.Feature(int64_list=tf.train.Int64List(value=negdoc)),
         }
 
-        return [feature]
+        return feature
 
     def create_tf_dev_feature(self, sample):
         return self.create_tf_train_feature(sample)
 
-    def parse_tf_train_example(self, example_proto):
+    def parse_tf_example(self, example_proto):
         feature_description = self.get_tf_feature_description()
         parsed_example = tf.io.parse_example(example_proto, feature_description)
         posdoc = parsed_example["posdoc"]

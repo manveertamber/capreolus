@@ -7,7 +7,7 @@ from capreolus.reranker import Reranker
 from capreolus.reranker.common import RbfKernelBankTF, similarity_matrix_tf
 
 
-class TFKNRM_Class(tf.keras.layers.Layer):
+class TFKNRM_Class(tf.keras.Model):
     def __init__(self, extractor, config, **kwargs):
         super(TFKNRM_Class, self).__init__(**kwargs)
         self.config = config
@@ -72,7 +72,7 @@ class TFKNRM(Reranker):
 
     dependencies = [
         Dependency(key="extractor", module="extractor", name="slowembedtext"),
-        Dependency(key="trainer", module="trainer", name="tputrainer")
+        Dependency(key="trainer", module="trainer", name="tensorflow")
     ]
     config_spec = [
         ConfigOption("gradkernels", True, "backprop through mus and sigmas"),
