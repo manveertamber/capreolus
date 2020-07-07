@@ -32,6 +32,7 @@ class CodeSearchNet(Collection):
     config_spec = [
         ConfigOption("lang", "ruby", "CSN language dataset to use"),
         ConfigOption("tokenizecode", True, "Whether to tokenize camelCase and snake_case in docstring and code"),
+        ConfigOption("removepunc", True, "Whether to remove non-alphabetic characters"),
         ConfigOption("removekeywords", True, "Whether to remove reserved words in each programming language"),
         ConfigOption("removeunichar", True, "Whether to remove single-letter character"),
     ]
@@ -43,7 +44,7 @@ class CodeSearchNet(Collection):
         return self._docmap
 
     @staticmethod
-    def process_text(sent, remove_keywords=True, tokenize_code=True, remove_unichar=True, lang=None):
+    def process_text(sent, remove_keywords=True, tokenize_code=True, remove_punc=True, remove_unichar=True, lang=None):
         sents = OrderedDict()
 
         sent = " ".join(sent.split())  # remove consecutive whitespace, \t, \n
@@ -59,8 +60,9 @@ class CodeSearchNet(Collection):
             sent = preprocess.code_tokenize(sent, return_str=True)
             sents["code_tokenized"] = sent
 
-        sent = preprocess.remove_non_alphabet(sent, return_str=True)
-        sents["no_nonalphabet"] = sent
+        if remove_punc:
+            sent = preprocess.remove_non_alphabet(sent, return_str=True)
+            sents["no_nonalphabet"] = sent
 
         if remove_unichar:
             sent = preprocess.remove_unicharacter(sent, return_str=True)
@@ -126,6 +128,7 @@ class CodeSearchNet(Collection):
                 lang=lang,
                 remove_keywords=self.config["removekeywords"],
                 tokenize_code=self.config["tokenizecode"],
+                remove_punc=self.config["removepunc"],
                 remove_unichar=self.config["removeunichar"])
             raw_doc, final_doc = docs["raw"], docs["final"]
             fout.write(document_to_trectxt(docno, final_doc))
