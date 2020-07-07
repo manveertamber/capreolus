@@ -4,6 +4,7 @@ from collections import defaultdict
 from copy import copy
 
 import tensorflow as tf
+from tensorflow.python.keras import backend as K
 import numpy as np
 from profane import ConfigOption
 from tqdm import tqdm
@@ -26,7 +27,7 @@ class TPUTrainer(TensorFlowTrainer):
 
     module_name = "tputrainer"
     config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96),
-                                                   ConfigOption("decaytype", "exponential")]
+                                                   ConfigOption("decaytype", "exponential"), ConfigOption("epochs", 3)]
 
     def get_optimizer(self):
         return tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
@@ -56,7 +57,7 @@ class TPUTrainer(TensorFlowTrainer):
         tf_record_filenames = []
 
         for sample in dataset:
-            tf_features.append(reranker.extractor.create_tf_dev_feature(sample))
+            tf_features.extend(reranker.extractor.create_tf_dev_feature(sample))
             if len(tf_features) > 20000:
                 tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                 tf_features = []
@@ -105,9 +106,7 @@ class TPUTrainer(TensorFlowTrainer):
 
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
-        tf_records_dataset = raw_dataset.shuffle(
-            self.config["niters"] * self.config["itersize"] * self.config["batch"]).batch(batch_size,
-                                                                                          drop_remainder=True).map(
+        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
         )
 
@@ -172,7 +171,6 @@ class TPUTrainer(TensorFlowTrainer):
 
         train_records = self.get_tf_train_records(reranker, train_dataset)
         dev_records = self.get_tf_dev_records(reranker, dev_data)
-        train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
 
         strategy_scope = self.strategy.scope()
@@ -233,6 +231,8 @@ class TPUTrainer(TensorFlowTrainer):
 
         initial_lr = self.change_lr(epoch)
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
+        train_records = train_records.shuffle(100000).repeat(count=3)
+        train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
 
         for x in train_dist_dataset:
             total_loss += distributed_train_step(x)
@@ -242,8 +242,8 @@ class TPUTrainer(TensorFlowTrainer):
 
             if num_batches % self.config["itersize"] == 0:
                 epoch += 1
-                if epoch > self.config["niters"]:
-                    break
+                # if epoch > self.config["niters"]:
+                #     break
 
                 # Do warmup and decay
                 new_lr = self.change_lr(epoch)
