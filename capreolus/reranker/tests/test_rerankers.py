@@ -453,7 +453,7 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
                 "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
             },
             "trainer": {
-                "name": "tensorflow",
+                "name": "tputrainer",
                 "batch": 1,
                 "niters": 1,
                 "itersize": 2,
