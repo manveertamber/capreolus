@@ -118,7 +118,8 @@ class CodeSearchNet(Collection):
 
         docmap = defaultdict(dict)
         fout = open(trec_path, "w", encoding="utf-8")
-        for id, code in tqdm(enumerate(codes), desc=f"Preparing the {lang} collection file"):
+        tbar = tqdm(enumerate(codes), total=len(codes), desc=f"Preparing the {lang} collection file")
+        for id, code in tbar:
             docno = f"{lang}-FUNCTION-{id}"
             docs = self.process_text(
                 " ".join(code["function_tokens"]),
@@ -131,32 +132,31 @@ class CodeSearchNet(Collection):
 
             url = code["url"]
             if raw_doc in docmap.get(url, {}):
-                logger.error(f"duplicate code: current code snippet {code['url']} duplicate the document "
-                               f"{docmap[url][raw_doc]}}")
-                # raise ValueError()
-            elif url in docmap:
+                raise ValueError(f"duplicate code: current code snippet {code['url']} duplicate the document "
+                    f"{docmap[url][raw_doc]}")
+            else:
                 docmap[url][raw_doc] = docno
+            tbar.update()
         fout.close()
 
         # remove the code_tokens for the unique url-docid mapping
         for url, docids in tqdm(docmap.items(), desc=f"Compressing the {lang} docid_map"):
             docmap[url] = list(docids.values()) if len(docids) == 1 else docids  # {code_tokens: docid} -> [docid]
 
-        assert sum([len(docs) for url, docs in self.docmap.items()]) == len(codes)
+        final_doc_number = sum([len(docs) for url, docs in docmap.items()])
+        assert final_doc_number == len(codes), f"Expect {len(codes)} documents, but got {final_doc_number}."
         return docmap
 
     def get_docid(self, url, raw_doc):
         """ provide the url and the raw document (code) to retrieve the corresponding doc id """
-        docs = self.docmap.get(url, None)
-        if not docs:
-            raise ValueError(f"Cannot code snippet with url {url}")
+        docs = self.docmap.get(url, -1)
+        if docs == -1:
+            return docs
+
         if len(docs) == 1:
             return docs[0]
 
-        docid = docs.get(raw_doc, None)
-        if not docid:
-            raise ValueError(f"Cannot code snippet with raw document {raw_doc}")
-        return docid
+        return docs.get(raw_doc, -1)
 
     def get_num_docs(self):
         """ calculate the number of document ids contained in the nested docid map """
