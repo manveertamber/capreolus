@@ -622,7 +622,7 @@ def test_bertpassage_id2vec(monkeypatch):
 
     tokenizer = extractor.tokenizer.bert_tokenizer
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][0]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -639,7 +639,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "we",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][1]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -656,7 +656,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "here",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][2]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -673,7 +673,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "ten",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][3]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -691,7 +691,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "[SEP]",
     ]
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][0]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -708,7 +708,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "we",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][1]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -725,7 +725,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "here",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][2]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -742,7 +742,7 @@ def test_bertpassage_id2vec(monkeypatch):
         "ten",
         "[SEP]",
     ]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][3]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -779,7 +779,7 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
 
     tokenizer = extractor.tokenizer.bert_tokenizer
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][0]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -802,13 +802,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["posdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["pos_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["posdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["pos_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][1]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -831,13 +831,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["posdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["pos_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["posdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["pos_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][2]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -860,13 +860,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["posdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["pos_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["posdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["pos_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == [
+    assert tokenizer.convert_ids_to_tokens(data["pos_bert_input"][3]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -889,13 +889,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["posdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["pos_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["posdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["pos_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][0]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -918,13 +918,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["negdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["neg_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["negdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["neg_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][1]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -947,13 +947,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["negdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["neg_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["negdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["neg_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][2]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -976,13 +976,13 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["negdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["neg_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["negdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["neg_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == [
+    assert tokenizer.convert_ids_to_tokens(data["neg_bert_input"][3]) == [
         "[CLS]",
         "sc",
         "##oo",
@@ -1005,8 +1005,8 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         "[PAD]",
     ]
     tf.debugging.assert_equal(
-        data["negdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+        data["neg_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
     )
     tf.debugging.assert_equal(
-        data["negdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+        data["neg_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
     )
