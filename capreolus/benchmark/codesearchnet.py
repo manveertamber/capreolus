@@ -69,11 +69,13 @@ class CodeSearchNetCorpus(Benchmark):
                     lang=config["lang"],
                     remove_keywords=config["removekeywords"],
                     tokenize_code=config["tokenizecode"],
+                    remove_punc=config["removepunc"],
                     remove_unichar=config["removeunichar"])
                 docstrings = self.collection.process_text(
                     sent=" ".join(data["docstring_tokens"]),
                     lang=config["lang"],
                     remove_keywords=False,
+                    remove_punc=config["removepunc"],
                     tokenize_code=config["tokenizecode"],
                     remove_unichar=config["removeunichar"])
                 yield {
