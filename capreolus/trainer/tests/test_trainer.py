@@ -16,7 +16,8 @@ def test_tf_get_tf_dataset(monkeypatch):
         {"maxdoclen": 4, "maxqlen": 4, "tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection}
     )
     training_judgments = benchmark.qrels.copy()
-    train_dataset = TrainTripletSampler(training_judgments, training_judgments, extractor)
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(training_judgments, training_judgments, extractor)
 
     reranker = collections.namedtuple("reranker", "extractor")(extractor=extractor)
 

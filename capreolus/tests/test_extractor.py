@@ -578,18 +578,11 @@ def test_deeptiles_create(monkeypatch, tmpdir, dummy_index):
 
 
 def test_bertpassage_build_vocab(monkeypatch):
-    extractor = BertPassage({"numpassages": 4, "passagelen": 5, "stride": 3, "index": {"collection": {"name": "dummy"}}})
+    extractor = BertPassage({"numpassages": 5, "passagelen": 5, "stride": 3, "index": {"collection": {"name": "dummy"}}})
 
     def get_doc(*args, **kwargs):
         return (
-            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
-            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
-            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
-            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
-            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
-            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
-            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
-            "the world"
+            "O that we now had here but one ten thousand of those men in"
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
@@ -597,13 +590,15 @@ def test_bertpassage_build_vocab(monkeypatch):
 
     extractor._build_vocab(["301"], ["some_docid"], topics)
 
-    assert len(extractor.docid2passages["some_docid"]) == 4
+    assert len(extractor.docid2passages["some_docid"]) == 5
 
+    print(extractor.docid2passages["some_docid"])
     assert extractor.docid2passages["some_docid"] == [
         ["o", "that", "we", "now", "had"],
         ["now", "had", "here", "but", "one"],
         ["but", "one", "ten", "thousand", "of"],
         ["thousand", "of", "those", "men", "in"],
+        ['men', 'in']
     ]
 
     assert extractor.qid2toks["301"] == ["sc", "##oo", "##by", "doo", "##by", "doo", "where", "are", "you"]
@@ -611,19 +606,12 @@ def test_bertpassage_build_vocab(monkeypatch):
 
 def test_bertpassage_id2vec(monkeypatch):
     extractor = BertPassage(
-        {"numpassages": 4, "passagelen": 5, "maxseqlen": 15, "stride": 3, "index": {"collection": {"name": "dummy"}}}
+        {"numpassages": 5, "passagelen": 5, "maxseqlen": 15, "stride": 3, "index": {"collection": {"name": "dummy"}}}
     )
 
     def get_doc(*args, **kwargs):
         return (
-            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
-            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
-            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
-            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
-            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
-            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
-            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
-            "the world"
+            "O that we now had here but one ten thousand of those men in"
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
@@ -775,19 +763,12 @@ def test_bertpassage_id2vec(monkeypatch):
 
 def test_bertpassage_id2vec_with_pad(monkeypatch):
     extractor = BertPassage(
-        {"numpassages": 4, "passagelen": 5, "maxseqlen": 20, "stride": 3, "index": {"collection": {"name": "dummy"}}}
+        {"numpassages": 5, "passagelen": 5, "maxseqlen": 20, "stride": 3, "index": {"collection": {"name": "dummy"}}}
     )
 
     def get_doc(*args, **kwargs):
         return (
-            "O that we now had here but one ten thousand of those men in England That do no work to-day. Whats he that "
-            "wishes so? My cousin, Westmorland? No, my fair cousin. If we are marked to die, we are enough To do our "
-            "country loss; and if to live, The fewer men, the greater share of honour. Gods will! I pray thee, wish"
-            " not one man more. Shangri-La is a fictional place described in the 1933 novel Lost Horizon "
-            "by British author James Hilton. Hilton describes Shangri-La as a mystical, harmonious valley, gently guided "
-            "from a lamasery, enclosed in the western end of the Kunlun Mountains. Shangri-La has become synonymous with "
-            "any earthly paradise, particularly a mythical Himalayan utopia – a permanently happy land, isolated from "
-            "the world"
+            "O that we now had here but one ten thousand of those men in"
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)

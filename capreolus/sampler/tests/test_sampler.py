@@ -12,7 +12,8 @@ def test_train_sampler(monkeypatch, tmpdir):
     benchmark = DummyBenchmark()
     extractor = EmbedText({"tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection})
     training_judgments = benchmark.qrels.copy()
-    train_dataset = TrainTripletSampler(training_judgments, training_judgments, extractor)
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(training_judgments, training_judgments, extractor)
 
     def mock_id2vec(*args, **kwargs):
         return {"query": np.array([1, 2, 3, 4]), "posdoc": np.array([1, 1, 1, 1]), "negdoc": np.array([2, 2, 2, 2])}
@@ -39,7 +40,8 @@ def test_pred_sampler(monkeypatch, tmpdir):
     benchmark = DummyBenchmark()
     extractor = EmbedText({"tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection})
     search_run = {"301": {"LA010189-0001": 50, "LA010189-0002": 100}}
-    pred_dataset = PredSampler(search_run, extractor)
+    pred_dataset = PredSampler()
+    pred_dataset.prepare(benchmark.qrels, search_run, extractor)
 
     def mock_id2vec(*args, **kwargs):
         return {"query": np.array([1, 2, 3, 4]), "posdoc": np.array([1, 1, 1, 1])}
