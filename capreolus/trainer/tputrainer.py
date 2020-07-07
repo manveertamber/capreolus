@@ -199,11 +199,13 @@ class TPUTrainer(TensorFlowTrainer):
                                if 'classifier' in variable.name]
             other_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if
                           'bert' not in variable.name and 'classifier' not in variable.name]
-            # Making sure that we did not miss any variables
-            assert len(other_vars) == 0
 
+            # TODO: Clean this up for general use
+            # Making sure that we did not miss any variables
             optimizer_1.apply_gradients(classifier_vars)
             optimizer_2.apply_gradients(bert_variables)
+            if other_vars:
+                optimizer_1.apply_gradients(other_vars)
 
             return loss
 
