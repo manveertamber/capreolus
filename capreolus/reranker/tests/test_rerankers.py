@@ -6,6 +6,7 @@ import pytest
 import torch
 from pymagnitude import Magnitude
 
+import capreolus
 from capreolus import Reranker, module_registry
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor.deeptileextractor import DeepTileExtractor
@@ -105,7 +106,6 @@ def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
         return Magnitude(None)
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
 
     reranker = TFKNRM(
         {
