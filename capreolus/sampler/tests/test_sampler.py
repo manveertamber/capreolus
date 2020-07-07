@@ -5,7 +5,7 @@ import torch.utils.data
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor.embedtext import EmbedText
 from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
-from sampler import TrainTripletSampler, PredSampler
+from capreolus.sampler import TrainTripletSampler, PredSampler
 
 
 def test_train_sampler(monkeypatch, tmpdir):

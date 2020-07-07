@@ -4,7 +4,7 @@ from collections import defaultdict, OrderedDict
 from capreolus import ModuleBase, constants
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.trec import topic_to_trectxt
-from utils.common import OrderedDefaultDict
+from capreolus.utils.common import OrderedDefaultDict
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
 MAX_THREADS = constants["MAX_THREADS"]
