@@ -124,6 +124,12 @@ class CodeSearchNetCorpus(Benchmark):
         topic_file.close()
         qrel_file.close()
 
+        # only keep the first 1000*n queries in test fold:
+        n_1k = len(qids["test"]) // 1000
+        if n_1k * 1000 < len(qids["test"]):
+            logger.warning(f"{len(qids['test']) - 1000} queries are removed from test qid list")
+            qids["test"] = qids["test"][:n_1k * 1000]
+
         # write to qid_map.json, docid_map, fold.json
         json.dump(self._query_map, open(self.query_map_file, "w"))
         json.dump(
