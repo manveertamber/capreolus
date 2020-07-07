@@ -16,8 +16,8 @@ class FilterRankTask(RankTask):
     # use the commands, searcheval(), evaluate() from RankTask
     config_spec = [
         ConfigOption("fold", "s1", "fold to run"),
-        ConfigOption("optimize", "map", "metric to maximize on the dev set"),
-        ConfigOption("metrics", "default", "metrics reported for evaluation", value_type="strlist"),
+        ConfigOption("optimize", "mrr", "metric to maximize on the dev set"),
+        ConfigOption("metrics", ["mrr", "map", "judged_10", "P_5", "ndcg_cut_10"], "metrics reported for evaluation", value_type="strlist"),
     ]
     dependencies = [
         Dependency(key="benchmark", module="benchmark", name="codesearchnet_corpus", provide_this=True, provide_children=["collection"]),
@@ -33,13 +33,13 @@ class FilterRankTask(RankTask):
         best_search_run_path = rank_results["path"][fold]
 
         self.searcher.index.create_index()
-        if self.searcher.name == "BM25_reranker":
+        if self.searcher.module_name == "BM25_reranker":
             best_search_run = Searcher.load_trec_run(best_search_run_path)
             search_results_folder = self.searcher.query_from_file(
-                self.benchmark.topics_fn, self.get_results_path(), best_search_run)
-        elif self.searcher.name == "BM25RM3":
+                self.benchmark.topic_file, self.get_results_path(), best_search_run)
+        elif self.searcher.module_name == "BM25RM3":
             search_results_folder = self.searcher.query_from_file(
-                self.benmark.topics_fn, self.get_results_path(), rerank=True, run_fn=best_search_run_path)
+                self.benmark.topic_file, self.get_results_path(), rerank=True, run_fn=best_search_run_path)
         else:
             raise ValueError(f"Unsupported seearcher: {self.searcher.name}")
 
