@@ -58,5 +58,6 @@ from profane import import_all_modules
 
 from .rank import RankTask
 from .rerank import RerankTask
+from .filterrerank import FilterRankTask
 
 import_all_modules(__file__, __package__)
