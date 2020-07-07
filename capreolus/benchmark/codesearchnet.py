@@ -30,6 +30,10 @@ class CodeSearchNetCorpus(Benchmark):
     query_type = "title"
     file_fn = PACKAGE_PATH / "data" / "csn_corpus"
 
+    config_spec = [
+        ConfigOption("includetrain", False, "Whether to include training set in fold and topic file"),
+    ]
+
     @property
     def query_map(self):
         if not hasattr(self, "_query_map"):
@@ -45,12 +49,13 @@ class CodeSearchNetCorpus(Benchmark):
 
     def build(self):
         config = self.collection.config
-        lang = config["lang"]
+        lang, include_train = config["lang"], self.config["includetrain"]
+        prefix = "include_train" if include_train else "exclude_train"
 
         self.query_map_file = self.file_fn / lang / "querymap.json"
         self.qrel_file = self.file_fn / lang / "qrels.txt"
-        self.fold_file = self.file_fn / lang / "fold.json"
-        self.topic_file = self.get_cache_path() / "topic.txt"
+        self.fold_file = self.file_fn / lang / f"{prefix}.fold.json"
+        self.topic_file = self.get_cache_path() / f"{prefix}.topic.txt"
 
         for file in [var for var in vars(self) if var.endswith("file")]:
             getattr(self, file).parent.mkdir(exist_ok=True, parents=True)
@@ -102,7 +107,8 @@ class CodeSearchNetCorpus(Benchmark):
         topic_file = open(self.topic_file, "w", encoding="utf-8")
         qrel_file = open(self.qrel_file, "w", encoding="utf-8")
 
-        for set_name in qids:
+        set_names = ["train", "valid", "test"] if self.config["includetrain"] else ["valid", "test"]
+        for set_name in set_names:
             data_buffer = []
             set_path = raw_dir / lang / "final" / "jsonl" / set_name
             for data in self.generate_parsed_doc_from_gz(set_path):
@@ -111,7 +117,7 @@ class CodeSearchNetCorpus(Benchmark):
                     logger.warning(
                         f"chunk query to first 1000 words otherwise TooManyClause would be triggered "
                         f"at lucene at search stage, ")
-                    data["docstring_final"] = " ".join(data["docstring_final"].split()[:1020])  # for TooManyClause Exception
+                    data["docstring_final"] = " ".join(data["docstring_final"].split()[:800])  # for TooManyClause Exception
 
                 docid = self.get_docid(data["url"], data["code_raw"])
                 qid = self._query_map.get(data["code_raw"], str(len(self._query_map)))
