@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from collections import defaultdict
+from copy import copy
 
 import numpy as np
 import tensorflow as tf
@@ -10,6 +11,8 @@ import tensorflow_ranking as tfr
 from tqdm import tqdm
 
 from capreolus import ConfigOption, Searcher, constants, evaluator, get_logger
+from reranker.common import TFPairwiseHingeLoss, TFCategoricalCrossEntropyLoss
+from utils.keras_support import AdamMultilr
 
 from . import Trainer
 
@@ -84,15 +87,18 @@ class TensorFlowTrainer(Trainer):
         ConfigOption("niters", 20, "number of iterations to train for"),
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         # ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
+        ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
         ConfigOption("lr", 0.001, "learning rate"),
+        ConfigOption("decay", 0.0, "learning rate decay"),
+        ConfigOption("warmupsteps", 10),
         ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
-        # ConfigOption("fastforward", False),
         ConfigOption("validatefreq", 1),
         ConfigOption("boardname", "default"),
         ConfigOption("usecache", False),
         ConfigOption("tpuname", None),
         ConfigOption("tpuzone", None),
         ConfigOption("storage", None),
+        ConfigOption("eager", False)
     ]
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
@@ -101,7 +107,8 @@ class TensorFlowTrainer(Trainer):
 
         # Use TPU if available, otherwise resort to GPU/CPU
         try:
-            self.tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=self.config["tpuname"], zone=self.config["tpuzone"])
+            self.tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=self.config["tpuname"],
+                                                                         zone=self.config["tpuzone"])
         except ValueError:
             self.tpu = None
             logger.info("Could not find the tpu")
@@ -121,7 +128,8 @@ class TensorFlowTrainer(Trainer):
         self.validate()
 
     def validate(self):
-        if self.tpu and any([self.config["storage"] is None, self.config["tpuname"] is None, self.config["tpuzone"] is None]):
+        if self.tpu and any(
+                [self.config["storage"] is None, self.config["tpuname"] is None, self.config["tpuzone"] is None]):
             raise ValueError("storage, tpuname and tpuzone configs must be provided when training on TPU")
         if self.tpu and self.config["storage"] and not self.config["storage"].startswith("gs://"):
             raise ValueError("For TPU utilization, the storage config should start with 'gs://'")
@@ -140,12 +148,41 @@ class TensorFlowTrainer(Trainer):
                 self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
             )
 
-        reranker.model.load_weights("{0}/dev.best".format(train_output_path))
+        reranker.build_model()
+        wrapped_model = self.get_model(reranker.model)
+        wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
+
+        return wrapped_model.model
 
     def apply_gradients(self, weights, grads):
         self.optimizer.apply_gradients(zip(grads, weights))
 
-    def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
+    def do_warmup(self, epoch):
+        warmup_steps = self.config["warmupsteps"]
+
+        return min(self.config["lr"] * ((epoch + 1) / warmup_steps), self.config["lr"])
+
+    def get_loss(self, loss_name):
+        try:
+            if loss_name == "pairwise_hinge_loss":
+                loss = TFPairwiseHingeLoss(reduction=tf.keras.losses.Reduction.NONE)
+            elif loss_name == "crossentropy":
+                loss = TFCategoricalCrossEntropyLoss(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
+            else:
+                loss = tfr.keras.losses.get(loss_name)
+        except ValueError:
+            loss = tf.keras.losses.get(loss_name)
+
+        return loss
+
+    def get_model(self, model):
+        if self.config["loss"] == "crossentropy":
+            return KerasPairModel(model)
+
+        return KerasTripletModel(model)
+
+    def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric,
+              relevance_level=1):
         # summary_writer = tf.summary.create_file_writer("{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"]))
 
         # Because TPUs can't work with local files
@@ -158,34 +195,31 @@ class TensorFlowTrainer(Trainer):
         initial_iter = self.fastforward_training(reranker, dev_output_path, None)
         logger.info("starting training from iteration %s/%s", initial_iter, self.config["niters"])
 
+        tf.config.experimental_run_functions_eagerly(self.config["eager"])
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            reranker.build_model()  # TODO needed here?
+            wrapped_model = self.get_model(reranker.model)
             train_records = self.get_tf_train_records(reranker, train_dataset)
             dev_records = self.get_tf_dev_records(reranker, dev_data)
             trec_callback = TrecCheckpointCallback(
-                qrels,
-                dev_data,
-                dev_records,
-                train_output_path,
-                metric,
-                self.config["validatefreq"],
-                relevance_level=relevance_level,
-            )
+                qrels, dev_data, dev_records, train_output_path, metric,
+                validate_freq=self.config["validatefreq"], relevance_level=relevance_level)
+            learning_rate_callback = tf.keras.callbacks.LearningRateScheduler(self.do_warmup)
             tensorboard_callback = tf.keras.callbacks.TensorBoard(
                 log_dir="{0}/capreolus_tensorboard/{1}".format(self.config["storage"], self.config["boardname"])
             )
-            reranker.build_model()  # TODO needed here?
 
             self.optimizer = self.get_optimizer()
-            loss = tfr.keras.losses.get(self.config["loss"])
-            reranker.model.compile(optimizer=self.optimizer, loss=loss)
+            loss = self.get_loss(self.config["loss"])
+            wrapped_model.compile(optimizer=self.optimizer, loss=loss)
 
             train_start_time = time.time()
-            reranker.model.fit(
+            wrapped_model.fit(
                 train_records.prefetch(tf.data.experimental.AUTOTUNE),
                 epochs=self.config["niters"],
                 steps_per_epoch=self.config["itersize"],
-                callbacks=[tensorboard_callback, trec_callback],
+                callbacks=[tensorboard_callback, trec_callback, learning_rate_callback],
                 workers=8,
                 use_multiprocessing=True,
             )
@@ -239,6 +273,14 @@ class TensorFlowTrainer(Trainer):
 
         tf_features = [reranker.extractor.create_tf_feature(sample) for sample in dataset]
 
+        # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
+        # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
+        if len(tf_features) % self.config["batch"]:
+            num_elements_to_add = self.config["batch"] - (len(tf_features) % self.config["batch"])
+            element_to_copy = tf_features[-1]
+            for i in range(num_elements_to_add):
+                tf_features.append(copy(element_to_copy))
+
         return [self.write_tf_record_to_file(dir_name, tf_features)]
 
     def convert_to_tf_train_record(self, reranker, dataset):
@@ -249,11 +291,11 @@ class TensorFlowTrainer(Trainer):
         """
         dir_name = self.get_tf_record_cache_path(dataset)
 
-        # total_samples = dataset.get_total_samples()
+        total_samples = dataset.get_total_samples()
         tf_features = []
         tf_record_filenames = []
 
-        for _ in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
+        for niter in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
             for sample_idx, sample in enumerate(dataset):
                 tf_features.append(reranker.extractor.create_tf_feature(sample))
 
@@ -309,11 +351,11 @@ class TensorFlowTrainer(Trainer):
         2. Else, converts the dataset into tf records, writes them to disk, and returns them
         """
         if self.config["usecache"] and self.cache_exists(dataset):
-            return self.load_cached_tf_records(reranker, dataset, 1)
+            return self.load_cached_tf_records(reranker, dataset, self.config["batch"])
         else:
             tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
             # TODO use actual batch size here. see issue #52
-            return self.load_tf_records_from_file(reranker, tf_record_filenames, 1)  # self.config["batch"])
+            return self.load_tf_records_from_file(reranker, tf_record_filenames, self.config["batch"])
 
     def get_tf_train_records(self, reranker, dataset):
         """
@@ -342,11 +384,13 @@ class TensorFlowTrainer(Trainer):
 
         strategy_scope = self.strategy.scope()
         with strategy_scope:
+            wrapped_model = self.get_model(reranker.model)
             pred_records = self.get_tf_dev_records(reranker, pred_data)
-            predictions = reranker.model.predict(pred_records)
+            predictions = wrapped_model.predict(pred_records)
             trec_preds = TrecCheckpointCallback.get_preds_in_trec_format(predictions, pred_data)
 
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
         Searcher.write_trec_run(trec_preds, pred_fn)
 
         return trec_preds
+
