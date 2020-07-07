@@ -1,5 +1,5 @@
 import os
-
+import json
 import numpy as np
 import pytrec_eval
 
@@ -181,6 +181,7 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
     test_runs = {}
     for s, score_dict in best_scores.items():
         test_qids = folds[s]["predict"]["test"]
+        assert all([qid not in test_runs for qid in test_qids])  # ensure there is no overlap between each fold
         # any empty (no results) queries need to be added so they contribute zeros to the average
         test_runs.update({qid: {} for qid in test_qids})
         test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
