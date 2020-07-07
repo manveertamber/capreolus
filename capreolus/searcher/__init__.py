@@ -73,12 +73,12 @@ class AnseriniSearcherMixIn:
         if rerank:
             anserini_fat_jar = "/home/xinyu1zhang/mpi-spring/anserini/target/anserini-0.9.1-SNAPSHOT-fatjar.jar"
             cmd = f"java -classpath {anserini_fat_jar} " \
-                  f"-Xms512M -Xmx31G -Dapp.name=SimpleSearch io.anserini.search.SimpleSearcher " \
+                  f"-Xms512M -Xmx51G -Dapp.name=SimpleSearch io.anserini.search.SimpleSearcher " \
                   f"-index {index_path} -topics {topicsfn} -output {output_path} -rerank -runfile {run_fn} " \
                   f"-threads {MAX_THREADS} {anserini_param_str}"
             print("reranking: ", cmd)
         else:
-            cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx31G -Dapp.name=SearchCollection io.anserini.search.SearchCollection -topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} -inmem -threads {MAX_THREADS} {anserini_param_str}"
+            cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx51G -Dapp.name=SearchCollection io.anserini.search.SearchCollection -topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} -inmem -threads {MAX_THREADS} {anserini_param_str}"
         logger.info("Anserini writing runs to %s", output_path)
         logger.debug(cmd)
 
