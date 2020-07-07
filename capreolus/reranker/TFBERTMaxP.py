@@ -23,6 +23,9 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         return passage_scores
 
     def predict_step(self, data):
+        """
+        Scores each passage and applies max pooling over it.
+        """
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = data
         batch_size = tf.shape(posdoc_bert_input)[0]
         num_passages = self.extractor.config["numpassages"]
@@ -50,9 +53,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)[:, 1]
         neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, 1]
 
-        stacked_score = tf.stack([pos_score, neg_score], axis=1)
-
-        return stacked_score
+        return pos_score, neg_score
 
 
 @Reranker.register
@@ -61,7 +62,7 @@ class TFBERTMaxP(Reranker):
 
     dependencies = [
         Dependency(key="extractor", module="extractor", name="bertpassage"),
-        Dependency(key="trainer", module="trainer", name="tputrainer"),
+        Dependency(key="trainer", module="trainer", name="berttputrainer"),
     ]
     config_spec = [
         ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),

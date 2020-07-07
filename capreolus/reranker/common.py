@@ -26,7 +26,10 @@ class KerasTripletModel(tf.keras.Model):
         self.model = model
 
     def call(self, x, **kwargs):
-        return self.model.score_pair(x, **kwargs)
+        pos_score, neg_score = self.model.score_pair(x, **kwargs)
+        stacked_score = tf.stack([pos_score, neg_score], axis=1)
+
+        return stacked_score
 
     def predict_step(self, data):
         return self.model.predict_step(data)

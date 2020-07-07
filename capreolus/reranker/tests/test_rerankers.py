@@ -453,7 +453,7 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
                 "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
             },
             "trainer": {
-                "name": "tputrainer",
+                "name": "berttputrainer",
                 "batch": 1,
                 "niters": 1,
                 "itersize": 2,
@@ -500,7 +500,7 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
                 "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
             },
             "trainer": {
-                "name": "tputrainer",
+                "name": "berttputrainer",
                 "batch": 4,
                 "niters": 1,
                 "itersize": 2,

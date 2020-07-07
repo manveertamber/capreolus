@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 
 class Sampler(ModuleBase):
     module_type = "sampler"
+    requires_random_seed = True
 
     def prepare(self, qid_to_docids, qrels, extractor, relevance_level=1, **kwargs):
         """
@@ -75,10 +76,6 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
     """
 
     module_name = "triplet"
-    config_spec = [
-        ConfigOption("seed", 1234),
-    ]
-    dependencies = []
 
     def __hash__(self):
         return self.get_hash()
@@ -101,13 +98,13 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
         while True:
             random.shuffle(all_qids)
 
-            # TODO: Investigate if co-locating samples for a query improves performance
-            # Right now a batch of 32 samples will contain 32 different qids. Not sure if this is a good thing.
             for qid in all_qids:
                 posdocid = random.choice(self.qid_to_reldocs[qid])
                 negdocid = random.choice(self.qid_to_negdocs[qid])
 
                 try:
+                    # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
+                    # ^ This is used with categorical cross entropy loss
                     yield self.extractor.id2vec(qid, posdocid, negdocid, label=[1, 0])
                 except MissingDocError:
                     # at training time we warn but ignore on missing docs
@@ -127,13 +124,10 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
 class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
     """
     Samples training data pairs. Each sample is of the form (query, doc)
-    Iterates through all the relevant documents in qrels
+    The number of generate positive and negative samples are the same.
     """
 
     module_name = "pair"
-    config_spec = [
-        ConfigOption("seed", 1234),
-    ]
     dependencies = []
 
     def get_hash(self):
@@ -151,8 +145,11 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
 
         while True:
             # TODO: two documents does not necessarily come from same query
+            # ^ Why?
             random.shuffle(all_qids)
             for qid in all_qids:
+                # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
+                # ^ This is used with categorical cross entropy loss
                 for docid in self.qid_to_reldocs[qid]:
                     yield self.extractor.id2vec(qid, docid, negid=None, label=[0, 1])
                 for docid in self.qid_to_negdocs[qid]:

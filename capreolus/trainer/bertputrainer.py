@@ -19,13 +19,17 @@ logger = get_logger(__name__)
 
 
 @Trainer.register
-class TPUTrainer(TensorFlowTrainer):
+class BERTPUTrainer(TensorFlowTrainer):
     """
-    TODO: Contains code specific to TFBERTMaxP (eg: uses two optimizers)
-    Need work before this can be used for all rerankers
+    Trains (optionally) on the TPU.
+    Uses two optimizers with different learning rates - one for the BERT layers and another for the classifier layers.
+    Configurable warmup and decay.
+    WARNING: The optimizers depend on specific layer names (see train()) - if your reranker does not have layers with
+    'bert' in the name, the normal learning rate will be applied to it instead of the value supplied through the
+    bertlr ConfigOption
     """
 
-    module_name = "tputrainer"
+    module_name = "berttputrainer"
     config_spec = TensorFlowTrainer.config_spec + [ConfigOption("decaystep", 3), ConfigOption("decay", 0.96),
                                                    ConfigOption("decaytype", "exponential"), ConfigOption("epochs", 3)]
 
@@ -36,7 +40,6 @@ class TPUTrainer(TensorFlowTrainer):
         """
         Apply warm up or decay depending on the current epoch
         """
-
         warmup_steps = self.config["warmupsteps"]
         if epoch <= warmup_steps:
             return min(self.config["bertlr"] * ((epoch + 1) / warmup_steps), self.config["lr"])
@@ -49,9 +52,6 @@ class TPUTrainer(TensorFlowTrainer):
                 return self.config["bertlr"] * (1 / (1 + self.config["decay"] * epoch))
 
     def convert_to_tf_dev_record(self, reranker, dataset):
-        """
-        Similar to self.convert_to_tf_train_record(), but won't result in multiple files
-        """
         dir_name = self.get_tf_record_cache_path(dataset)
         tf_features = []
         tf_record_filenames = []
@@ -80,15 +80,18 @@ class TPUTrainer(TensorFlowTrainer):
         """
         Tensorflow works better if the input data is fed in as tfrecords
         Takes in a dataset,  iterates through it, and creates multiple tf records from it.
-        The exact structure of the tfrecords is defined by reranker.extractor. For example, see EmbedText.get_tf_feature()
+        The exact structure of the tfrecords is defined by reranker.extractor. For example, see BertPassage.get_tf_train_feature()
+        params:
+        reranker - A capreolus.reranker.Reranker instance
+        dataset - A capreolus.sampler.Sampler instance
         """
         dir_name = self.get_tf_record_cache_path(dataset)
 
-        total_samples = dataset.get_total_samples()
         tf_features = []
         tf_record_filenames = []
 
         for niter in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
+            # dataset is a generator - so the inner loop does not reset with each niter
             for sample_idx, sample in enumerate(dataset):
                 tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
 
@@ -96,6 +99,7 @@ class TPUTrainer(TensorFlowTrainer):
                     tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                     tf_features = []
 
+                # Each iteration should have itersize * batch samples
                 if sample_idx + 1 >= self.config["itersize"] * self.config["batch"]:
                     break
 
@@ -173,6 +177,7 @@ class TPUTrainer(TensorFlowTrainer):
         dev_records = self.get_tf_dev_records(reranker, dev_data)
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
 
+        # Does not very much from https://www.tensorflow.org/tutorials/distribute/custom_training
         strategy_scope = self.strategy.scope()
         with strategy_scope:
             reranker.build_model()
@@ -193,6 +198,8 @@ class TPUTrainer(TensorFlowTrainer):
                 loss = compute_loss(labels, predictions)
 
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
+
+            # TODO: Expose the layer names to lookout for as a ConfigOption?
             bert_variables = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables)
                               if 'bert' in variable.name]
             classifier_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables)
@@ -233,9 +240,11 @@ class TPUTrainer(TensorFlowTrainer):
 
         initial_lr = self.change_lr(epoch)
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
-        train_records = train_records.shuffle(100000).repeat(count=3)
+        train_records = train_records.shuffle(100000)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
 
+        # Goes through the dataset ONCE. However, the dataset may already contain multiple instances of the same sample,
+        # depending upon what Sampler was used.
         for x in train_dist_dataset:
             total_loss += distributed_train_step(x)
             train_loss = total_loss / num_batches
@@ -244,8 +253,6 @@ class TPUTrainer(TensorFlowTrainer):
 
             if num_batches % self.config["itersize"] == 0:
                 epoch += 1
-                # if epoch > self.config["niters"]:
-                #     break
 
                 # Do warmup and decay
                 new_lr = self.change_lr(epoch)

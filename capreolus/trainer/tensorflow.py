@@ -177,6 +177,9 @@ class TensorFlowTrainer(Trainer):
         return loss
 
     def get_model(self, model):
+        """
+        Wraps the reranker.model so that it can handle either pointwise input or pairwise input.
+        """
         if self.config["loss"] == "crossentropy":
             return KerasPairModel(model)
 

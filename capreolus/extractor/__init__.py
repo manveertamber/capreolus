@@ -67,6 +67,16 @@ class Extractor(ModuleBase):
     def build_from_benchmark(self, *args, **kwargs):
         raise NotImplementedError
 
+    def id2vec(self, qid, posdocid, negdocid=None, label=None):
+        """
+        Creates a feature from the (qid, docid) pair.
+        If negdocid is supplied, that's also included in the feature (needed for training with pairwise hinge loss)
+        Label is a vector of shape [num_classes], and is supplied only when using pointwise training (i.e cross entropy)
+        When using pointwise samples, negdocid is None, and label is either [0, 1] or [1, 0] depending on whether the
+        document represented by posdocid is relevant or irrelevant respectively.
+        """
+        raise NotImplementedError
+
 
 from profane import import_all_modules
 
