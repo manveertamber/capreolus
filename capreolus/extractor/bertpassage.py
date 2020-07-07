@@ -143,7 +143,7 @@ class BertPassage(Extractor):
             "label": _bytes_feature(tf.io.serialize_tensor(label)),
         }
 
-        return feature
+        return [feature]
 
     def parse_tf_train_example(self, example_proto):
         feature_description = self.get_tf_feature_description()

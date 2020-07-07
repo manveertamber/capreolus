@@ -72,7 +72,7 @@ class TFKNRM(Reranker):
 
     dependencies = [
         Dependency(key="extractor", module="extractor", name="slowembedtext"),
-        Dependency(key="trainer", module="trainer", name="tensorflow"),
+        Dependency(key="trainer", module="trainer", name="tputrainer")
     ]
     config_spec = [
         ConfigOption("gradkernels", True, "backprop through mus and sigmas"),
