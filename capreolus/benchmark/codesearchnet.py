@@ -103,6 +103,7 @@ class CodeSearchNetCorpus(Benchmark):
         qrel_file = open(self.qrel_file, "w", encoding="utf-8")
 
         for set_name in qids:
+            data_buffer = []
             set_path = raw_dir / lang / "final" / "jsonl" / set_name
             for data in self.generate_parsed_doc_from_gz(set_path):
                 n_words_in_docstring = len(data["docstring_final"].split())
@@ -112,23 +113,22 @@ class CodeSearchNetCorpus(Benchmark):
                         f"at lucene at search stage, ")
                     data["docstring_final"] = " ".join(data["docstring_final"].split()[:1020])  # for TooManyClause Exception
 
-                docid = self.collection.get_docid(data["url"], data["code_raw"])
+                docid = self.get_docid(data["url"], data["code_raw"])
                 qid = self._query_map.get(data["code_raw"], str(len(self._query_map)))
-                qrel_file.write(f"{qid} Q0 {docid} 1\n")
+                data_buffer.append((qid, docid, data["docstring_final"]))
 
                 if data["docstring_raw"] not in self._query_map:
                     self._query_map[data["docstring_raw"]] = qid
-                    qids[set_name].append(qid)
-                    topic_file.write(topic_to_trectxt(qid, data["docstring_final"]))
+
+                if len(data_buffer) == 1000:  # write to disk
+                    for qid, docid, docstring_final in data_buffer:
+                        qrel_file.write(f"{qid} Q0 {docid} 1\n")
+                        qids[set_name].append(qid)
+                        topic_file.write(topic_to_trectxt(qid, docstring_final))
+                    data_buffer = []
 
         topic_file.close()
         qrel_file.close()
-
-        # only keep the first 1000*n queries in test fold:
-        n_1k = len(qids["test"]) // 1000
-        if n_1k * 1000 < len(qids["test"]):
-            logger.warning(f"{len(qids['test']) - 1000} queries are removed from test qid list")
-            qids["test"] = qids["test"][:n_1k * 1000]
 
         # write to qid_map.json, docid_map, fold.json
         json.dump(self._query_map, open(self.query_map_file, "w"))
