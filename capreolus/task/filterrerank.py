@@ -1,6 +1,3 @@
-import os
-
-import numpy as np
 from profane import ConfigOption, Dependency
 
 from capreolus import evaluator
@@ -23,7 +20,7 @@ class FilterRankTask(RankTask):
         ConfigOption("metrics", "default", "metrics reported for evaluation", value_type="strlist"),
     ]
     dependencies = [
-        Dependency(key="benchmark", module="benchmark", name="codesearchnet_corpus", provide_this=True, provide_children=["collection"])
+        Dependency(key="benchmark", module="benchmark", name="codesearchnet_corpus", provide_this=True, provide_children=["collection"]),
         Dependency(key="rank", module="task", name="rank"),   # take the benchmark
         Dependency(key="searcher", module="searcher", name="BM25")
     ]
@@ -35,7 +32,7 @@ class FilterRankTask(RankTask):
         rank_results = self.rank.evaluate()
         best_search_run_path = rank_results["path"][fold]
 
-        self.searcher.["index"].create_index()
+        self.searcher.index.create_index()
         if self.searcher.name == "BM25_reranker":
             best_search_run = Searcher.load_trec_run(best_search_run_path)
             search_results_folder = self.searcher.query_from_file(
