@@ -57,8 +57,10 @@ class TFKNRM_Class(tf.keras.Model):
 
     def score_pair(self, x, **kwargs):
         posdoc, negdoc, query, query_idf = x
+        pos_score = self.call((posdoc, query, query_idf))
+        neg_score = self.call((negdoc, query, query_idf))
 
-        return tf.stack([self.call((posdoc, query, query_idf)), self.call((negdoc, query, query_idf))], axis=1)
+        return pos_score, neg_score
 
 
 @Reranker.register

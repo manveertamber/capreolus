@@ -59,13 +59,10 @@ class TFVanillaBert_Class(tf.keras.Model):
     def score_pair(self, x, **kwargs):
         pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
 
-        return tf.stack(
-            [
-                self.call((pos_toks, posdoc_mask, query_toks, query_mask)),
-                self.call((neg_toks, negdoc_mask, query_toks, query_mask)),
-            ],
-            axis=1,
-        )
+        pos_score = self.call((pos_toks, posdoc_mask, query_toks, query_mask))
+        neg_score = self.call((neg_toks, negdoc_mask, query_toks, query_mask))
+
+        return pos_score, neg_score
 
 
 @Reranker.register
