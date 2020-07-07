@@ -1,7 +1,7 @@
 import os
 
 from capreolus import ModuleBase
-
+from capreolus.utils.trec import load_trec_coll_docno
 
 class Collection(ModuleBase):
     """Base class for Collection modules. The purpose of a Collection is to describe a document collection's location and its format. 
@@ -84,6 +84,12 @@ class Collection(ModuleBase):
         raise IOError(
             f"a download URL is not configured for collection={self.module_name} and the collection path does not exist; you must manually place the document collection at this path in order to use this collection"
         )
+
+    def get_docnos(self):
+        if not hasattr(self, "docnos"):
+            coll_path = self.find_document_path()
+            self.docnos = load_trec_coll_docno(coll_path)
+        return self.docnos
 
 
 from profane import import_all_modules
