@@ -7,10 +7,12 @@ import numpy as np
 from tqdm import tqdm
 
 from capreolus import ConfigOption, constants, get_logger
-from capreolus.utils.common import Anserini
+
+from . import Index
 from .anserini import AnseriniIndex
 
 
+@Index.register
 class AnseriniIndexWithTf(AnseriniIndex):
     module_name = "anserini_tf"
 
@@ -36,7 +38,6 @@ class AnseriniIndexWithTf(AnseriniIndex):
         self.open()
         if isinstance(docid, int):
             docid = self.index_reader_utils.convert_internal_docid_to_collection_docid(docid)
-
         try:
             docvec = self.index_reader_utils.get_document_vector(docid)
         except jnius.JavaException as e:
@@ -122,7 +123,7 @@ class AnseriniIndexWithTf(AnseriniIndex):
             self.doclen = {docid: sum(doc_vec.values()) for docid, doc_vec in self.tf.items()}
             print(f"tf been loaded from {tf_path}")
         else:
-            docnos = self["collection"].get_docnos()
+            docnos = self.collection.get_docnos()
             for docid in tqdm(docnos, desc="Preparing doclen & tf"):
                 self.doclen[docid], self.tf[docid] = self.calc_doclen_tfdict(docid)
 
