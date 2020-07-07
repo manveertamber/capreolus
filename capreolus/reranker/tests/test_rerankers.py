@@ -167,7 +167,7 @@ def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.build_model()
 
     train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
-    train_dataset = TrainTripletSampler(train_run, benchmark.qrelsextractor)
+    train_dataset = TrainTripletSampler(train_run, benchmark.qrels, extractor)
     dev_dataset = PredSampler(train_run, benchmark.qrels, extractor)
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
