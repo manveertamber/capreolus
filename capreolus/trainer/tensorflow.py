@@ -11,8 +11,9 @@ import tensorflow_ranking as tfr
 from tqdm import tqdm
 
 from capreolus import ConfigOption, Searcher, constants, evaluator, get_logger
-from reranker.common import TFPairwiseHingeLoss, TFCategoricalCrossEntropyLoss
-from utils.keras_support import AdamMultilr
+from capreolus.reranker.common import TFPairwiseHingeLoss, TFCategoricalCrossEntropyLoss, KerasTripletModel, \
+    KerasPairModel
+from capreolus.utils.keras_support import AdamMultilr
 
 from . import Trainer
 
