@@ -1,9 +1,9 @@
 import torch
-from profane import ConfigOption, Dependency
 from torch import nn
 
+from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
-from capreolus.reranker.common import RbfKernelBank, SimilarityMatrix, create_emb_layer
+from capreolus.reranker.common import RbfKernelBank, StackedSimilarityMatrix, create_emb_layer
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
@@ -13,7 +13,7 @@ class ConvKNRM_class(nn.Module):
     def __init__(self, extractor, config):
         super(ConvKNRM_class, self).__init__()
         self.p = config
-        self.simmat = SimilarityMatrix(padding=extractor.pad)
+        self.simmat = StackedSimilarityMatrix(padding=extractor.pad)
         self.embeddings = create_emb_layer(extractor.embeddings, non_trainable=True)
 
         mus = [-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
@@ -79,9 +79,14 @@ class ConvKNRM_class(nn.Module):
 
 @Reranker.register
 class ConvKNRM(Reranker):
-    module_name = "ConvKNRM"
-    description = """Zhuyun Dai, Chenyan Xiong, Jamie Callan, and Zhiyuan Liu. 2018. Convolutional Neural Networks for Soft-Matching N-Grams in Ad-hoc Search. In WSDM'18."""
+    """Zhuyun Dai, Chenyan Xiong, Jamie Callan, and Zhiyuan Liu. 2018. Convolutional Neural Networks for Soft-Matching N-Grams in Ad-hoc Search. In WSDM'18."""
 
+    module_name = "ConvKNRM"
+
+    dependencies = [
+        Dependency(key="extractor", module="extractor", name="slowembedtext"),
+        Dependency(key="trainer", module="trainer", name="pytorch"),
+    ]
     config_spec = [
         ConfigOption("gradkernels", True, "backprop through mus and sigmas"),
         ConfigOption("maxngram", 3, "maximum ngram length considered"),

@@ -3,6 +3,7 @@ from profane import ConfigOption, Dependency
 from tensorflow.python.keras.engine import data_adapter
 from transformers import TFBertForSequenceClassification
 
+from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 from capreolus.utils.loginit import get_logger
 
@@ -58,12 +59,21 @@ class TFVanillaBert_Class(tf.keras.Model):
     def score_pair(self, x, **kwargs):
         pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
 
-        return tf.stack([self.call((pos_toks, posdoc_mask, query_toks, query_mask)), self.call((neg_toks, negdoc_mask, query_toks, query_mask))], axis=1)
+        return tf.stack(
+            [
+                self.call((pos_toks, posdoc_mask, query_toks, query_mask)),
+                self.call((neg_toks, negdoc_mask, query_toks, query_mask)),
+            ],
+            axis=1,
+        )
 
 
 @Reranker.register
 class TFVanillaBERT(Reranker):
+    """TensorFlow implementation of Vanilla BERT."""
+
     module_name = "TFVanillaBERT"
+
     dependencies = [
         Dependency(key="extractor", module="extractor", name="berttext"),
         Dependency(key="trainer", module="trainer", name="tensorflow"),

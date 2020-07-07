@@ -1,9 +1,11 @@
 import collections
-import numpy as np
 import os
+
+import numpy as np
 import tensorflow as tf
+
 from capreolus.benchmark import DummyBenchmark
-from capreolus.extractor import EmbedText
+from capreolus.extractor.embedtext import EmbedText
 from capreolus.sampler import TrainTripletSampler
 from capreolus.trainer import TensorFlowTrainer
 

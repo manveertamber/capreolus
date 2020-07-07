@@ -1,19 +1,16 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from pymagnitude import Magnitude
 
+from capreolus import Reranker, module_registry
 from capreolus.benchmark import DummyBenchmark
-from capreolus.extractor import EmbedText, BertText, BertPassage
-from capreolus.reranker.PACRR import PACRR
-from capreolus.sampler import TrainTripletSampler, PredSampler, TrainPairSampler
-from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
-from capreolus.tokenizer import AnseriniTokenizer, BertTokenizer
-from capreolus.trainer import PytorchTrainer, TensorFlowTrainer
-from capreolus.extractor.bagofwords import BagOfWords
 from capreolus.extractor.deeptileextractor import DeepTileExtractor
+from capreolus.extractor.embedtext import EmbedText
+from capreolus.extractor.slowembedtext import SlowEmbedText
 from capreolus.reranker.CDSSM import CDSSM
 from capreolus.reranker.DeepTileBar import DeepTileBar
 from capreolus.reranker.DSSM import DSSM
@@ -25,13 +22,25 @@ from capreolus.reranker.CDSSM import CDSSM
 from capreolus.reranker.TFBERTMaxP import TFBERTMaxP
 from capreolus.reranker.TFKNRM import TFKNRM
 from capreolus.reranker.TK import TK
+from capreolus.sampler import TrainTripletSampler, TrainPairSampler, PredSampler
+from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
+
+rerankers = set(module_registry.get_module_names("reranker"))
+
+
+@pytest.mark.parametrize("reranker_name", rerankers)
+def test_reranker_creatable(tmpdir_as_cache, dummy_index, reranker_name):
+    provide = {"collection": dummy_index.collection, "index": dummy_index}
+    reranker = Reranker.create(reranker_name, provide=provide)
 
 
 def test_knrm_pytorch(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+    def fake_load_embeddings(self):
+        self.embeddings = np.zeros((1, 50))
+        self.stoi = {"<pad>": 0}
+        self.itos = {v: k for k, v in self.stoi.items()}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(EmbedText, "_load_pretrained_embeddings", fake_load_embeddings)
 
     reranker = KNRM(
         {
@@ -65,9 +74,9 @@ def test_knrm_pytorch(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_knrm_tf(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = TFKNRM(
         {"gradkernels": True, "finetune": False, "trainer": {"niters": 1, "itersize": 4, "batch": 2}},
@@ -91,6 +100,7 @@ def test_knrm_tf(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
     assert os.path.exists(Path(tmpdir) / "train" / "dev.best.index")
 
+
 def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
         return Magnitude(None)
@@ -98,7 +108,11 @@ def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
 
     reranker = TFKNRM(
-        {"gradkernels": True, "finetune": False, "trainer": {"niters": 1, "itersize": 4, "batch": 2, "loss": "binary_crossentropy"}},
+        {
+            "gradkernels": True,
+            "finetune": False,
+            "trainer": {"niters": 1, "itersize": 4, "batch": 2, "loss": "binary_crossentropy"},
+        },
         provide={"index": dummy_index},
     )
     extractor = reranker.extractor
@@ -119,11 +133,14 @@ def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
     assert os.path.exists(Path(tmpdir) / "train" / "dev.best.index")
 
-def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
+    def fake_load_embeddings(self):
+        self.embeddings = np.zeros((1, 50))
+        self.stoi = {"<pad>": 0}
+        self.itos = {v: k for k, v in self.stoi.items()}
+
+    monkeypatch.setattr(EmbedText, "_load_pretrained_embeddings", fake_load_embeddings)
 
     reranker = PACRR(
         {
@@ -154,11 +171,6 @@ def test_pacrr(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 
 def test_dssm_unigram(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
-
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
-
     reranker = DSSM({"nhiddens": "56", "trainer": {"niters": 1, "itersize": 4, "batch": 2}}, provide={"index": dummy_index})
     extractor = reranker.extractor
     metric = "map"
@@ -179,9 +191,9 @@ def test_dssm_unigram(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_tk(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = TK(
         {
@@ -219,9 +231,9 @@ def test_tk(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_tk_get_mask(tmpdir, dummy_index, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = TK(
         {
@@ -323,9 +335,9 @@ def test_deeptilebars(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_HINT(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = HINT(
         {"spatialGRU": 2, "LSTMdim": 6, "kmax": 10, "trainer": {"niters": 1, "itersize": 2, "batch": 1}},
@@ -350,9 +362,9 @@ def test_HINT(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_POSITDRMM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = POSITDRMM({"trainer": {"niters": 1, "itersize": 4, "batch": 2}}, provide={"index": dummy_index})
     extractor = reranker.extractor
@@ -374,9 +386,9 @@ def test_POSITDRMM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     reranker = CDSSM(
         {
@@ -406,28 +418,36 @@ def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 # Deliberately commented out. This unit test will pass only if you have tons of RAM
 def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    reranker = TFBERTMaxP({
-        "pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20,
-        "extractor": {
-            "name": "bertpassage",
-            "usecache": False, "maxseqlen": 256, "numpassages": 16, "passagelen": 150, "stride": 100,
-            "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}}
-        },
-        "trainer": {
-            "name": "tensorflow",
-            "batch": 1,
-            "niters": 1,
-            "itersize": 2,
-            "lr": 0.001,
-            "validatefreq": 1,
-            "usecache": False,
-            "tpuname": None,
-            "tpuzone": None,
-            "storage": None,
-            "boardname": "default",
-            "loss": "pairwise_hinge_loss",
+    reranker = TFBERTMaxP(
+        {
+            "pretrained": "bert-base-uncased",
+            "passagelen": 80,
+            "stride": 20,
+            "extractor": {
+                "name": "bertpassage",
+                "usecache": False,
+                "maxseqlen": 256,
+                "numpassages": 16,
+                "passagelen": 150,
+                "stride": 100,
+                "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
+            },
+            "trainer": {
+                "name": "tensorflow",
+                "batch": 1,
+                "niters": 1,
+                "itersize": 2,
+                "lr": 0.001,
+                "validatefreq": 1,
+                "usecache": False,
+                "tpuname": None,
+                "tpuzone": None,
+                "storage": None,
+                "boardname": "default",
+                "loss": "pairwise_hinge_loss",
+            },
         }
-    })
+    )
 
     benchmark = DummyBenchmark({"collection": {"name": "dummy"}})
 
@@ -445,29 +465,37 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
 
 
 def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
-    reranker = TFBERTMaxP({
-        "pretrained": "bert-base-uncased", "passagelen": 80, "stride": 20,
-        "extractor": {
-            "name": "bertpassage",
-            "usecache": False, "maxseqlen": 128, "numpassages": 16, "passagelen": 150, "stride": 100,
-            "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}}
-        },
-        "trainer": {
-            "name": "tputrainer",
-            "batch": 4,
-            "niters": 1,
-            "itersize": 2,
-            "lr": 0.001,
-            "validatefreq": 1,
-            "usecache": False,
-            "tpuname": None,
-            "tpuzone": None,
-            "storage": None,
-            "boardname": "default",
-            "loss": "crossentropy",
-            "eager": False 
+    reranker = TFBERTMaxP(
+        {
+            "pretrained": "bert-base-uncased",
+            "passagelen": 80,
+            "stride": 20,
+            "extractor": {
+                "name": "bertpassage",
+                "usecache": False,
+                "maxseqlen": 128,
+                "numpassages": 16,
+                "passagelen": 150,
+                "stride": 100,
+                "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
+            },
+            "trainer": {
+                "name": "tputrainer",
+                "batch": 4,
+                "niters": 1,
+                "itersize": 2,
+                "lr": 0.001,
+                "validatefreq": 1,
+                "usecache": False,
+                "tpuname": None,
+                "tpuzone": None,
+                "storage": None,
+                "boardname": "default",
+                "loss": "crossentropy",
+                "eager": False,
+            },
         }
-    })
+    )
 
     benchmark = DummyBenchmark({"collection": {"name": "dummy"}})
 
@@ -482,4 +510,3 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, "map"
     )
-

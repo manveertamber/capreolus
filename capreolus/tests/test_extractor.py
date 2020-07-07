@@ -2,37 +2,97 @@ from collections import defaultdict
 import tensorflow as tf
 
 import nltk
-from nltk import TextTilingTokenizer
-from pymagnitude import Magnitude, MagnitudeUtils
 import numpy as np
+import pytest
+from nltk import TextTilingTokenizer
+from pymagnitude import Magnitude
 
-from capreolus.collection import DummyCollection
-from capreolus.index import AnseriniIndex
-from capreolus.tokenizer import AnseriniTokenizer
+from capreolus import Extractor, module_registry
 from capreolus.benchmark import DummyBenchmark
-from capreolus.extractor import EmbedText
-from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
-
-from capreolus.utils.exceptions import MissingDocError
+from capreolus.collection import DummyCollection
 from capreolus.extractor.bagofwords import BagOfWords
 from capreolus.extractor.deeptileextractor import DeepTileExtractor
-from capreolus.extractor import BertPassage
+from capreolus.extractor.embedtext import EmbedText
+from capreolus.extractor.slowembedtext import SlowEmbedText
+from capreolus.index import AnseriniIndex
+from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
+from capreolus.tokenizer import AnseriniTokenizer
+from capreolus.utils.exceptions import MissingDocError
+from capreolus.extractor.bertpassage import BertPassage
 
 MAXQLEN = 8
 MAXDOCLEN = 7
 
+extractors = set(module_registry.get_module_names("extractor"))
 
-def test_embedtext_creation(monkeypatch):
+
+@pytest.mark.parametrize("extractor_name", extractors)
+def test_extractor_creatable(tmpdir_as_cache, dummy_index, extractor_name):
+    provide = {"index": dummy_index, "collection": dummy_index.collection}
+    extractor = Extractor.create(extractor_name, provide=provide)
+
+
+def test_embedtext_id2vec(monkeypatch):
+    def fake_load_embeddings(self):
+        vocab = ["<pad>", "lessdummy", "dummy", "doc", "hello", "greetings", "world", "from", "outer", "space"]
+        self.embeddings = np.random.random((len(vocab), 50))
+        self.embeddings[0, :] = 0
+        self.stoi = {term: idx for idx, term in enumerate(vocab)}
+        self.itos = {v: k for k, v in self.stoi.items()}
+
+    monkeypatch.setattr(EmbedText, "_load_pretrained_embeddings", fake_load_embeddings)
+
+    extractor_cfg = {"name": "embedtext", "embeddings": "glove6b", "calcidf": True, "maxqlen": MAXQLEN, "maxdoclen": MAXDOCLEN}
+    extractor = EmbedText(extractor_cfg, provide={"collection": DummyCollection()})
+    benchmark = DummyBenchmark()
+
+    qids = list(benchmark.qrels.keys())  # ["301"]
+    qid = qids[0]
+    docids = list(benchmark.qrels[qid].keys())
+
+    extractor.preprocess(qids, docids, benchmark.topics[benchmark.query_type])
+
+    docid1, docid2 = docids[0], docids[1]
+    data = extractor.id2vec(qid, docid1, docid2)
+    q, d1, d2, idf = [data[k] for k in ["query", "posdoc", "negdoc", "idfs"]]
+
+    assert q.shape[0] == idf.shape[0]
+
+    topics = benchmark.topics[benchmark.query_type]
+    # emb_path = "glove/light/glove.6B.300d"
+    # fullemb = Magnitude(MagnitudeUtils.download_model(emb_path))
+
+    assert len(q) == MAXQLEN
+    assert len(d1) == MAXDOCLEN
+    assert len(d2) == MAXDOCLEN
+
+    assert len([w for w in q if w.sum() != 0]) == len(topics[qid].strip().split()[:MAXQLEN])
+    assert len([w for w in d1 if w.sum() != 0]) == len(extractor.index.get_doc(docid1).strip().split()[:MAXDOCLEN])
+    assert len([w for w in d2 if w.sum() != 0]) == len(extractor.index.get_doc(docid2).strip().split()[:MAXDOCLEN])
+
+    # check MissDocError
+    error_thrown = False
+    try:
+        extractor.id2vec(qid, "0000000", "111111")
+    except MissingDocError as err:
+        error_thrown = True
+        assert err.related_qid == qid
+        assert err.missed_docid == "0000000"
+
+    assert error_thrown
+
+
+def test_slowembedtext_creation(monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     index_cfg = {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}}
     index = AnseriniIndex(index_cfg)
 
     extractor_cfg = {
-        "name": "embedtext",
+        "name": "slowembedtext",
         "embeddings": "glove6b",
         "zerounk": True,
         "calcidf": True,
@@ -40,7 +100,7 @@ def test_embedtext_creation(monkeypatch):
         "maxdoclen": MAXDOCLEN,
         "usecache": False,
     }
-    extractor = EmbedText(extractor_cfg, provide={"index": index})
+    extractor = SlowEmbedText(extractor_cfg, provide={"index": index})
     benchmark = DummyBenchmark()
 
     qids = list(benchmark.qrels.keys())  # ["301"]
@@ -61,14 +121,14 @@ def test_embedtext_creation(monkeypatch):
     return extractor
 
 
-def test_embedtext_id2vec(monkeypatch):
+def test_slowembedtext_id2vec(monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     extractor_cfg = {
-        "name": "embedtext",
+        "name": "slowembedtext",
         "embeddings": "glove6b",
         "zerounk": True,
         "calcidf": True,
@@ -76,7 +136,7 @@ def test_embedtext_id2vec(monkeypatch):
         "maxdoclen": MAXDOCLEN,
         "usecache": False,
     }
-    extractor = EmbedText(extractor_cfg, provide={"collection": DummyCollection()})
+    extractor = SlowEmbedText(extractor_cfg, provide={"collection": DummyCollection()})
     benchmark = DummyBenchmark()
 
     qids = list(benchmark.qrels.keys())  # ["301"]
@@ -115,14 +175,14 @@ def test_embedtext_id2vec(monkeypatch):
     assert error_thrown
 
 
-def test_embedtext_caching(dummy_index, monkeypatch):
+def test_slowembedtext_caching(dummy_index, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
-        return Magnitude(None)
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     extractor_cfg = {
-        "name": "embedtext",
+        "name": "slowembedtext",
         "embeddings": "glove6b",
         "zerounk": True,
         "calcidf": True,
@@ -130,7 +190,7 @@ def test_embedtext_caching(dummy_index, monkeypatch):
         "maxdoclen": MAXDOCLEN,
         "usecache": True,
     }
-    extractor = EmbedText(extractor_cfg, provide={"index": dummy_index})
+    extractor = SlowEmbedText(extractor_cfg, provide={"index": dummy_index})
     benchmark = DummyBenchmark()
 
     qids = list(benchmark.qrels.keys())  # ["301"]
@@ -143,7 +203,7 @@ def test_embedtext_caching(dummy_index, monkeypatch):
 
     assert extractor.is_state_cached(qids, docids)
 
-    new_extractor = EmbedText(extractor_cfg, provide={"index": dummy_index})
+    new_extractor = SlowEmbedText(extractor_cfg, provide={"index": dummy_index})
 
     assert new_extractor.is_state_cached(qids, docids)
     new_extractor._build_vocab(qids, docids, benchmark.topics[benchmark.query_type])
@@ -335,7 +395,7 @@ def test_bagofwords_caching(dummy_index, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
         return Magnitude(None)
 
-    monkeypatch.setattr(EmbedText, "_get_pretrained_emb", fake_magnitude_embedding)
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
 
     extractor_cfg = {"name": "bagofwords", "datamode": "trigram", "maxqlen": 4, "maxdoclen": 800, "usecache": True}
     extractor = BagOfWords(extractor_cfg, provide={"index": dummy_index})
@@ -518,14 +578,7 @@ def test_deeptiles_create(monkeypatch, tmpdir, dummy_index):
 
 
 def test_bertpassage_build_vocab(monkeypatch):
-    extractor = BertPassage({
-        "numpassages": 4,
-        "passagelen": 5,
-        "stride": 3,
-        "index": {
-            "collection": {"name": "dummy"}
-        }
-    })
+    extractor = BertPassage({"numpassages": 4, "passagelen": 5, "stride": 3, "index": {"collection": {"name": "dummy"}}})
 
     def get_doc(*args, **kwargs):
         return (
@@ -540,9 +593,7 @@ def test_bertpassage_build_vocab(monkeypatch):
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
-    topics = {
-        "301": "scooby dooby doo where are you"
-    }
+    topics = {"301": "scooby dooby doo where are you"}
 
     extractor._build_vocab(["301"], ["some_docid"], topics)
 
@@ -552,22 +603,16 @@ def test_bertpassage_build_vocab(monkeypatch):
         ["o", "that", "we", "now", "had"],
         ["now", "had", "here", "but", "one"],
         ["but", "one", "ten", "thousand", "of"],
-        ["thousand", "of", "those", "men", "in"]
+        ["thousand", "of", "those", "men", "in"],
     ]
 
-    assert extractor.qid2toks["301"] == ['sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you']
+    assert extractor.qid2toks["301"] == ["sc", "##oo", "##by", "doo", "##by", "doo", "where", "are", "you"]
 
 
 def test_bertpassage_id2vec(monkeypatch):
-    extractor = BertPassage({
-        "numpassages": 4,
-        "passagelen": 5,
-        "maxseqlen": 15,
-        "stride": 3,
-        "index": {
-            "collection": {"name": "dummy"}
-        }
-    })
+    extractor = BertPassage(
+        {"numpassages": 4, "passagelen": 5, "maxseqlen": 15, "stride": 3, "index": {"collection": {"name": "dummy"}}}
+    )
 
     def get_doc(*args, **kwargs):
         return (
@@ -582,36 +627,156 @@ def test_bertpassage_id2vec(monkeypatch):
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
-    topics = {
-        "301": "scooby dooby doo where are you"
-    }
+    topics = {"301": "scooby dooby doo where are you"}
 
     extractor._build_vocab(["301"], ["some_docid"], topics)
     data = extractor.id2vec("301", "some_docid", negid="some_docid", label=[1, 0])
 
     tokenizer = extractor.tokenizer.bert_tokenizer
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "o",
+        "that",
+        "we",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "now",
+        "had",
+        "here",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "but",
+        "one",
+        "ten",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "thousand",
+        "of",
+        "those",
+        "[SEP]",
+    ]
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "[SEP]"]
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "[SEP]"]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "o",
+        "that",
+        "we",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "now",
+        "had",
+        "here",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "but",
+        "one",
+        "ten",
+        "[SEP]",
+    ]
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "thousand",
+        "of",
+        "those",
+        "[SEP]",
+    ]
 
 
 def test_bertpassage_id2vec_with_pad(monkeypatch):
-    extractor = BertPassage({
-        "numpassages": 4,
-        "passagelen": 5,
-        "maxseqlen": 20,
-        "stride": 3,
-        "index": {
-            "collection": {"name": "dummy"}
-        }
-    })
+    extractor = BertPassage(
+        {"numpassages": 4, "passagelen": 5, "maxseqlen": 20, "stride": 3, "index": {"collection": {"name": "dummy"}}}
+    )
 
     def get_doc(*args, **kwargs):
         return (
@@ -626,45 +791,241 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
         )
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
-    topics = {
-        "301": "scooby dooby doo where are you"
-    }
+    topics = {"301": "scooby dooby doo where are you"}
 
     extractor._build_vocab(["301"], ["some_docid"], topics)
     data = extractor.id2vec("301", "some_docid", negid="some_docid", label=[1, 0])
 
     tokenizer = extractor.tokenizer.bert_tokenizer
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "now", "had", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["posdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["posdoc_seg"][0], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][0]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "o",
+        "that",
+        "we",
+        "now",
+        "had",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["posdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["posdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "but", "one", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["posdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["posdoc_seg"][1], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][1]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "now",
+        "had",
+        "here",
+        "but",
+        "one",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["posdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["posdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "thousand", "of", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["posdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["posdoc_seg"][2], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][2]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "but",
+        "one",
+        "ten",
+        "thousand",
+        "of",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["posdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["posdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "men", "in", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["posdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["posdoc_seg"][3], tf.constant([0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["posdoc"][3]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "thousand",
+        "of",
+        "those",
+        "men",
+        "in",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["posdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["posdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "o", "that", "we", "now", "had", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["negdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["negdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][0]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "o",
+        "that",
+        "we",
+        "now",
+        "had",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["negdoc_mask"][0], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["negdoc_seg"][0], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "now", "had", "here", "but", "one", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["negdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["negdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][1]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "now",
+        "had",
+        "here",
+        "but",
+        "one",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["negdoc_mask"][1], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["negdoc_seg"][1], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "but", "one", "ten", "thousand", "of", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["negdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["negdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][2]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "but",
+        "one",
+        "ten",
+        "thousand",
+        "of",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["negdoc_mask"][2], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["negdoc_seg"][2], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )
 
-    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == ["[CLS]", 'sc', '##oo', '##by', 'doo', '##by', 'doo', 'where', 'are', 'you', "[SEP]", "thousand", "of", "those", "men", "in", "[SEP]", "[PAD]", "[PAD]", "[PAD]"]
-    tf.debugging.assert_equal(data["negdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64))
-    tf.debugging.assert_equal(data["negdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64))
-
-
+    assert tokenizer.convert_ids_to_tokens(data["negdoc"][3]) == [
+        "[CLS]",
+        "sc",
+        "##oo",
+        "##by",
+        "doo",
+        "##by",
+        "doo",
+        "where",
+        "are",
+        "you",
+        "[SEP]",
+        "thousand",
+        "of",
+        "those",
+        "men",
+        "in",
+        "[SEP]",
+        "[PAD]",
+        "[PAD]",
+        "[PAD]",
+    ]
+    tf.debugging.assert_equal(
+        data["negdoc_mask"][3], tf.constant([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0], dtype=tf.int64)
+    )
+    tf.debugging.assert_equal(
+        data["negdoc_seg"][3], tf.constant([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1], dtype=tf.int64)
+    )

@@ -1,5 +1,4 @@
-from capreolus import evaluator, Dependency, ConfigOption
-from capreolus.searcher import Searcher
+from capreolus import ConfigOption, Dependency, evaluator
 from capreolus.task import Task
 from capreolus.utils.loginit import get_logger
 
@@ -11,9 +10,7 @@ class TutorialTask(Task):
     module_name = "tutorial"
     config_spec = [ConfigOption("optimize", "map", "metric to maximize on the validation set")]
     dependencies = [
-        Dependency(
-            key="benchmark", module="benchmark", name="robust04.yang19", provide_this=True, provide_children=["collection"]
-        ),
+        Dependency(key="benchmark", module="benchmark", name="nf", provide_this=True, provide_children=["collection"]),
         Dependency(key="searcher1", module="searcher", name="BM25RM3"),
         Dependency(key="searcher2", module="searcher", name="SDM"),
     ]
@@ -37,7 +34,7 @@ class TutorialTask(Task):
         )
 
         for fold, path in best_results["path"].items():
-            shortpath = "..." + path[:-20]
+            shortpath = "..." + path[-40:]
             logger.info("fold=%s best run: %s", fold, shortpath)
 
         logger.info("cross-validated results when optimizing for '%s':", self.config["optimize"])

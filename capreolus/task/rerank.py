@@ -1,16 +1,12 @@
-import random
 import os
 from collections import defaultdict
 from pathlib import Path
 
-import numpy as np
-import torch
-from profane import ModuleBase, Dependency, ConfigOption, constants
+from profane import ConfigOption, Dependency
 
 from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
-from capreolus import evaluator
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -25,10 +21,12 @@ class RerankTask(Task):
         ConfigOption("threshold", 100, "Number of docids per query to evaluate during prediction"),
     ]
     dependencies = [
-        Dependency(key="benchmark", module="benchmark", name="wsdm20demo", provide_this=True, provide_children=["collection"]),
+        Dependency(
+            key="benchmark", module="benchmark", name="robust04.yang19", provide_this=True, provide_children=["collection"]
+        ),
         Dependency(key="rank", module="task", name="rank"),
         Dependency(key="reranker", module="reranker", name="KNRM"),
-        Dependency(key="sampler", module="sampler", name="triplet")
+        Dependency(key="sampler", module="sampler", name="triplet"),
     ]
 
     commands = ["train", "evaluate", "traineval"] + Task.help_commands
@@ -78,7 +76,7 @@ class RerankTask(Task):
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         train_dataset = self.sampler
         train_dataset.prepare(
-            train_run, self.benchmark.qrels,self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+            train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
         )
         dev_dataset = PredSampler()
         dev_dataset.prepare(
@@ -110,7 +108,9 @@ class RerankTask(Task):
                     test_run[qid][docid] = score
 
         test_dataset = PredSampler()
-        test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level)
+        test_dataset.prepare(
+            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+        )
         test_output_path = train_output_path / "pred" / "test" / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
@@ -137,11 +137,11 @@ class RerankTask(Task):
         train_output_path = self.get_results_path()
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
 
-        test_run = {qid: docs for qid, docs in best_search_run.items() if
-                    qid in self.benchmark.folds[fold]["predict"]["test"]}
+        test_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
         test_dataset = PredSampler()
-        test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor,
-                             relevance_level=self.benchmark.relevance_level)
+        test_dataset.prepare(
+            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+        )
         test_output_path = train_output_path / "pred" / "test" / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
@@ -152,63 +152,84 @@ class RerankTask(Task):
     def evaluate(self):
         fold = self.config["fold"]
         train_output_path = self.get_results_path()
-        test_output_path = train_output_path / "pred" / "test" / "best"
         logger.debug("results path: %s", train_output_path)
 
-        if os.path.exists(test_output_path):
-            test_preds = Searcher.load_trec_run(test_output_path)
-        else:
-            threshold = self.config["threshold"]
-            self.rank.search()
-            rank_results = self.rank.evaluate()
-            best_search_run_path = rank_results["path"][fold]
-            best_search_run = Searcher.load_trec_run(best_search_run_path)
+        searcher_runs, reranker_runs = self.find_crossvalidated_results()
 
-            docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
-            self.reranker.extractor.preprocess(
-                qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type]
+        if fold not in reranker_runs:
+            logger.error("could not find predictions; run the train command first")
+            raise ValueError("could not find predictions; run the train command first")
+
+        fold_dev_metrics = evaluator.eval_runs(
+            reranker_runs[fold]["dev"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+        )
+        logger.info("rerank: fold=%s dev metrics: %s", fold, fold_dev_metrics)
+
+        fold_test_metrics = evaluator.eval_runs(
+            reranker_runs[fold]["test"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+        )
+        logger.info("rerank: fold=%s test metrics: %s", fold, fold_test_metrics)
+
+        if len(reranker_runs) != len(self.benchmark.folds):
+            logger.info(
+                "rerank: skipping cross-validated metrics because results exist for only %s/%s folds",
+                len(reranker_runs),
+                len(self.benchmark.folds),
             )
-            self.reranker.build_model()
-            self.reranker.searcher_scores = best_search_run
+            return {
+                "fold_test_metrics": fold_test_metrics,
+                "fold_dev_metrics": fold_dev_metrics,
+                "cv_metrics": None,
+                "interpolated_cv_metrics": None,
+            }
 
-            self.reranker.trainer.load_best_model(self.reranker, train_output_path)
+        logger.info("rerank: average cross-validated metrics when choosing iteration based on '%s':", self.config["optimize"])
+        all_preds = {}
+        for preds in reranker_runs.values():
+            for qid, docscores in preds["test"].items():
+                all_preds.setdefault(qid, {})
+                for docid, score in docscores.items():
+                    all_preds[qid][docid] = score
 
-            test_run = defaultdict(dict)
-            # This is possible because best_search_run is an OrderedDict
-            for qid, docs in best_search_run.items():
-                if qid in self.benchmark.folds[fold]["predict"]["test"]:
-                    for idx, (docid, score) in enumerate(docs.items()):
-                        if idx >= threshold:
-                            break
-                        test_run[qid][docid] = score
+        cv_metrics = evaluator.eval_runs(
+            all_preds, self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+        )
+        interpolated_results = evaluator.interpolated_eval(
+            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], evaluator.DEFAULT_METRICS
+        )
 
-            test_dataset = PredSampler()
-            test_dataset.prepare(test_run, self.benchmark.qrels, self.reranker.extractor)
+        for metric, score in sorted(cv_metrics.items()):
+            logger.info("%25s: %0.4f", metric, score)
 
-            test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
+        logger.info("interpolated with alphas = %s", sorted(interpolated_results["alphas"].values()))
+        for metric, score in sorted(interpolated_results["score"].items()):
+            logger.info("%25s: %0.4f", metric + " [interp]", score)
 
-        metrics = evaluator.eval_runs(test_preds, self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level)
-        logger.info("rerank: fold=%s test metrics: %s", fold, metrics)
+        return {
+            "fold_test_metrics": fold_test_metrics,
+            "fold_dev_metrics": fold_dev_metrics,
+            "cv_metrics": cv_metrics,
+            "interpolated_results": interpolated_results,
+        }
 
-        print("\ncomputing metrics across all folds")
-        avg = {}
-        found = 0
+    def find_crossvalidated_results(self):
+        searcher_runs = {}
+        rank_results = self.rank.evaluate()
+        for fold in self.benchmark.folds:
+            searcher_runs[fold] = {"dev": Searcher.load_trec_run(rank_results["path"][fold])}
+            searcher_runs[fold]["test"] = searcher_runs[fold]["dev"]
+
+        reranker_runs = {}
+        train_output_path = self.get_results_path()
+        test_output_path = train_output_path / "pred" / "test" / "best"
+        dev_output_path = train_output_path / "pred" / "dev" / "best"
         for fold in self.benchmark.folds:
             # TODO fix by using multiple Tasks
-            from pathlib import Path
+            test_path = Path(test_output_path.as_posix().replace("fold-" + self.config["fold"], "fold-" + fold))
+            if os.path.exists(test_path):
+                reranker_runs.setdefault(fold, {})["test"] = Searcher.load_trec_run(test_path)
 
-            pred_path = Path(test_output_path.as_posix().replace("fold-" + self.config["fold"], "fold-" + fold))
-            if not os.path.exists(pred_path):
-                print("\tfold=%s results are missing and will not be included" % fold)
-                continue
+                dev_path = Path(dev_output_path.as_posix().replace("fold-" + self.config["fold"], "fold-" + fold))
+                reranker_runs.setdefault(fold, {})["dev"] = Searcher.load_trec_run(dev_path)
 
-            found += 1
-            preds = Searcher.load_trec_run(pred_path)
-            metrics = evaluator.eval_runs(preds, self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level)
-            for metric, val in metrics.items():
-                avg.setdefault(metric, []).append(val)
-
-        avg = {k: np.mean(v) for k, v in avg.items()}
-        logger.info("rerank: average cross-validated metrics when choosing iteration based on '%s':", self.config["optimize"])
-        for metric, score in sorted(avg.items()):
-            logger.info("%15s: %0.4f", metric, score)
+        return searcher_runs, reranker_runs

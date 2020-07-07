@@ -1,15 +1,11 @@
-import random
 import os
 
-
 import numpy as np
-import torch
-from profane import ModuleBase, Dependency, ConfigOption, constants
+from profane import ConfigOption, Dependency
 
 from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
-from capreolus import evaluator
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -24,7 +20,9 @@ class ReRerankTask(Task):
         ConfigOption("topn", 100, "number of stage two results to rerank"),
     ]
     dependencies = [
-        Dependency(key="benchmark", module="benchmark", name="wsdm20demo", provide_this=True, provide_children=["collection"]),
+        Dependency(
+            key="benchmark", module="benchmark", name="robust04.yang19", provide_this=True, provide_children=["collection"]
+        ),
         Dependency(key="rank", module="task", name="rank", provide_this=True),
         Dependency(key="rerank1", module="task", name="rerank"),
         Dependency(key="rerank2", module="task", name="rerank"),
@@ -110,4 +108,4 @@ class ReRerankTask(Task):
         avg = {k: np.mean(v) for k, v in avg.items()}
         logger.info("rerank: average cross-validated metrics when choosing iteration based on '%s':", self.config["optimize"])
         for metric, score in sorted(avg.items()):
-            logger.info("%15s: %0.4f", metric, score)
+            logger.info("%25s: %0.4f", metric, score)

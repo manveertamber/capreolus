@@ -1,13 +1,12 @@
 import math
 
 import torch
-from profane import ConfigOption, Dependency
 from torch import nn
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
-from allennlp.modules.matrix_attention import CosineMatrixAttention
+from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
-from capreolus.reranker.common import SimilarityMatrix, create_emb_layer
+from capreolus.reranker.common import StackedSimilarityMatrix, create_emb_layer
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)  # pylint: disable=invalid-name
@@ -51,7 +50,7 @@ class TK_class(nn.Module):
         dropout = 0
         non_trainable = not self.p["finetune"]
         self.embedding = create_emb_layer(extractor.embeddings, non_trainable=non_trainable)
-        self.cosine_module = SimilarityMatrix(padding=extractor.pad)
+        self.cosine_module = StackedSimilarityMatrix(padding=extractor.pad)
 
         self.position_encoder = PositionalEncoding(self.embeddim)
         self.mixer = nn.Parameter(torch.full([1, 1, 1], 0.9, dtype=torch.float32, requires_grad=True))
@@ -146,10 +145,14 @@ class TK_class(nn.Module):
 
 @Reranker.register
 class TK(Reranker):
-    module_name = "TK"
-    description = """Sebastian Hofstätter, Markus Zlabinger, and Allan Hanbury. 2019.
-                     TU Wien @ TREC Deep Learning '19 -- Simple Contextualization for Re-ranking. In TREC '19."""
+    """Sebastian Hofstätter, Markus Zlabinger, and Allan Hanbury. 2019. TU Wien @ TREC Deep Learning '19 -- Simple Contextualization for Re-ranking. In TREC '19."""
 
+    module_name = "TK"
+
+    dependencies = [
+        Dependency(key="extractor", module="extractor", name="slowembedtext"),
+        Dependency(key="trainer", module="trainer", name="pytorch"),
+    ]
     config_spec = [
         ConfigOption("gradkernels", True, "backprop through mus and sigmas"),
         ConfigOption("scoretanh", False, "use a tanh on the prediction as in paper (True) or do not use a nonlinearity (False)"),
@@ -157,7 +160,7 @@ class TK(Reranker):
         ConfigOption("projdim", 32),
         ConfigOption("ffdim", 100),
         ConfigOption("numlayers", 2),
-        ConfigOption("numattheads", 8),
+        ConfigOption("numattheads", 10),
         ConfigOption("alpha", 0.5),
         ConfigOption("usemask", False),
         ConfigOption("usemixer", False),

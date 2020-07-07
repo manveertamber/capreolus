@@ -2,10 +2,10 @@ import math
 
 import torch
 import torch.nn.functional as F
-from profane import ConfigOption, Dependency
 from torch import nn
 from torch.autograd import Variable
 
+from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 from capreolus.reranker.common import create_emb_layer
 
@@ -323,9 +323,14 @@ class HiNT_main(nn.Module):
 
 @Reranker.register
 class HINT(Reranker):
-    module_name = "HINT"
-    description = """Yixing Fan, Jiafeng Guo, Yanyan Lan, Jun Xu, Chengxiang Zhai, and Xueqi Cheng. 2018. Modeling Diverse Relevance Patterns in Ad-hoc Retrieval. In SIGIR'18."""
+    """Yixing Fan, Jiafeng Guo, Yanyan Lan, Jun Xu, Chengxiang Zhai, and Xueqi Cheng. 2018. Modeling Diverse Relevance Patterns in Ad-hoc Retrieval. In SIGIR'18."""
 
+    module_name = "HINT"
+
+    dependencies = [
+        Dependency(key="extractor", module="extractor", name="slowembedtext"),
+        Dependency(key="trainer", module="trainer", name="pytorch"),
+    ]
     config_spec = [ConfigOption("spatialGRU", 2), ConfigOption("LSTMdim", 6), ConfigOption("kmax", 10)]
 
     def test(self, query_sentence, query_idf, pos_sentence, *args, **kwargs):

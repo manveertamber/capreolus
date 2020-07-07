@@ -1,21 +1,21 @@
 import math
 import os
 import pickle
-from collections import defaultdict
-
-import numpy as np
 import re
+from collections import defaultdict
 from functools import reduce
 
+import numpy as np
 import torch
 from nltk import TextTilingTokenizer
+from profane import ConfigOption, Dependency, constants
 from pymagnitude import Magnitude, MagnitudeUtils
 from tqdm import tqdm
-from profane import ConfigOption, Dependency, constants
 
-from capreolus.extractor import Extractor
 from capreolus.utils.common import padlist
 from capreolus.utils.loginit import get_logger
+
+from . import Extractor
 
 logger = get_logger(__name__)
 CACHE_BASE_PATH = constants["CACHE_BASE_PATH"]
@@ -50,9 +50,9 @@ class DeepTileExtractor(Extractor):
         ConfigOption("tilechannels", 3),
         ConfigOption("embeddings", "glove6b"),
         ConfigOption("passagelen", 20),
-        ConfigOption("maxqlen", 8),
+        ConfigOption("maxqlen", 4),
         ConfigOption("maxdoclen", 800),
-        ConfigOption("usecache", False),
+        ConfigOption("usecache", True),
     ]
 
     def _get_pretrained_emb(self):

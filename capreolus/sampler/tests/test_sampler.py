@@ -1,12 +1,11 @@
-import pytest
+import numpy as np
 import torch
 import torch.utils.data
-import numpy as np
 
 from capreolus.benchmark import DummyBenchmark
-from capreolus.extractor import EmbedText
-from capreolus.sampler import TrainTripletSampler, PredSampler
-from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
+from capreolus.extractor.embedtext import EmbedText
+from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
+from sampler import TrainTripletSampler, PredSampler
 
 
 def test_train_sampler(monkeypatch, tmpdir):

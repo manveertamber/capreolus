@@ -1,16 +1,11 @@
-from profane import import_all_modules
-
-# import_all_modules(__file__, __package__)
-
-import random
-from itertools import product
 import hashlib
+import random
+
 import torch.utils.data
 
 from profane import ModuleBase, Dependency, ConfigOption, constants
 from capreolus.utils.exceptions import MissingDocError
 from capreolus.utils.loginit import get_logger
-
 
 logger = get_logger(__name__)
 
@@ -31,7 +26,9 @@ class Sampler(ModuleBase):
         # remove qids from qid_to_docids that do not have relevance labels in the qrels
         self.qid_to_docids = {qid: docids for qid, docids in qid_to_docids.items() if qid in qrels}
         if len(self.qid_to_docids) != len(qid_to_docids):
-            logger.warning("skipping qids that were missing from the qrels: {}".format(qid_to_docids.keys() - self.qid_to_docids.keys()))
+            logger.warning(
+                "skipping qids that were missing from the qrels: {}".format(qid_to_docids.keys() - self.qid_to_docids.keys())
+            )
 
         self.qid_to_reldocs = {
             qid: [docid for docid in docids if qrels[qid].get(docid, 0) >= relevance_level]
@@ -54,8 +51,7 @@ class Sampler(ModuleBase):
             negdocs = len(self.qid_to_negdocs[qid])
             total_samples += posdocs * negdocs
             if posdocs == 0 or negdocs == 0:
-                logger.debug("removing training qid=%s with %s positive docs and %s negative docs", qid, posdocs,
-                             negdocs)
+                logger.debug("removing training qid=%s with %s positive docs and %s negative docs", qid, posdocs, negdocs)
                 del self.qid_to_reldocs[qid]
                 del self.qid_to_docids[qid]
                 del self.qid_to_negdocs[qid]
@@ -133,6 +129,7 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
     Samples training data pairs. Each sample is of the form (query, doc)
     Iterates through all the relevant documents in qrels
     """
+
     module_name = "pair"
     config_spec = [
         ConfigOption("seed", 1234),
@@ -170,6 +167,7 @@ class PredSampler(Sampler, torch.utils.data.IterableDataset):
     """
     Creates a Dataset for evaluation (test) data to be used with a pytorch DataLoader
     """
+
     module_name = "pred"
     config_spec = [
         ConfigOption("seed", 1234),

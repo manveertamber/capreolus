@@ -1,13 +1,17 @@
 import pytest
 
-from capreolus.collection import Collection, DummyCollection
+from capreolus import module_registry
+from capreolus.collection import DummyCollection
 from capreolus.index import Index
-from capreolus.index import AnseriniIndex
-from capreolus.tests.common_fixtures import tmpdir_as_cache, dummy_index
+from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
+
+indexs = set(module_registry.get_module_names("index"))
 
 
-def test_anserini_create_index(tmpdir_as_cache):
-    index = AnseriniIndex({"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}})
+@pytest.mark.parametrize("index_name", indexs)
+def test_create_index(tmpdir_as_cache, index_name):
+    provide = {"collection": DummyCollection()}
+    index = Index.create(index_name, provide=provide)
     assert not index.exists()
     index.create_index()
     assert index.exists()
