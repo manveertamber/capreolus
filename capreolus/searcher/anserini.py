@@ -283,7 +283,7 @@ class BM25Reranker(Searcher):
         """ only perform bm25 on the docs in runs """
         donefn = os.path.join(output_path, "done")
         if os.path.exists(donefn):
-            logger.debug(f"done file for {self.name} already exists, skip search")
+            logger.debug(f"done file for {self.module_name} already exists, skip search")
             return output_path
 
         self.index.open()
