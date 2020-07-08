@@ -216,9 +216,9 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
     config_spec = [
         ConfigOption("k1", [0.65, 0.70, 0.75], "controls term saturation", value_type="floatlist"),
         ConfigOption("b", [0.60, 0.7], "controls document length normalization", value_type="floatlist"),
-        ConfigOption("fbTerms", [65, 70, 95, 100], "number of generated terms from feedback", value_type="intlist"),
-        ConfigOption("fbDocs", [5, 10, 15], "number of documents used for feedback", value_type="intlist"),
-        ConfigOption("originalQueryWeight", [0.5], "the weight of unexpended query", value_type="floatlist"),
+        ConfigOption("fbTerms", [40, 50, 60, 70, 90], "number of generated terms from feedback", value_type="intlist"),
+        ConfigOption("fbDocs", [2, 5, 10, 15], "number of documents used for feedback", value_type="intlist"),
+        ConfigOption("originalQueryWeight", [0.1, 0.3, 0.5, 0.7, 0.9], "the weight of unexpended query", value_type="floatlist"),
         ConfigOption("hits", 1000, "number of results to return"),
         ConfigOption("fields", "title"),
     ]
