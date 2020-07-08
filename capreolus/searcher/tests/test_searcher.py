@@ -32,7 +32,6 @@ def test_searcher_query(tmpdir_as_cache, tmpdir, dummy_index, searcher_name):
         # if searcher_name != "BM25":
         return
 
-    print(results.values())
     if isinstance(list(results.values())[0], dict):
         assert all(len(d) == nhits for d in results.values())
     else:
