@@ -639,12 +639,19 @@ class CodeSearchDistractor(Searcher):
 
                         for rank, obj2 in enumerate(objs):
                             docid = self.benchmark.get_docid(obj2["url"], obj2["code_raw"])
-                            assert docid != 1
+                            assert docid != -1
 
                             all_docs.append(docid)
-                            runs[qid][docid] = 1.0 / (rank + 1)
+                            runs[qid][docid] = 1.0 / (rank + 1) if docid != gt_docid else 100
                         assert gt_docid in all_docs
                     objs = []  # reset
+
+        # in case of the duplicate query, preserve 1k from all of their neighours
+        for qid in runs:
+            if len(runs[qid]) <= 1000:
+                continue
+            docs = sorted(runs[qid].items(), key=lambda kv: kv[1], reverse=True)[:1000]
+            runs[qid] = {doc: score for doc, score in docs}
 
         os.makedirs(output_path, exist_ok=True)
         self.write_trec_run(runs, os.path.join(output_path, "searcher"))
