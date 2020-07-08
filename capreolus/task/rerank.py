@@ -4,6 +4,7 @@ from pathlib import Path
 
 from profane import ConfigOption, Dependency
 
+from capreolus import evaluator
 from capreolus.sampler import TrainTripletSampler, PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
