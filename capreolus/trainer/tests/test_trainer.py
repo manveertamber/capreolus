@@ -7,7 +7,10 @@ import tensorflow as tf
 from capreolus.benchmark import DummyBenchmark
 from capreolus.extractor.embedtext import EmbedText
 from capreolus.sampler import TrainTripletSampler
-from capreolus.trainer import TensorFlowTrainer
+from capreolus.trainer.tensorflow import TensorflowTrainer
+from capreolus.extractor.slowembedtext import SlowEmbedText
+from capreolus.reranker.TFKNRM import TFKNRM
+from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
 
 
 def test_tf_get_tf_dataset(monkeypatch):
@@ -33,7 +36,7 @@ def test_tf_get_tf_dataset(monkeypatch):
         }
 
     monkeypatch.setattr(EmbedText, "id2vec", mock_id2vec)
-    trainer = TensorFlowTrainer(
+    trainer = TensorflowTrainer(
         {
             "name": "tensorflow",
             "batch": 2,
@@ -63,3 +66,40 @@ def test_tf_get_tf_dataset(monkeypatch):
         tf.debugging.assert_equal(
             batch[3], tf.convert_to_tensor(np.array([[0.1, 0.1, 0.2, 0.1], [0.1, 0.1, 0.2, 0.1]]), dtype=tf.float32)
         )
+
+
+def test_tf_find_cached_tf_records(monkeypatch, dummy_index):
+    def fake_magnitude_embedding(*args, **kwargs):
+        return np.zeros((1, 8), dtype=np.float32), {0: "<pad>"}, {"<pad>": 0}
+
+    monkeypatch.setattr(SlowEmbedText, "_load_pretrained_embeddings", fake_magnitude_embedding)
+
+    reranker = TFKNRM(
+        {"gradkernels": True, "finetune": False, "trainer": {"niters": 1, "itersize": 4, "batch": 2}},
+        provide={"index": dummy_index},
+    )
+    extractor = reranker.extractor
+    benchmark = DummyBenchmark()
+
+    extractor.preprocess(["301"], ["LA010189-0001", "LA010189-0002"], benchmark.topics[benchmark.query_type])
+
+    train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(train_run, benchmark.qrels, extractor)
+
+    required_samples = 8
+    reranker.trainer.convert_to_tf_train_record(reranker, train_dataset)
+    assert reranker.trainer.find_cached_tf_records(train_dataset, required_samples) is not None
+    assert reranker.trainer.find_cached_tf_records(train_dataset, required_samples - 4) is not None
+    assert reranker.trainer.find_cached_tf_records(train_dataset, 24) is None
+
+    reranker = TFKNRM(
+        {"gradkernels": True, "finetune": False, "trainer": {"niters": 1, "itersize": 4, "batch": 6}},
+        provide={"index": dummy_index},
+    )
+    reranker.extractor.preprocess(["301"], ["LA010189-0001", "LA010189-0002"], benchmark.topics[benchmark.query_type])
+    train_dataset.prepare(train_run, benchmark.qrels, extractor)
+    reranker.trainer.convert_to_tf_train_record(reranker, train_dataset)
+    assert reranker.trainer.find_cached_tf_records(train_dataset, 24) is not None
+    assert reranker.trainer.find_cached_tf_records(train_dataset, 18) is not None
+

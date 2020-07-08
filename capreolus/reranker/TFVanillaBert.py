@@ -10,69 +10,69 @@ from capreolus.utils.loginit import get_logger
 logger = get_logger(__name__)
 
 
-class TFVanillaBert_Class(tf.keras.Model):
+class TFVanillaBert_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFVanillaBert_Class, self).__init__(*args, **kwargs)
-        self.clsidx = extractor.clsidx  # The index of the CLS token
-        self.sepidx = extractor.sepidx  # The index of the SEP token
         self.extractor = extractor
-        self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"])
+
+        # TFBertForSequenceClassification contains both the BERT and the linear classifier layers
+        self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
+
+        assert extractor.config["numpassages"] == 1, "numpassages should be 1 for TFVanillaBERT"
         self.config = config
 
     def call(self, x, **kwargs):
         """
-        During training, both posdoc and negdoc are passed
-        During eval, both posdoc and negdoc are passed but negdoc would be a zero tensor
-        Whether negdoc is a legit doc tensor or a dummy zero tensor is determined by which sampler is used
-        (eg: sampler.TrainDataset) as well as the extractor (eg: EmbedText)
+        Returns logits of shape [2]
         """
+        doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
+        doc_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
 
-        pos_toks, posdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3]
-        batch_size = tf.shape(pos_toks)[0]
-        doclen = tf.shape(pos_toks)[1]
-        qlen = tf.shape(query_toks)[1]
-
-        cls = tf.cast(tf.fill([batch_size, 1], self.clsidx, name="clstoken"), tf.int64)
-        sep_1 = tf.cast(tf.fill([batch_size, 1], self.sepidx, name="septoken1"), tf.int64)
-        sep_2 = tf.cast(tf.fill([batch_size, 1], self.sepidx, name="septoken2"), tf.int64)
-
-        query_posdoc_tokens_tensor = tf.concat([cls, query_toks, sep_1, pos_toks, sep_2], axis=1)
-        ones = tf.ones([batch_size, 1], dtype=tf.int64)
-        query_posdoc_mask = tf.concat([ones, query_mask, ones, posdoc_mask, ones], axis=1)
-        query_doc_segments_tensor = tf.concat([tf.zeros([batch_size, qlen + 2]), tf.ones([batch_size, doclen + 1])], axis=1)
-        posdoc_score = self.bert(
-            query_posdoc_tokens_tensor, attention_mask=query_posdoc_mask, token_type_ids=query_doc_segments_tensor
-        )[0][:, 0]
-
-        return posdoc_score
+        return doc_scores
 
     def predict_step(self, data):
-        data = data_adapter.expand_1d(data)
-        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
-        return self.score(x)
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = data
+        batch_size = tf.shape(posdoc_bert_input)[0]
+        num_passages = self.extractor.config["numpassages"]
+        assert num_passages == 1
+        maxseqlen = self.extractor.config["maxseqlen"]
+
+        posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])
+        posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
+        posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
+
+        doc_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 1]
+        tf.debugging.assert_equal(tf.shape(doc_scores), [batch_size])
+
+        return doc_scores
 
     def score(self, x, **kwargs):
-        pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
 
-        return self.call((pos_toks, posdoc_mask, query_toks, query_mask))
+        return self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)
 
     def score_pair(self, x, **kwargs):
-        pos_toks, posdoc_mask, neg_toks, negdoc_mask, query_toks, query_mask = x[0], x[1], x[2], x[3], x[4], x[5]
+        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
 
-        pos_score = self.call((pos_toks, posdoc_mask, query_toks, query_mask))
-        neg_score = self.call((neg_toks, negdoc_mask, query_toks, query_mask))
+        pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)[:, 1]
+        neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, 1]
 
         return pos_score, neg_score
 
 
 @Reranker.register
 class TFVanillaBERT(Reranker):
-    """TensorFlow implementation of Vanilla BERT."""
+    """
+        TensorFlow implementation of Vanilla BERT.
+        Input is of the form [CLS] sentence A [SEP] sentence B [SEP]
+        The "score" of a query (sentence A) - document (sentence B) pair is the probability that the document is relevant
+        to the query. This is achieved through a linear classifier layer attached to BERT's last layer and using the logits[1] as the score.
+    """
 
     module_name = "TFVanillaBERT"
 
     dependencies = [
-        Dependency(key="extractor", module="extractor", name="berttext"),
+        Dependency(key="extractor", module="extractor", name="bertpassage"),
         Dependency(key="trainer", module="trainer", name="tensorflow"),
     ]
     config_spec = [ConfigOption("pretrained", "bert-base-uncased", "pretrained model to load")]

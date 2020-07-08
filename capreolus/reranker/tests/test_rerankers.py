@@ -26,6 +26,7 @@ from capreolus.reranker.TFKNRM import TFKNRM
 from capreolus.reranker.TK import TK
 from capreolus.sampler import TrainTripletSampler, TrainPairSampler, PredSampler
 from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
+from reranker.TFVanillaBert import TFVanillaBERT
 
 rerankers = set(module_registry.get_module_names("reranker"))
 
@@ -435,6 +436,50 @@ def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
 
+def test_tfvanillabert(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
+    reranker = TFVanillaBERT(
+        {
+            "pretrained": "bert-base-uncased",
+            "extractor": {
+                "name": "bertpassage",
+                "usecache": False,
+                "maxseqlen": 256,
+                "numpassages": 1,
+                "passagelen": 150,
+                "stride": 100,
+                "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
+            },
+            "trainer": {
+                "name": "tensorflow",
+                "batch": 1,
+                "niters": 1,
+                "itersize": 2,
+                "lr": 0.001,
+                "validatefreq": 1,
+                "usecache": False,
+                "tpuname": None,
+                "tpuzone": None,
+                "storage": None,
+                "boardname": "default",
+                "loss": "pairwise_hinge_loss",
+            },
+        }
+    )
+
+    benchmark = DummyBenchmark({"collection": {"name": "dummy"}})
+
+    reranker.extractor.preprocess(["301"], ["LA010189-0001", "LA010189-0002"], benchmark.topics[benchmark.query_type])
+    reranker.build_model()
+    reranker.bm25_scores = {"301": {"LA010189-0001": 2, "LA010189-0002": 1}}
+    train_run = {"301": ["LA010189-0001", "LA010189-0002"]}
+    train_dataset = TrainTripletSampler()
+    train_dataset.prepare(train_run, benchmark.qrels, reranker.extractor)
+    dev_dataset = PredSampler()
+    dev_dataset.prepare(train_run, benchmark.qrels, reranker.extractor)
+    reranker.trainer.train(
+        reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, "map"
+    )
+
 
 # Deliberately commented out. This unit test will pass only if you have tons of RAM
 def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
@@ -453,7 +498,7 @@ def test_bertmaxp(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
                 "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
             },
             "trainer": {
-                "name": "berttputrainer",
+                "name": "tensorflow",
                 "batch": 1,
                 "niters": 1,
                 "itersize": 2,
@@ -500,7 +545,7 @@ def test_bertmaxp_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
                 "index": {"name": "anserini", "indexstops": False, "stemmer": "porter", "collection": {"name": "dummy"}},
             },
             "trainer": {
-                "name": "berttputrainer",
+                "name": "tensorflow",
                 "batch": 4,
                 "niters": 1,
                 "itersize": 2,

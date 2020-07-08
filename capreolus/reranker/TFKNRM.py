@@ -1,13 +1,11 @@
 import tensorflow as tf
-from profane import ConfigOption, Dependency
-from tensorflow.python.keras.engine import data_adapter
 
 from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 from capreolus.reranker.common import RbfKernelBankTF, similarity_matrix_tf
 
 
-class TFKNRM_Class(tf.keras.Model):
+class TFKNRM_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, **kwargs):
         super(TFKNRM_Class, self).__init__(**kwargs)
         self.config = config
@@ -46,9 +44,7 @@ class TFKNRM_Class(tf.keras.Model):
         return score
 
     def predict_step(self, data):
-        data = data_adapter.expand_1d(data)
-        x, _, _ = data_adapter.unpack_x_y_sample_weight(data)
-        return self.score(x)
+        return self.score(data)
 
     def score(self, x, **kwargs):
         posdoc, negdoc, query, query_idf = x

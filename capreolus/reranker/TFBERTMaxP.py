@@ -5,7 +5,6 @@ from transformers import TFBertForSequenceClassification
 
 from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
-from capreolus.utils.loginit import get_logger
 
 
 class TFBERTMaxP_Class(tf.keras.layers.Layer):
@@ -16,6 +15,9 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         self.config = config
 
     def call(self, x, **kwargs):
+        """
+        Returns logits of shape [2]
+        """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
 
         passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
@@ -62,7 +64,7 @@ class TFBERTMaxP(Reranker):
 
     dependencies = [
         Dependency(key="extractor", module="extractor", name="bertpassage"),
-        Dependency(key="trainer", module="trainer", name="berttputrainer"),
+        Dependency(key="trainer", module="trainer", name="tensorflow"),
     ]
     config_spec = [
         ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),
