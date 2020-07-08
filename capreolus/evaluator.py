@@ -183,8 +183,11 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         test_qids = folds[s]["predict"]["test"]
         assert all([qid not in test_runs for qid in test_qids])  # ensure there is no overlap between each fold
         # any empty (no results) queries need to be added so they contribute zeros to the average
-        test_runs.update({qid: {} for qid in test_qids})
-        test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
+        evaluated_runs = {qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids}
+        unevaluated_runs = {qid: {} for qid in test_qids if qid not in evaluated_runs}
+        test_runs.update({**evaluated_runs, **unevaluated_runs})
+        if unevaluated_runs:
+            logger.warning(f"Cannot find {len(unevaluated_runs)} queries from {s} test runs")
 
     scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
