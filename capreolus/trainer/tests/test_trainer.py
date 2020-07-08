@@ -5,7 +5,6 @@ import numpy as np
 import tensorflow as tf
 
 from capreolus.benchmark import DummyBenchmark
-from capreolus.extractor.embedtext import EmbedText
 from capreolus.sampler import TrainTripletSampler
 from capreolus.trainer.tensorflow import TensorflowTrainer
 from capreolus.extractor.slowembedtext import SlowEmbedText
@@ -15,7 +14,7 @@ from capreolus.tests.common_fixtures import dummy_index, tmpdir_as_cache
 
 def test_tf_get_tf_dataset(monkeypatch):
     benchmark = DummyBenchmark()
-    extractor = EmbedText(
+    extractor = SlowEmbedText(
         {"maxdoclen": 4, "maxqlen": 4, "tokenizer": {"keepstops": True}}, provide={"collection": benchmark.collection}
     )
     training_judgments = benchmark.qrels.copy()
@@ -35,7 +34,7 @@ def test_tf_get_tf_dataset(monkeypatch):
             "query_idf": np.array([0.1, 0.1, 0.2, 0.1], dtype=np.float),
         }
 
-    monkeypatch.setattr(EmbedText, "id2vec", mock_id2vec)
+    monkeypatch.setattr(SlowEmbedText, "id2vec", mock_id2vec)
     trainer = TensorflowTrainer(
         {
             "name": "tensorflow",
@@ -55,7 +54,7 @@ def test_tf_get_tf_dataset(monkeypatch):
     for filename in tf_record_filenames:
         assert os.path.isfile(filename)
 
-    tf_record_dataset = trainer.load_tf_records_from_file(reranker, tf_record_filenames, 2)
+    tf_record_dataset = trainer.load_tf_train_records_from_file(reranker, tf_record_filenames, 2)
     dataset = tf_record_dataset
 
     for idx, data_and_label in enumerate(dataset):
