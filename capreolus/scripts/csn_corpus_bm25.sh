@@ -1,4 +1,4 @@
-for lang in $1 # "javascript" # "java" "python" "php"
+for lang in $1
 do
   cmd="with
           rank.searcher.name=csn_distractors
@@ -6,7 +6,5 @@ do
           searcher.name=BM25_reranker
           searcher.k1=0.9,1.0,1.1 searcher.b=0.9,1.0"
 
-  python run.py filterrank.searcheval $cmd benchmark.collection.removeunichar=False
-  python run.py filterrank.searcheval $cmd benchmark.collection.removeunichar=False benchmark.collection.removepunc=False
-#  python run.py filterrank.searcheval $cmd benchmark.collection.removeunichar=False benchmark.collection.removepunc=False
+python run.py filterrank.searcheval $cmd
 done
