@@ -25,7 +25,7 @@ def list2str(l, delimiter="-"):
 class AnseriniSearcherMixIn:
     """ MixIn for searchers that use Anserini's SearchCollection script """
 
-    def _anserini_query_from_file(self, topicsfn, anserini_param_str, output_base_path, topicfield, rerank=False, run_fn=""):
+    def _anserini_query_from_file(self, topicsfn, anserini_param_str, output_base_path, topicfield):
         if not os.path.exists(topicsfn):
             raise IOError(f"could not find topics file: {topicsfn}")
 
@@ -51,7 +51,6 @@ class AnseriniSearcherMixIn:
         if self.index.config["indexstops"]:
             indexopts += " -keepstopwords"
 
-
         index_path = self.index.get_index_path()
         anserini_fat_jar = Anserini.get_fat_jar()
         cmd = (
@@ -60,14 +59,6 @@ class AnseriniSearcherMixIn:
             f"-topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} "
             f"-topicfield {topicfield} -inmem -threads {MAX_THREADS} {anserini_param_str}"
         )
-
-        if rerank:
-            anserini_fat_jar = "/home/xinyu1zhang/mpi-spring/anserini-ictir-docfilter/target/anserini-0.9.1-SNAPSHOT-fatjar.jar"
-            cmd = f"java -classpath {anserini_fat_jar} " \
-                  f"-Xms512M -Xmx31G -Dapp.name=SimpleSearch io.anserini.search.SimpleSearcher " \
-                  f"-index {index_path} -topics {topicsfn} -output {output_path} -rerank -runfile {run_fn} " \
-                  f"-threads {MAX_THREADS} {anserini_param_str}"
-            print("reranking: ", cmd)
         logger.info("Anserini writing runs to %s", output_path)
         logger.debug(cmd)
 
@@ -216,113 +207,24 @@ class BM25RM3(Searcher, AnseriniSearcherMixIn):
     config_spec = [
         ConfigOption("k1", [0.65, 0.70, 0.75], "controls term saturation", value_type="floatlist"),
         ConfigOption("b", [0.60, 0.7], "controls document length normalization", value_type="floatlist"),
-        ConfigOption("fbTerms", [40, 50, 60, 70, 90], "number of generated terms from feedback", value_type="intlist"),
-        ConfigOption("fbDocs", [2, 5, 10, 15], "number of documents used for feedback", value_type="intlist"),
-        ConfigOption("originalQueryWeight", [0.1, 0.3, 0.5, 0.7, 0.9], "the weight of unexpended query", value_type="floatlist"),
+        ConfigOption("fbTerms", [65, 70, 95, 100], "number of generated terms from feedback", value_type="intlist"),
+        ConfigOption("fbDocs", [5, 10, 15], "number of documents used for feedback", value_type="intlist"),
+        ConfigOption("originalQueryWeight", [0.5], "the weight of unexpended query", value_type="floatlist"),
         ConfigOption("hits", 1000, "number of results to return"),
         ConfigOption("fields", "title"),
     ]
 
-    def query_from_file(self, topicsfn, output_path, rerank=False, run_fn=""):
-        return self._query_from_file(topicsfn, output_path, self.config, rerank=rerank, run_fn=run_fn)
-
-    def _query_from_file(self, topicsfn, output_path, config, rerank=False, run_fn=""):
+    def _query_from_file(self, topicsfn, output_path, config):
         hits = str(config["hits"])
 
-        suffix = ".multi" if rerank else ""
         anserini_param_str = (
             "-rm3 "
-            + " ".join(f"-rm3.{k}{suffix} {list2str(config[k], ' ')}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
+            + " ".join(f"-rm3.{k} {list2str(config[k], ' ')}" for k in ["fbTerms", "fbDocs", "originalQueryWeight"])
             + " -bm25 "
-            + " ".join(f"-bm25.{k}{suffix} {list2str(config[k], ' ')}" for k in ["k1", "b"])
+            + " ".join(f"-bm25.{k} {list2str(config[k], ' ')}" for k in ["k1", "b"])
             + f" -hits {hits}"
         )
-        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, config["fields"], rerank=rerank, run_fn=run_fn)
-
-        return output_path
-
-
-@Searcher.register
-class BM25Reranker(Searcher):
-    module_name = "BM25_reranker"
-    dependencies = [
-        Dependency(key="index", module="index", name="anserini_tf"),
-        # "searcher": Dependency(module="searcher", name="csn_distractors"),
-    ]
-    config_spec = [
-        ConfigOption("k1", [0.65, 0.70, 0.75], "controls term saturation", value_type="floatlist"),
-        ConfigOption("b", [0.60, 0.7], "controls document length normalization", value_type="floatlist"),
-        ConfigOption("hits", 1000, "number of results to return"),
-        ConfigOption("fields", "title"),
-    ]
-
-    def __calc_bm25(self, query, docid):
-        doclen = self.index.get_doclen(docid)
-        k1_b = [(float(k1), float(b)) for k1 in self.config["k1"] for b in self.config["b"]]
-
-        tfs = {term: self.index.get_tf(term, docid) for term in query}
-        idfs = {term: self.index.get_idf(term) for term in query}
-        bm25_per_qterm = {f"k1={k1},b={b}": (docid, sum(
-            [idfs[term] * tfs[term] / (tfs[term] + k1 * (1 - b + b * doclen / self.avg_doc_len)) for term in query]))
-            for k1, b in k1_b}
-        return bm25_per_qterm
-
-    def calc_bm25(self, query, docids):
-        kb_docid_scores = [self.__calc_bm25(query, docid) for docid in docids]  # {runname: {docid: score}}
-        kbs = kb_docid_scores[0].keys()
-        bm25s = {kb: {r_idx_score[kb][0]: r_idx_score[kb][1] for r_idx_score in kb_docid_scores} for kb in kbs}
-
-        for kb in bm25s:
-            if self.config["hits"] >= len(bm25s[kb]):
-                continue
-            sorted_bm25 = sorted(bm25s[kb].items(), key=lambda k_v: k_v[1], reverse=True)
-            bm25s[kb] = {docid: score for docid, score in sorted_bm25[:self.config["hits"]]}
-
-        return bm25s
-
-    def query_from_file(self, topicsfn, output_path, runs=None):
-        """ only perform bm25 on the docs in runs """
-        donefn = os.path.join(output_path, "done")
-        if os.path.exists(donefn):
-            logger.debug(f"done file for {self.module_name} already exists, skip search")
-            return output_path
-
-        self.index.open()
-
-        # prepare topic
-        cache_fn = self.get_cache_path()
-        topic_cache_path = cache_fn / "topic.analyze.json"
-        docnos = self.index.collection.get_docnos()
-        self.avg_doc_len = self.index.get_avglen()
-
-        cache_fn.mkdir(exist_ok=True, parents=True)
-        output_path.mkdir(exist_ok=True, parents=True)
-
-        if os.path.exists(topic_cache_path):
-            topics = json.load(open(topic_cache_path))
-            logger.info(f"loading analyzed topic from cache {topic_cache_path}")
-        else:
-            topics = load_trec_topics(topicsfn)["title"]
-            topics = {qid: self.index.analyze_sent(q) for qid, q in tqdm(topics.items(), desc="Transforming query")}
-            json.dump(topics, open(topic_cache_path, "w"))
-            logger.info(f"storing analyzed topic from cache {topic_cache_path}")
-
-        if isinstance(runs, dict):  # filter undesired query if runs are given
-            topics = [(qid, query) for qid, query in topics.items() if qid in runs]
-
-        mode = "w"
-        for qid, query in tqdm(topics, desc=f"Calculating bm25"):
-            docids = runs[qid] if runs else docnos
-            if not docids:
-                continue
-
-            runname_bm25 = self.calc_bm25(query, docids)
-            for runname, bm25 in runname_bm25.items():
-                self.write_trec_run({qid: bm25}, os.path.join(output_path, f"searcher_{runname}"), mode)
-            mode = "a"
-
-        with open(donefn, "wt") as donef:
-            print("done", file=donef)
+        self._anserini_query_from_file(topicsfn, anserini_param_str, output_path, config["fields"])
 
         return output_path
 
