@@ -123,14 +123,14 @@ class AnseriniIndexWithTf(AnseriniIndex):
         if os.path.exists(tf_path):
             self.tf = json.load(open(tf_path))
             self.doclen = {docid: sum(doc_vec.values()) for docid, doc_vec in self.tf.items()}
-            print(f"tf been loaded from {tf_path}")
+            logger.info(f"tf been loaded from {tf_path}")
         else:
             docnos = self.collection.get_docnos()
             for docid in tqdm(docnos, desc="Preparing doclen & tf"):
                 self.doclen[docid], self.tf[docid] = self.calc_doclen_tfdict(docid)
 
             json.dump(self.tf, open(tf_path, "w"))
-            print(f"{len(self.tf)} tf values been cached into {tf_path}")
+            logger.info(f"{len(self.tf)} tf values been cached into {tf_path}")
 
         self.avgdl = np.mean(list(self.doclen.values()))
-        print(f"average doc len: {self.avgdl}")
+        logger.info(f"average doc len: {self.avgdl}")
