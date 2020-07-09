@@ -68,6 +68,7 @@ class CodeSearchNet(Collection):
             sent = preprocess.remove_unicharacter(sent, return_str=True)
             sents["no_unichar"] = sent
 
+        sent = sent.strip("<")  # not to conflict with trec tag format
         sents["final"] = sent
         return sents
 
