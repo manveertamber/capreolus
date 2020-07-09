@@ -11,6 +11,8 @@ from capreolus import ConfigOption, constants, get_logger
 from . import Index
 from .anserini import AnseriniIndex
 
+logger = get_logger(__name__)  # pylint: disable=invalid-name
+
 
 @Index.register
 class AnseriniIndexWithTf(AnseriniIndex):
