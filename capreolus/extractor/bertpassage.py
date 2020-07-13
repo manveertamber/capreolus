@@ -62,12 +62,12 @@ class BertPassage(Extractor):
 
     def get_tf_feature_description(self):
         feature_description = {
-            "pos_bert_input": tf.io.FixedLenFeature([], tf.string),
-            "pos_mask": tf.io.FixedLenFeature([], tf.string),
-            "pos_seg": tf.io.FixedLenFeature([], tf.string),
-            "neg_bert_input": tf.io.FixedLenFeature([], tf.string),
-            "neg_mask": tf.io.FixedLenFeature([], tf.string),
-            "neg_seg": tf.io.FixedLenFeature([], tf.string),
+            "posdoc": tf.io.FixedLenFeature([], tf.string),
+            "posdoc_mask": tf.io.FixedLenFeature([], tf.string),
+            "posdoc_seg": tf.io.FixedLenFeature([], tf.string),
+            "negdoc": tf.io.FixedLenFeature([], tf.string),
+            "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
+            "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
             "label": tf.io.FixedLenFeature([], tf.string),
         }
 
@@ -175,12 +175,12 @@ class BertPassage(Extractor):
 
             return parsed_tensor
 
-        pos_bet_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
-        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["pos_mask"], dtype=tf.int64)
-        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["pos_seg"], dtype=tf.int64)
-        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["neg_bert_input"], dtype=tf.int64)
-        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["neg_mask"], dtype=tf.int64)
-        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["neg_seg"], dtype=tf.int64)
+        pos_bet_input = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
+        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
+        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
+        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
+        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
+        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
         label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (pos_bet_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
@@ -201,12 +201,12 @@ class BertPassage(Extractor):
 
             return parsed_tensor
 
-        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
-        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["pos_mask"], dtype=tf.int64)
-        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["pos_seg"], dtype=tf.int64)
-        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["neg_bert_input"], dtype=tf.int64)
-        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["neg_mask"], dtype=tf.int64)
-        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["neg_seg"], dtype=tf.int64)
+        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
+        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
+        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
+        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
+        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
+        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
         label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
@@ -299,16 +299,15 @@ class BertPassage(Extractor):
             pos_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
             pos_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
 
-        # TODO: Rename the posdoc key in the below dict to 'pos_bert_input'
         data = {
             "posdocid": posid,
-            "pos_bert_input": np.array(pos_bert_inputs, dtype=np.long),
-            "pos_mask": np.array(pos_bert_masks, dtype=np.long),
-            "pos_seg": np.array(pos_bert_segs, dtype=np.long),
+            "posdoc": np.array(pos_bert_inputs, dtype=np.long),
+            "posdoc_mask": np.array(pos_bert_masks, dtype=np.long),
+            "posdoc_seg": np.array(pos_bert_segs, dtype=np.long),
             "negdocid": "",
-            "neg_bert_input": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "neg_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "neg_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "label": np.repeat(np.array([label], dtype=np.float32), self.config["numpassages"], 0),
         }
 
@@ -332,8 +331,8 @@ class BertPassage(Extractor):
                 raise MissingDocError(qid, negid)
 
             data["negdocid"] = negid
-            data["neg_bert_input"] = np.array(neg_bert_inputs, dtype=np.long)
-            data["neg_mask"] = np.array(neg_bert_masks, dtype=np.long)
-            data["neg_seg"] = np.array(neg_bert_segs, dtype=np.long)
+            data["negdoc"] = np.array(neg_bert_inputs, dtype=np.long)
+            data["negdoc_mask"] = np.array(neg_bert_masks, dtype=np.long)
+            data["negdoc_seg"] = np.array(neg_bert_segs, dtype=np.long)
 
         return data
