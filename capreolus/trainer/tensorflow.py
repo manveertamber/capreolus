@@ -30,7 +30,7 @@ class TensorflowTrainer(Trainer):
     bertlr ConfigOption
     """
 
-    module_name = "tensorflow"
+    module_name = "berttputrainer"
     config_spec = [
         ConfigOption("batch", 32, "batch size"),
         ConfigOption("niters", 20, "number of iterations to train for"),
@@ -250,7 +250,7 @@ class TensorflowTrainer(Trainer):
         """
         Looks for a tf record for the passed dataset that has at least the specified number of samples
         """
-        parent_dir = "{0}/capreolus_tfrecords/".format(self.config["storage"]) if self.tpu else "{0}".format(self.get_cache_path())
+        parent_dir = "{0}/capreolus_tfrecords".format(self.config["storage"]) if self.tpu else "{0}".format(self.get_cache_path())
         if not tf.io.gfile.exists(parent_dir):
             return None
         else:
@@ -258,12 +258,19 @@ class TensorflowTrainer(Trainer):
             required_prefix = dataset.get_hash()
 
             for child_dir in child_dirs:
-                sample_count = int(child_dir.split("_")[-1])
-                prefix = "_".join(child_dir.split("_")[:-1])
+                split_dir = child_dir.split("_")
+                if len(split_dir) == 3:
+                    child_dir = child_dir.strip("/")
+                    sample_count = int(child_dir.split("_")[-1])
+                    prefix = "_".join(child_dir.split("_")[:-1])
 
-                # TODO: Add checks to make sure that the child dir is not empty
-                if prefix == required_prefix and sample_count >= required_sample_count:
-                    return "{0}/{1}".format(parent_dir, child_dir)
+                    # TODO: Add checks to make sure that the child dir is not empty
+                    if prefix == required_prefix and sample_count >= required_sample_count:
+                        return "{0}/{1}".format(parent_dir, child_dir)
+                elif len(split_dir) == 2:
+                    child_dir = child_dir.strip("/")
+                    if child_dir == required_prefix:
+                        return "{0}/{1}".format(parent_dir, child_dir)
 
             return None
 
@@ -277,7 +284,7 @@ class TensorflowTrainer(Trainer):
 
         if self.config["usecache"] and cached_tf_record_dir is not None:
             filenames = tf.io.gfile.listdir(cached_tf_record_dir)
-            filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
+            filenames = ["{0}/{1}".format(cached_tf_record_dir, name.strip("/")) for name in filenames]
 
             return self.load_tf_train_records_from_file(reranker, filenames, self.config["batch"])
         else:
