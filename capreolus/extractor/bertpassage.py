@@ -91,12 +91,12 @@ class BertPassage(Extractor):
                 value = value.numpy()  # get value of tensor
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-        posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
+        posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["pos_mask"],
-            sample["pos_seg"],
-            sample["neg_mask"],
-            sample["neg_seg"],
+            sample["posdoc_mask"],
+            sample["posdoc_seg"],
+            sample["negdoc_mask"],
+            sample["negdoc_seg"],
         )
         label = sample["label"]
         features = []
@@ -115,12 +115,12 @@ class BertPassage(Extractor):
                 continue
 
             feature = {
-                "pos_bert_input": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
-                "pos_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
-                "pos_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg[i])),
-                "neg_bert_input": _bytes_feature(tf.io.serialize_tensor(negdoc[i])),
-                "neg_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask[i])),
-                "neg_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg[i])),
+                "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
+                "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
+                "posdoc_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg[i])),
+                "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc[i])),
+                "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask[i])),
+                "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg[i])),
                 "label": _bytes_feature(tf.io.serialize_tensor(label[i])),
             }
             features.append(feature)
@@ -132,12 +132,12 @@ class BertPassage(Extractor):
         Unlike the train feature, the dev set uses all passages. Both the input and the output are dicts with the shape
         [batch_size, num_passages, maxseqlen]
         """
-        posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
+        posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["pos_mask"],
-            sample["pos_seg"],
-            sample["neg_mask"],
-            sample["neg_seg"],
+            sample["posdoc_mask"],
+            sample["posdoc_seg"],
+            sample["negdoc_mask"],
+            sample["negdoc_seg"],
         )
         label = sample["label"]
 
@@ -148,12 +148,12 @@ class BertPassage(Extractor):
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
         feature = {
-            "pos_bert_input": _bytes_feature(tf.io.serialize_tensor(posdoc)),
-            "pos_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask)),
-            "pos_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg)),
-            "neg_bert_input": _bytes_feature(tf.io.serialize_tensor(negdoc)),
-            "neg_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)),
-            "neg_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
+            "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc)),
+            "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask)),
+            "posdoc_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg)),
+            "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
+            "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)),
+            "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
             "label": _bytes_feature(tf.io.serialize_tensor(label)),
         }
 
