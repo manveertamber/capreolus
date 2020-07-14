@@ -132,8 +132,8 @@ class TensorflowTrainer(Trainer):
             # Making sure that we did not miss any variables
             optimizer_1.apply_gradients(classifier_vars)
             optimizer_2.apply_gradients(bert_variables)
-            if other_vars:
-                optimizer_1.apply_gradients(other_vars)
+            # if other_vars:
+            #     optimizer_1.apply_gradients(other_vars)
 
             return loss
 
@@ -161,7 +161,7 @@ class TensorflowTrainer(Trainer):
 
         initial_lr = self.change_lr(epoch, self.config["bertlr"])
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
-        train_records = train_records.shuffle(100000)
+        train_records = train_records.shuffle(10000).repeat(count=3)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
 
         # Goes through the dataset ONCE (i.e niters * itersize * batch samples). However, the dataset may already contain multiple instances of the same sample,
@@ -302,24 +302,45 @@ class TensorflowTrainer(Trainer):
         reranker - A capreolus.reranker.Reranker instance
         dataset - A capreolus.sampler.Sampler instance
         """
+        # dir_name = self.form_tf_record_cache_path(dataset)
+        #
+        # tf_features = []
+        # tf_record_filenames = []
+        # required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
+        # sample_count = 0
+        #
+        # for sample in dataset:
+        #     tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
+        #     if len(tf_features) > 20000:
+        #         tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+        #         tf_features = []
+        #
+        #     sample_count += 1
+        #     if sample_count >= required_sample_count:
+        #        break
+        #
+        # assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
+        # if len(tf_features):
+        #     tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+        #
+        # return tf_record_filenames
         dir_name = self.form_tf_record_cache_path(dataset)
 
+        total_samples = dataset.get_total_samples()
         tf_features = []
         tf_record_filenames = []
-        required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
-        sample_count = 0
 
-        for sample in dataset:
-            tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
-            if len(tf_features) > 20000:
-                tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
-                tf_features = []
+        for niter in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
+            for sample_idx, sample in enumerate(dataset):
+                tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
 
-            sample_count += 1
-            if sample_count >= required_sample_count:
-               break
+                if len(tf_features) > 20000:
+                    tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+                    tf_features = []
 
-        assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
+                if sample_idx + 1 >= self.config["itersize"] * self.config["batch"]:
+                    break
+
         if len(tf_features):
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
 
