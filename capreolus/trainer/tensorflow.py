@@ -159,7 +159,7 @@ class TensorflowTrainer(Trainer):
         total_loss = 0
         iter_bar = tqdm(total=self.config["itersize"])
 
-        initial_lr = self.change_lr(epoch, optimizer_2.lr)
+        initial_lr = self.change_lr(epoch, self.config["bertlr"])
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
         train_records = train_records.shuffle(100000)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_records)
@@ -177,7 +177,7 @@ class TensorflowTrainer(Trainer):
                 epoch += 1
 
                 # Do warmup and decay
-                new_lr = self.change_lr(epoch, optimizer_2.lr)
+                new_lr = self.change_lr(epoch, self.config["bertlr"])
                 K.set_value(optimizer_2.lr, K.get_value(new_lr))
 
                 iter_bar.close()
