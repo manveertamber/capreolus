@@ -175,7 +175,7 @@ class BertPassage(Extractor):
 
             return parsed_tensor
 
-        pos_bet_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
+        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
         pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["pos_mask"], dtype=tf.int64)
         pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["pos_seg"], dtype=tf.int64)
         neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["neg_bert_input"], dtype=tf.int64)
@@ -183,7 +183,7 @@ class BertPassage(Extractor):
         neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["neg_seg"], dtype=tf.int64)
         label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
-        return (pos_bet_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
+        return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
 
     def parse_tf_dev_example(self, example_proto):
         feature_description = self.get_tf_feature_description()
