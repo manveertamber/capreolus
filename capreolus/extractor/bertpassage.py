@@ -29,7 +29,6 @@ class BertPassage(Extractor):
         ),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
-    requires_random_seed = True
 
     pad = 0
     pad_tok = "[PAD]"
