@@ -22,6 +22,7 @@ class BertPassage(Extractor):
     Does NOT use all the passages. The first passages is always used. Use the `prob` config to control the probability
     of a passage being selected
     """
+
     module_name = "bertpassage"
     dependencies = [
         Dependency(
@@ -225,17 +226,17 @@ class BertPassage(Extractor):
                 assert len(passages) > 0, f"no passage can be built from empty document {doc}"
                 break
             else:
-                passage = doc[i: i + self.config["passagelen"]]
+                passage = doc[i : i + self.config["passagelen"]]
 
             passages.append(tokenize(" ".join(passage)))
 
         n_actual_passages = len(passages)
         # If we have a more passages than required, keep the first and last, and sample from the rest
-        if n_actual_passages > numpassages: 
+        if n_actual_passages > numpassages:
             if numpassages > 1:
                 passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
             else:
-                passages = [passages[0]] 
+                passages = [passages[0]]
         else:
             # Pad until we have the required number of passages
             for _ in range(numpassages - n_actual_passages):

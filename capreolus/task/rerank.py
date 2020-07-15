@@ -137,7 +137,9 @@ class RerankTask(Task):
         best_search_run = Searcher.load_trec_run(best_search_run_path)
 
         docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
-        self.reranker.extractor.preprocess(qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type])
+        self.reranker.extractor.preprocess(
+            qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type]
+        )
         train_output_path = self.get_results_path()
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
 
