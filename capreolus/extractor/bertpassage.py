@@ -232,8 +232,11 @@ class BertPassage(Extractor):
 
         n_actual_passages = len(passages)
         # If we have a more passages than required, keep the first and last, and sample from the rest
-        if n_actual_passages > numpassages:
-            passages = [passages[0]] + random.sample(passages[1:-1], numpassages - 2) + [passages[-1]]
+        if n_actual_passages > numpassages: 
+            if numpassages > 1:
+                passages = [passages[0]] + random.sample(passages[1:-1], numpassages - 2) + [passages[-1]]
+            else:
+                passages = [passages[0]] 
         else:
             # Pad until we have the required number of passages
             for _ in range(numpassages - n_actual_passages):
