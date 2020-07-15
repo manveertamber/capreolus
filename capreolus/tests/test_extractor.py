@@ -581,9 +581,7 @@ def test_bertpassage_build_vocab(monkeypatch):
     extractor = BertPassage({"numpassages": 5, "passagelen": 5, "stride": 3, "index": {"collection": {"name": "dummy"}}})
 
     def get_doc(*args, **kwargs):
-        return (
-            "O that we now had here but one ten thousand of those men in"
-        )
+        return "O that we now had here but one ten thousand of those men in"
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
     topics = {"301": "scooby dooby doo where are you"}
@@ -598,7 +596,7 @@ def test_bertpassage_build_vocab(monkeypatch):
         ["now", "had", "here", "but", "one"],
         ["but", "one", "ten", "thousand", "of"],
         ["thousand", "of", "those", "men", "in"],
-        ['men', 'in']
+        ["men", "in"],
     ]
 
     assert extractor.qid2toks["301"] == ["sc", "##oo", "##by", "doo", "##by", "doo", "where", "are", "you"]
@@ -610,9 +608,7 @@ def test_bertpassage_id2vec(monkeypatch):
     )
 
     def get_doc(*args, **kwargs):
-        return (
-            "O that we now had here but one ten thousand of those men in"
-        )
+        return "O that we now had here but one ten thousand of those men in"
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
     topics = {"301": "scooby dooby doo where are you"}
@@ -767,9 +763,7 @@ def test_bertpassage_id2vec_with_pad(monkeypatch):
     )
 
     def get_doc(*args, **kwargs):
-        return (
-            "O that we now had here but one ten thousand of those men in"
-        )
+        return "O that we now had here but one ten thousand of those men in"
 
     monkeypatch.setattr(AnseriniIndex, "get_doc", get_doc)
     topics = {"301": "scooby dooby doo where are you"}
