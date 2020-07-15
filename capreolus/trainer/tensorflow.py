@@ -312,16 +312,19 @@ class TensorflowTrainer(Trainer):
         required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
         sample_count = 0
 
+        iter_bar = tqdm(total=required_sample_count)
         for sample in dataset:
             tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
             if len(tf_features) > 20000:
                 tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                 tf_features = []
 
+            iter_bar.update(1)
             sample_count += 1
             if sample_count >= required_sample_count:
                break
 
+        iter_bar.close()
         assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
         if len(tf_features):
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
