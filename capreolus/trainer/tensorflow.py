@@ -302,49 +302,29 @@ class TensorflowTrainer(Trainer):
         reranker - A capreolus.reranker.Reranker instance
         dataset - A capreolus.sampler.Sampler instance
         """
-        # dir_name = self.form_tf_record_cache_path(dataset)
-        #
-        # tf_features = []
-        # tf_record_filenames = []
-        # required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
-        # sample_count = 0
-        #
-        # for sample in dataset:
-        #     tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
-        #     if len(tf_features) > 20000:
-        #         tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
-        #         tf_features = []
-        #
-        #     sample_count += 1
-        #     if sample_count >= required_sample_count:
-        #        break
-        #
-        # assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
-        # if len(tf_features):
-        #     tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
-        #
-        # return tf_record_filenames
         dir_name = self.form_tf_record_cache_path(dataset)
 
-        total_samples = dataset.get_total_samples()
         tf_features = []
         tf_record_filenames = []
+        required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
+        sample_count = 0
 
-        for niter in tqdm(range(0, self.config["niters"]), desc="Converting data to tf records"):
-            for sample_idx, sample in enumerate(dataset):
-                tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
+        for sample in dataset:
+            tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
+            if len(tf_features) > 20000:
+                tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
+                tf_features = []
 
-                if len(tf_features) > 20000:
-                    tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
-                    tf_features = []
+            sample_count += 1
+            if sample_count >= required_sample_count:
+               break
 
-                if sample_idx + 1 >= self.config["itersize"] * self.config["batch"]:
-                    break
-
+        assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
         if len(tf_features):
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
 
         return tf_record_filenames
+
 
     def get_tf_dev_records(self, reranker, dataset):
         """
