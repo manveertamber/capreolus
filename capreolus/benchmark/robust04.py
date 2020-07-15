@@ -69,8 +69,8 @@ class SampledRobust04(Robust04):
 
     def build(self):
         mode, rate = self.config["mode"], self.config["rate"]
-        self.sampled_qrel_file = self.file_fn / f"{mode}.{rate}.qrels.txt"
-        self.sampled_fold_file = self.file_fn / f"{mode}.{rate}.fold.json"
+        self.sampled_qrel_file = self.file_fn / (f"{mode}.%.2f.qrels.txt"%rate)
+        self.sampled_fold_file = self.file_fn / (f"{mode}.%.2f.fold.json"%rate)
         self.download_if_missing()
 
     def prune_redundant_judgement(self, sampled_qrels, n_expected_judgement, mode):
@@ -79,7 +79,7 @@ class SampledRobust04(Robust04):
 
         n_judgement = self.get_judgement_stat(sampled_qrels, "sum")
         n_remove = n_judgement - n_expected_judgement
-        assert n_remove >= 0
+        assert n_remove >= 0, f"expect {n_expected_judgement} judgements but the input contains only {n_judgement} judegment. current mode: {mode}, rate: {self.config['rate']}"
         logger.info(f"{n_remove} more judgements to remove")
         # if n_judgement < n_expected_judgement:
         #     logger.warning(f"The qrels are already oversampled")
@@ -114,7 +114,7 @@ class SampledRobust04(Robust04):
                     del pruned_qrels[qid]
                     continue
 
-                doc_to_drop = random.sample(pruned_qrels[qid].keys(), 1)
+                doc_to_drop = random.sample(pruned_qrels[qid].keys(), 1)[0]
                 del pruned_qrels[qid][doc_to_drop]
                 n_remove -= 1
 
@@ -129,6 +129,9 @@ class SampledRobust04(Robust04):
         if self.sampled_qrel_file.exists() and self.sampled_fold_file.exists():
             return
 
+        self.sampled_qrel_file.parent.mkdir(parents=True, exist_ok=True)
+        self.sampled_fold_file.parent.mkdir(parents=True, exist_ok=True)
+
         mode, rate, qrels = self.config["mode"], self.config["rate"], self.qrels
 
         if rate <= 0 or rate > 1:
@@ -142,10 +145,10 @@ class SampledRobust04(Robust04):
 
         sampled_qrels = defaultdict(dict)
         if mode == "deep":  # sample `rate` percent queries from qrels.
-            for fold, split in self.folds:
+            for fold, split in self.folds.items():
                 # sampling within each fold's test qids s.t. the train qids in each would be kept uniformly
                 test_qids = split["predict"]["test"]
-                n_expected_qids = math.ceil(len(test_qids) * rate)
+                n_expected_qids = math.ceil(len(test_qids) * rate) + 1  # add one to avoid over-trim
                 sampled_qids = random.sample(test_qids, n_expected_qids)
                 sampled_qrels.update({qid: qrels[qid] for qid in sampled_qids})
 
@@ -153,8 +156,8 @@ class SampledRobust04(Robust04):
             for qid, docs in self.qrels.items():
                 n_expected_docids = math.ceil(len(docs) * rate)
                 assert n_expected_docids > 0, f"{qid} has zero document after sampling with rate {rate}"
-                sampled_docs = random.sample(docs, n_expected_docids)
-                sampled_qrels[qid] = sampled_docs
+                sampled_docids = random.sample(docs.keys(), n_expected_docids)
+                sampled_qrels[qid] = {docid: docs[docid] for docid in sampled_docids}
 
         else:
             raise ValueError(f"Unexpected sampling mode: {mode}")
@@ -162,7 +165,7 @@ class SampledRobust04(Robust04):
         # prune the sampled qrels s.t. shallow and deep sampling would keep same number of judgements
         n_judgement = self.get_judgement_stat(qrels, "sum")
         n_expected_judgement = math.floor(rate * n_judgement)
-        sampled_qrels = self.prune_redundant_judgement(sampled_qrels, n_expected_judgement)
+        sampled_qrels = self.prune_redundant_judgement(sampled_qrels, n_expected_judgement, mode)
         n_qids, n_avg_doc, n_sampled_judgement = \
             len(sampled_qrels), self.get_judgement_stat(sampled_qrels, "avg"), self.get_judgement_stat(sampled_qrels, "sum")
         logger.info(f"After {mode} sampling with rate={rate}: \n"
@@ -172,7 +175,7 @@ class SampledRobust04(Robust04):
 
         # update train and dev qids in each fold accordingly
         new_folds = {}
-        for fold_name, split in self.folds:
+        for fold_name, split in self.folds.items():
             train_qids, dev_qids = split["train_qids"], split["predict"]["dev"]
             new_folds[fold_name] = {
                 "train_qids": [qid for qid in train_qids if qid in sampled_qrels],
@@ -185,7 +188,7 @@ class SampledRobust04(Robust04):
         # save to disk
         with open(self.sampled_qrel_file, "w") as f:
             for qid in sorted(sampled_qrels.keys(), key=lambda x: int(x)):
-                for docid, label in sampled_qrels[qid]:
+                for docid, label in sampled_qrels[qid].items():
                     f.write(f"{qid} Q0 {docid} {label}\n")
         json.dump(new_folds, open(self.sampled_fold_file, "w"))
 
