@@ -131,12 +131,24 @@ class RerankTask(Task):
     def predict(self):
         fold = self.config["fold"]
         self.rank.search()
+        threshold = self.config["threshold"]
         rank_results = self.rank.evaluate()
         best_search_run_path = rank_results["path"][fold]
         best_search_run = Searcher.load_trec_run(best_search_run_path)
 
+        docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
+        self.reranker.extractor.preprocess(qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type])
         train_output_path = self.get_results_path()
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
+
+        test_run = defaultdict(dict)
+        # This is possible because best_search_run is an OrderedDict
+        for qid, docs in best_search_run.items():
+            if qid in self.benchmark.folds[fold]["predict"]["test"]:
+                for idx, (docid, score) in enumerate(docs.items()):
+                    if idx >= threshold:
+                        break
+                test_run[qid][docid] = score
 
         test_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]}
         test_dataset = PredSampler()
