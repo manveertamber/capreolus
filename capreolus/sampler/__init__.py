@@ -1,5 +1,4 @@
 import hashlib
-import random
 
 import torch.utils.data
 
@@ -46,16 +45,17 @@ class Sampler(ModuleBase):
 
     def clean(self):
         # remove any ids that do not have any relevant docs or any non-relevant docs for training
-        total_samples = 1  # keep tracks of the total possible number of unique training triples for this dataset
+        total_samples = 0  # keep tracks of the total possible number of unique training triples for this dataset
         for qid in list(self.qid_to_docids.keys()):
             posdocs = len(self.qid_to_reldocs[qid])
             negdocs = len(self.qid_to_negdocs[qid])
-            total_samples += posdocs * negdocs
             if posdocs == 0 or negdocs == 0:
                 logger.debug("removing training qid=%s with %s positive docs and %s negative docs", qid, posdocs, negdocs)
                 del self.qid_to_reldocs[qid]
                 del self.qid_to_docids[qid]
                 del self.qid_to_negdocs[qid]
+            else:
+                total_samples += posdocs * negdocs
 
         self.total_samples = total_samples
 
@@ -94,13 +94,12 @@ class TrainTripletSampler(Sampler, torch.utils.data.IterableDataset):
         if len(all_qids) == 0:
             raise RuntimeError("TrainDataset has no valid qids")
 
-        random.seed(self.config["seed"])
         while True:
-            random.shuffle(all_qids)
+            self.rng.shuffle(all_qids)
 
             for qid in all_qids:
-                posdocid = random.choice(self.qid_to_reldocs[qid])
-                negdocid = random.choice(self.qid_to_negdocs[qid])
+                posdocid = self.rng.choice(self.qid_to_reldocs[qid])
+                negdocid = self.rng.choice(self.qid_to_negdocs[qid])
 
                 try:
                     # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
@@ -141,12 +140,10 @@ class TrainPairSampler(Sampler, torch.utils.data.IterableDataset):
         if len(all_qids) == 0:
             raise RuntimeError("TrainDataset has no valid training pairs")
 
-        random.seed(self.config["seed"])
-
         while True:
             # TODO: two documents does not necessarily come from same query
             # ^ Why?
-            random.shuffle(all_qids)
+            self.rng.shuffle(all_qids)
             for qid in all_qids:
                 # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
                 # ^ This is used with categorical cross entropy loss
