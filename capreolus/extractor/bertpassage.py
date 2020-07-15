@@ -3,7 +3,6 @@ import os
 import tensorflow as tf
 import numpy as np
 from collections import defaultdict
-import random
 from profane import ConfigOption
 from profane.base import Dependency
 from tqdm import tqdm
@@ -30,6 +29,7 @@ class BertPassage(Extractor):
         ),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
+    requires_random_seed = True
 
     pad = 0
     pad_tok = "[PAD]"
@@ -103,7 +103,7 @@ class BertPassage(Extractor):
 
         for i in range(num_passages):
             # Always use the first passage, then sample from the remaining passages
-            if i > 0 and random.random() > self.config["prob"]:
+            if i > 0 and self.rng.random() > self.config["prob"]:
                 continue
 
             bert_input_line = posdoc[i]
@@ -234,7 +234,7 @@ class BertPassage(Extractor):
         # If we have a more passages than required, keep the first and last, and sample from the rest
         if n_actual_passages > numpassages: 
             if numpassages > 1:
-                passages = [passages[0]] + random.sample(passages[1:-1], numpassages - 2) + [passages[-1]]
+                passages = [passages[0]] + self.rng.choice(passages[1:-1], numpassages - 2, replace=False) + [passages[-1]]
             else:
                 passages = [passages[0]] 
         else:
