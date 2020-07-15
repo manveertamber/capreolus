@@ -2,11 +2,15 @@ import os
 import pickle
 
 import pytest
+import numpy as np
 from tqdm import tqdm
 
 from capreolus import Benchmark, module_registry
+
+from capreolus.benchmark.robust04 import SampledRobust04
 from capreolus.benchmark.codesearchnet import CodeSearchNetChallenge as CodeSearchNetCodeSearchNetChallengeBenchmark
 from capreolus.benchmark.codesearchnet import CodeSearchNetCorpus as CodeSearchNetCodeSearchNetCorpusBenchmark
+
 from capreolus.collection.codesearchnet import CodeSearchNet as CodeSearchNetCollection
 from capreolus.tests.common_fixtures import tmpdir_as_cache
 from capreolus.utils.common import remove_newline
@@ -103,3 +107,12 @@ def test_csn_challenge_download_if_missing():
     benmchmark.download_if_missing()
 
     assert benmchmark.qid_map_file.exists() and benmchmark.topic_file.exists()
+
+
+def test_sampled_roubst04():
+    for mode in ["shallow", "deep"]:
+        for rate in np.arange(0.1, 1, 0.1):
+            config = {"name": "sampled_robust04", "mode": mode, "rate": rate}
+            benchmark = SampledRobust04(config)
+            benchmark.download_if_missing()
+            assert benchmark.sampled_qrel_file.exists() and benchmark.sampled_fold_file.exists()
