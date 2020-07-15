@@ -203,6 +203,9 @@ class TensorflowTrainer(Trainer):
                         best_metric = metrics[metric]
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
 
+            if num_batches >= self.config["niters"] * self.config["itersize"]:
+                break
+
     def predict(self, reranker, pred_data, pred_fn):
         pred_records = self.get_tf_dev_records(reranker, pred_data)
         pred_dist_dataset = self.strategy.experimental_distribute_dataset(pred_records)
