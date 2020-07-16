@@ -273,7 +273,7 @@ class TensorflowTrainer(Trainer):
 
             for child_dir in child_dirs:
                 child_dir_ending = child_dir.split("_")[-1][-1]
-                # The child dir will end with '/' if it's on gcloud, but not on local disk. 
+                # The child dir will end with '/' if it's on gcloud, but not on local disk.
                 if child_dir_ending == "/":
                     sample_count = int(child_dir.split("_")[-1][:-1])
                 else:
