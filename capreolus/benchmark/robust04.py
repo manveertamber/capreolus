@@ -79,21 +79,23 @@ class SampledRobust04(Robust04Yang19):
         return True
 
     @property
-    def sampled_qrels(self):
+    def unsampled_qrels(self):
         if not hasattr(self, "_qrels"):
-            self._qrels = load_qrels(self.sampled_qrel_file)
-        return self._qrels
+            self._unsampled_qrels = load_qrels(self.unsampled_qrel_file)
+        return self._unsampled_qrels
 
     @property
-    def sampled_folds(self):
+    def unsampled_folds(self):
         if not hasattr(self, "_folds"):
-            self._folds = json.load(open(self.sampled_fold_file, "rt"))
-        return self._folds
+            self._unsampled_folds = json.load(open(self.unsampled_fold_file, "rt"))
+        return self._unsampled_folds
 
     def build(self):
         mode, rate = self.config["mode"], self.config["rate"]
-        self.sampled_qrel_file = self.file_fn / (f"{mode}.%.2f.qrels.txt"%rate)
-        self.sampled_fold_file = self.file_fn / (f"{mode}.%.2f.fold.json"%rate)
+        self.unsampled_qrel_file = self.qrel_file
+        self.unsampled_fold_file = self.fold_file
+        self.qrel_file = self.file_fn / (f"{mode}.%.2f.qrels.txt"%rate)
+        self.qrel_file = self.file_fn / (f"{mode}.%.2f.fold.json"%rate)
         self.download_if_missing()
 
     def prune_redundant_judgement(self, sampled_qrels, n_expected_judgement, mode):
@@ -157,11 +159,11 @@ class SampledRobust04(Robust04Yang19):
 
     def download_if_missing(self):
         """ prepare sampled files from Robust04 qrels"""
-        if self.sampled_qrel_file.exists() and self.sampled_fold_file.exists():
+        if self.qrel_file.exists() and self.fold_file.exists():
             return
 
-        self.sampled_qrel_file.parent.mkdir(parents=True, exist_ok=True)
-        self.sampled_fold_file.parent.mkdir(parents=True, exist_ok=True)
+        self.qrel_file.parent.mkdir(parents=True, exist_ok=True)
+        self.fold_file.parent.mkdir(parents=True, exist_ok=True)
 
         mode, rate, qrels = self.config["mode"], self.config["rate"], self.qrels
 
@@ -169,8 +171,8 @@ class SampledRobust04(Robust04Yang19):
             raise ValueError(f"Sampling rate out of range: expect it from (0, 1], yet got {rate}")
 
         if rate == 1:
-            self.sampled_qrel_file = self.qrel_file
-            self.sampled_fold_file = self.fold_file
+            self.qrel_file = self.unsampled_qrel_file
+            self.fold_file = self.unsampled_fold_file
             logger.warning(f"No sampling is performed since sampling rate is set to {rate}")
             return
 
@@ -223,8 +225,8 @@ class SampledRobust04(Robust04Yang19):
             }
 
         # save to disk
-        with open(self.sampled_qrel_file, "w") as f:
+        with open(self.qrel_file, "w") as f:
             for qid in sorted(sampled_qrels.keys(), key=lambda x: int(x)):
                 for docid, label in sampled_qrels[qid].items():
                     f.write(f"{qid} Q0 {docid} {label}\n")
-        json.dump(new_folds, open(self.sampled_fold_file, "w"))
+        json.dump(new_folds, open(self.fold_file, "w"))

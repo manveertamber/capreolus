@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from capreolus.task import Task, RerankTask
 from capreolus.sampler import TrainTripletSampler, PredSampler
+from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -43,12 +44,12 @@ class WSDM2021(RerankTask):
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         train_dataset = self.sampler
         train_dataset.prepare(
-            train_run, self.benchmark.sampled_qrels, self.reranker.extractor,
+            train_run, self.benchmark.qrels, self.reranker.extractor,
             relevance_level=self.benchmark.relevance_level,
         )
         dev_dataset = PredSampler()
         dev_dataset.prepare(
-            dev_run, self.benchmark.sampled_qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+            dev_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
         )
 
         self.reranker.trainer.train(
@@ -57,7 +58,7 @@ class WSDM2021(RerankTask):
             train_output_path,
             dev_dataset,
             dev_output_path,
-            self.benchmark.sampled_qrels,
+            self.benchmark.qrels,
             self.config["optimize"],
             self.benchmark.relevance_level,
         )
@@ -77,7 +78,7 @@ class WSDM2021(RerankTask):
 
         test_dataset = PredSampler()
         test_dataset.prepare(
-            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+            test_run, self.benchmark.unsampled_qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
         test_output_path = train_output_path / "pred" / "test" / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
@@ -86,7 +87,7 @@ class WSDM2021(RerankTask):
 
         if include_train:
             train_dataset = PredSampler(
-                train_run, self.benchmark.sampled_qrels, self.reranker.extractor,
+                train_run, self.benchmark.qrels, self.reranker.extractor,
                 relevance_level=self.benchmark.relevance_level,
             )
 
