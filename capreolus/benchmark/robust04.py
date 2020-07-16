@@ -122,6 +122,8 @@ class SampledRobust04(Robust04):
                 if self.contain_empty_label(  # don't remove if we run out of either pos or neg judged doc
                         docs=[d for d in pruned_qrels[qid] if d != doc_to_drop],
                         docs2label=pruned_qrels[qid]):
+                    logger.info(f"Potential empty pos/neg is detected, skip dropping qid {qid} "
+                                f"(#judgement left: {len(pruned_qrels[qid])})")
                     continue
 
                 del pruned_qrels[qid][doc_to_drop]
@@ -167,6 +169,8 @@ class SampledRobust04(Robust04):
                 assert n_expected_docids > 0, f"{qid} has zero document after sampling with rate {rate}"
                 sampled_docids = random.sample(docs.keys(), n_expected_docids)
                 if self.contain_empty_label(sampled_docids, docs):  # skip if run out of either pos or neg judged doc
+                    logger.info(f"Potential empty pos/neg is detected, skip dropping qid {qid}"
+                                f"(#judgement left: {len(docs)}")
                     continue
                 sampled_qrels[qid] = {docid: docs[docid] for docid in sampled_docids}
 
