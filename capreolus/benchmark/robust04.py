@@ -33,7 +33,22 @@ class Robust04(Benchmark):
 
 
 @Benchmark.register
-class SampledRobust04(Robust04):
+class Robust04Yang19(Benchmark):
+    """Robust04 benchmark using the folds from Yang et al. [1]
+
+    [1] Wei Yang, Kuang Lu, Peilin Yang, and Jimmy Lin. 2019. Critically Examining the "Neural Hype": Weak Baselines and the Additivity of Effectiveness Gains from Neural Ranking Models. SIGIR 2019.
+    """
+
+    module_name = "robust04.yang19"
+    dependencies = [Dependency(key="collection", module="collection", name="robust04")]
+    qrel_file = PACKAGE_PATH / "data" / "qrels.robust2004.txt"
+    topic_file = PACKAGE_PATH / "data" / "topics.robust04.301-450.601-700.txt"
+    fold_file = PACKAGE_PATH / "data" / "rob04_yang19_folds.json"
+    query_type = "title"
+
+
+@Benchmark.register
+class SampledRobust04(Robust04Yang19):
     module_name = "sampled_robust04"
     file_fn = PACKAGE_PATH / "data" / module_name
 
@@ -213,18 +228,3 @@ class SampledRobust04(Robust04):
                 for docid, label in sampled_qrels[qid].items():
                     f.write(f"{qid} Q0 {docid} {label}\n")
         json.dump(new_folds, open(self.sampled_fold_file, "w"))
-
-
-@Benchmark.register
-class Robust04Yang19(Benchmark):
-    """Robust04 benchmark using the folds from Yang et al. [1]
-
-    [1] Wei Yang, Kuang Lu, Peilin Yang, and Jimmy Lin. 2019. Critically Examining the "Neural Hype": Weak Baselines and the Additivity of Effectiveness Gains from Neural Ranking Models. SIGIR 2019.
-    """
-
-    module_name = "robust04.yang19"
-    dependencies = [Dependency(key="collection", module="collection", name="robust04")]
-    qrel_file = PACKAGE_PATH / "data" / "qrels.robust2004.txt"
-    topic_file = PACKAGE_PATH / "data" / "topics.robust04.301-450.601-700.txt"
-    fold_file = PACKAGE_PATH / "data" / "rob04_yang19_folds.json"
-    query_type = "title"
