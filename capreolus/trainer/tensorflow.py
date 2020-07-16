@@ -54,6 +54,21 @@ class TensorflowTrainer(Trainer):
     ]
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
+    @staticmethod
+    def get_preds_in_trec_format(predictions, dev_data):
+        """
+        Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
+        As a side effect, also writes the predictions into a file in the trec format
+        """
+        logger.debug("There are {} predictions".format(len(predictions)))
+        pred_dict = defaultdict(lambda: dict())
+
+        for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
+            # Pytrec_eval has problems with high precision floats
+            pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
+
+        return dict(pred_dict)
+
     def build(self):
         tf.random.set_seed(self.config["seed"])
 
@@ -304,10 +319,34 @@ class TensorflowTrainer(Trainer):
             tf_record_filenames = self.convert_to_tf_train_record(reranker, dataset)
             return self.load_tf_train_records_from_file(reranker, tf_record_filenames, self.config["batch"])
 
+    def get_tf_dev_records(self, reranker, dataset):
+        """
+        1. Returns tf records from cache (disk) if applicable
+        2. Else, converts the dataset into tf records, writes them to disk, and returns them
+        """
+        cached_tf_record_dir = self.form_tf_record_cache_path(dataset)
+        if self.config["usecache"] and tf.io.gfile.exists(cached_tf_record_dir):
+            filenames = tf.io.gfile.listdir(cached_tf_record_dir)
+            filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
+
+            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])
+        else:
+            tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
+            # TODO use actual batch size here. see issue #52
+            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
+
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
         tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
+        )
+
+        return tf_records_dataset
+
+    def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
+        raw_dataset = tf.data.TFRecordDataset(filenames)
+        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
+            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
         )
 
         return tf_records_dataset
@@ -347,30 +386,6 @@ class TensorflowTrainer(Trainer):
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
 
         return tf_record_filenames
-
-    def get_tf_dev_records(self, reranker, dataset):
-        """
-        1. Returns tf records from cache (disk) if applicable
-        2. Else, converts the dataset into tf records, writes them to disk, and returns them
-        """
-        cached_tf_record_dir = self.form_tf_record_cache_path(dataset)
-        if self.config["usecache"] and tf.io.gfile.exists(cached_tf_record_dir):
-            filenames = tf.io.gfile.listdir(cached_tf_record_dir)
-            filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
-
-            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])
-        else:
-            tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
-            # TODO use actual batch size here. see issue #52
-            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
-
-    def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
-        raw_dataset = tf.data.TFRecordDataset(filenames)
-        tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
-            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
-        )
-
-        return tf_records_dataset
 
     def convert_to_tf_dev_record(self, reranker, dataset):
         dir_name = self.form_tf_record_cache_path(dataset)
@@ -416,21 +431,6 @@ class TensorflowTrainer(Trainer):
         logger.info("Wrote tf record file: {}".format(filename))
 
         return str(filename)
-
-    @staticmethod
-    def get_preds_in_trec_format(predictions, dev_data):
-        """
-        Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
-        As a side effect, also writes the predictions into a file in the trec format
-        """
-        logger.debug("There are {} predictions".format(len(predictions)))
-        pred_dict = defaultdict(lambda: dict())
-
-        for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
-            # Pytrec_eval has problems with high precision floats
-            pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
-
-        return dict(pred_dict)
 
     def change_lr(self, epoch, lr):
         """
