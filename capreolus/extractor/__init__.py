@@ -14,6 +14,7 @@ class Extractor(ModuleBase):
     """
 
     module_type = "extractor"
+    requires_random_seed = True
 
     def _extend_stoi(self, toks_list, calc_idf=False):
         if not self.stoi:

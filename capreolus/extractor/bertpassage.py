@@ -3,7 +3,6 @@ import os
 import tensorflow as tf
 import numpy as np
 from collections import defaultdict
-import random
 from profane import ConfigOption
 from profane.base import Dependency
 from tqdm import tqdm
@@ -23,6 +22,7 @@ class BertPassage(Extractor):
     Does NOT use all the passages. The first passages is always used. Use the `prob` config to control the probability
     of a passage being selected
     """
+
     module_name = "bertpassage"
     dependencies = [
         Dependency(
@@ -103,7 +103,7 @@ class BertPassage(Extractor):
 
         for i in range(num_passages):
             # Always use the first passage, then sample from the remaining passages
-            if i > 0 and random.random() > self.config["prob"]:
+            if i > 0 and self.rng.random() > self.config["prob"]:
                 continue
 
             bert_input_line = posdoc[i]
@@ -175,15 +175,15 @@ class BertPassage(Extractor):
 
             return parsed_tensor
 
-        pos_bet_input = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
-        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
-        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
-        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
-        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
-        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
+        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
+        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["pos_mask"], dtype=tf.int64)
+        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["pos_seg"], dtype=tf.int64)
+        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["neg_bert_input"], dtype=tf.int64)
+        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["neg_mask"], dtype=tf.int64)
+        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["neg_seg"], dtype=tf.int64)
         label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
-        return (pos_bet_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
+        return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
 
     def parse_tf_dev_example(self, example_proto):
         feature_description = self.get_tf_feature_description()
@@ -226,14 +226,17 @@ class BertPassage(Extractor):
                 assert len(passages) > 0, f"no passage can be built from empty document {doc}"
                 break
             else:
-                passage = doc[i: i + self.config["passagelen"]]
+                passage = doc[i : i + self.config["passagelen"]]
 
             passages.append(tokenize(" ".join(passage)))
 
         n_actual_passages = len(passages)
         # If we have a more passages than required, keep the first and last, and sample from the rest
         if n_actual_passages > numpassages:
-            passages = [passages[0]] + random.sample(passages[1:-1], numpassages - 2) + [passages[-1]]
+            if numpassages > 1:
+                passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
+            else:
+                passages = [passages[0]]
         else:
             # Pad until we have the required number of passages
             for _ in range(numpassages - n_actual_passages):

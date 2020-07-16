@@ -59,8 +59,7 @@ class TensorflowTrainer(Trainer):
 
         # Use TPU if available, otherwise resort to GPU/CPU
         try:
-            self.tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=self.config["tpuname"],
-                                                                         zone=self.config["tpuzone"])
+            self.tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=self.config["tpuname"], zone=self.config["tpuzone"])
         except ValueError:
             self.tpu = None
             logger.info("Could not find the tpu")
@@ -78,14 +77,12 @@ class TensorflowTrainer(Trainer):
         self.validate()
 
     def validate(self):
-        if self.tpu and any(
-                [self.config["storage"] is None, self.config["tpuname"] is None, self.config["tpuzone"] is None]):
+        if self.tpu and any([self.config["storage"] is None, self.config["tpuname"] is None, self.config["tpuzone"] is None]):
             raise ValueError("storage, tpuname and tpuzone configs must be provided when training on TPU")
         if self.tpu and self.config["storage"] and not self.config["storage"].startswith("gs://"):
             raise ValueError("For TPU utilization, the storage config should start with 'gs://'")
 
-    def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric,
-              relevance_level=1):
+    def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
             train_output_path = "{0}/{1}/{2}".format(
                 self.config["storage"], "train_output", hashlib.md5(str(train_output_path).encode("utf-8")).hexdigest()
@@ -114,20 +111,30 @@ class TensorflowTrainer(Trainer):
             data, labels = inputs
 
             with tf.GradientTape() as tape:
-                predictions = wrapped_model(data, training=True)
-                loss = compute_loss(labels, predictions)
+                train_predictions = wrapped_model(data, training=True)
+                loss = compute_loss(labels, train_predictions)
 
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
 
             # TODO: Expose the layer names to lookout for as a ConfigOption?
             # TODO: Crystina mentioned that hugging face models have 'bert' in all the layers (including classifiers). Handle this case
-            bert_variables = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables)
-                              if 'bert' in variable.name]
-            classifier_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables)
-                               if 'classifier' in variable.name]
-            other_vars = [(gradients[i], variable) for i, variable in enumerate(wrapped_model.trainable_variables) if
-                          'bert' not in variable.name and 'classifier' not in variable.name]
+            bert_variables = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "bert" in variable.name and "classifier" not in variable.name
+            ]
+            classifier_vars = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "classifier" in variable.name
+            ]
+            other_vars = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "bert" not in variable.name and "classifier" not in variable.name
+            ]
 
+            assert len(bert_variables) + len(classifier_vars) + len(other_vars) == len(wrapped_model.trainable_variables)
             # TODO: Clean this up for general use
             # Making sure that we did not miss any variables
             optimizer_1.apply_gradients(classifier_vars)
@@ -187,21 +194,26 @@ class TensorflowTrainer(Trainer):
                 total_loss = 0
 
                 if epoch % self.config["validatefreq"] == 0:
-                    predictions = []
+                    dev_predictions = []
                     for x in tqdm(dev_dist_dataset, desc="validation"):
-                        pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [
-                            distributed_test_step(x)]
+                        pred_batch = (
+                            distributed_test_step(x).values
+                            if self.strategy.num_replicas_in_sync > 1
+                            else [distributed_test_step(x)]
+                        )
                         for p in pred_batch:
-                            predictions.extend(p)
+                            dev_predictions.extend(p)
 
-                    trec_preds = self.get_preds_in_trec_format(predictions, dev_data)
+                    trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
                     metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
-                    logger.info("dev metrics: %s",
-                                " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
+                    logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
                         logger.info("Writing checkpoint")
                         best_metric = metrics[metric]
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+
+            if num_batches >= self.config["niters"] * self.config["itersize"]:
+                break
 
     def predict(self, reranker, pred_data, pred_fn):
         pred_records = self.get_tf_dev_records(reranker, pred_data)
@@ -250,7 +262,9 @@ class TensorflowTrainer(Trainer):
         """
         Looks for a tf record for the passed dataset that has at least the specified number of samples
         """
-        parent_dir = "{0}/capreolus_tfrecords".format(self.config["storage"]) if self.tpu else "{0}".format(self.get_cache_path())
+        parent_dir = (
+            "{0}/capreolus_tfrecords/".format(self.config["storage"]) if self.tpu else "{0}".format(self.get_cache_path())
+        )
         if not tf.io.gfile.exists(parent_dir):
             return None
         else:
@@ -258,19 +272,18 @@ class TensorflowTrainer(Trainer):
             required_prefix = dataset.get_hash()
 
             for child_dir in child_dirs:
-                split_dir = child_dir.split("_")
-                if len(split_dir) == 3:
-                    child_dir = child_dir.strip("/")
+                child_dir_ending = child_dir.split("_")[-1][-1]
+                # The child dir will end with '/' if it's on gcloud, but not on local disk.
+                if child_dir_ending == "/":
+                    sample_count = int(child_dir.split("_")[-1][:-1])
+                else:
                     sample_count = int(child_dir.split("_")[-1])
-                    prefix = "_".join(child_dir.split("_")[:-1])
 
-                    # TODO: Add checks to make sure that the child dir is not empty
-                    if prefix == required_prefix and sample_count >= required_sample_count:
-                        return "{0}/{1}".format(parent_dir, child_dir)
-                elif len(split_dir) == 2:
-                    child_dir = child_dir.strip("/")
-                    if child_dir == required_prefix:
-                        return "{0}/{1}".format(parent_dir, child_dir)
+                prefix = "_".join(child_dir.split("_")[:-1])
+
+                # TODO: Add checks to make sure that the child dir is not empty
+                if prefix == required_prefix and sample_count >= required_sample_count:
+                    return "{0}{1}".format(parent_dir, child_dir)
 
             return None
 
@@ -284,7 +297,7 @@ class TensorflowTrainer(Trainer):
 
         if self.config["usecache"] and cached_tf_record_dir is not None:
             filenames = tf.io.gfile.listdir(cached_tf_record_dir)
-            filenames = ["{0}/{1}".format(cached_tf_record_dir, name.strip("/")) for name in filenames]
+            filenames = ["{0}{1}".format(cached_tf_record_dir, name) for name in filenames]
 
             return self.load_tf_train_records_from_file(reranker, filenames, self.config["batch"])
         else:
@@ -316,16 +329,19 @@ class TensorflowTrainer(Trainer):
         required_sample_count = self.config["niters"] * self.config["itersize"] * self.config["batch"]
         sample_count = 0
 
+        iter_bar = tqdm(total=required_sample_count)
         for sample in dataset:
             tf_features.extend(reranker.extractor.create_tf_train_feature(sample))
             if len(tf_features) > 20000:
                 tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                 tf_features = []
 
+            iter_bar.update(1)
             sample_count += 1
             if sample_count >= required_sample_count:
-               break
+                break
 
+        iter_bar.close()
         assert sample_count == required_sample_count, "dataset generator ran out before generating enough samples"
         if len(tf_features):
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
@@ -475,8 +491,3 @@ class TensorflowTrainer(Trainer):
         wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
 
         return wrapped_model.model
-
-
-
-
-

@@ -108,7 +108,7 @@ def test_knrm_tf_ce(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     def fake_magnitude_embedding(*args, **kwargs):
         vectors = np.zeros((8, 32))
         stoi = defaultdict(lambda x: 0)
-        itos = defaultdict(lambda x: 'dummy')
+        itos = defaultdict(lambda x: "dummy")
 
         return vectors, stoi, itos
 
@@ -435,6 +435,7 @@ def test_CDSSM(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker.trainer.train(
         reranker, train_dataset, Path(tmpdir) / "train", dev_dataset, Path(tmpdir) / "dev", benchmark.qrels, metric
     )
+
 
 def test_tfvanillabert(dummy_index, tmpdir, tmpdir_as_cache, monkeypatch):
     reranker = TFVanillaBERT(

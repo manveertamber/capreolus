@@ -33,8 +33,8 @@ class TFVanillaBert_Class(tf.keras.layers.Layer):
     def predict_step(self, data):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = data
         batch_size = tf.shape(posdoc_bert_input)[0]
-        num_passages = self.extractor.config["numpassages"]
-        assert num_passages == 1
+        num_passages = tf.shape(posdoc_bert_input)[1]
+        tf.debugging.assert_equal(num_passages, 1)
         maxseqlen = self.extractor.config["maxseqlen"]
 
         posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])

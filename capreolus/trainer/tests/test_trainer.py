@@ -101,4 +101,3 @@ def test_tf_find_cached_tf_records(monkeypatch, dummy_index):
     reranker.trainer.convert_to_tf_train_record(reranker, train_dataset)
     assert reranker.trainer.find_cached_tf_records(train_dataset, 24) is not None
     assert reranker.trainer.find_cached_tf_records(train_dataset, 18) is not None
-
