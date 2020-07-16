@@ -244,20 +244,24 @@ class BertPassage(Extractor):
 
     def _build_vocab(self, qids, docids, topics):
         if self.is_state_cached(qids, docids) and self.config["usecache"]:
-            self.load_state(qids, docids)
-            logger.info("Vocabulary loaded from cache")
-        else:
-            logger.info("Building bertpassage vocabulary")
-            self.docid2passages = {}
+            try:
+                self.load_state(qids, docids)
+                logger.info("Vocabulary loaded from cache")
+                return
+            except Exception as e:
+                logger.warning("Fail to load cached state. Error message: ", e)
 
-            for docid in tqdm(docids, "extract passages"):
-                # Naive tokenization based on white space
-                doc = self.index.get_doc(docid).split()
-                passages = self.get_passages_for_doc(doc)
-                self.docid2passages[docid] = passages
+        logger.info("Building bertpassage vocabulary")
+        self.docid2passages = {}
 
-            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
-            self.cache_state(qids, docids)
+        for docid in tqdm(docids, "extract passages"):
+            # Naive tokenization based on white space
+            doc = self.index.get_doc(docid).split()
+            passages = self.get_passages_for_doc(doc)
+            self.docid2passages[docid] = passages
+
+        self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+        self.cache_state(qids, docids)
 
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
