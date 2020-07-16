@@ -62,12 +62,12 @@ class BertPassage(Extractor):
 
     def get_tf_feature_description(self):
         feature_description = {
-            "posdoc": tf.io.FixedLenFeature([], tf.string),
-            "posdoc_mask": tf.io.FixedLenFeature([], tf.string),
-            "posdoc_seg": tf.io.FixedLenFeature([], tf.string),
-            "negdoc": tf.io.FixedLenFeature([], tf.string),
-            "negdoc_mask": tf.io.FixedLenFeature([], tf.string),
-            "negdoc_seg": tf.io.FixedLenFeature([], tf.string),
+            "pos_bert_input": tf.io.FixedLenFeature([], tf.string),
+            "pos_mask": tf.io.FixedLenFeature([], tf.string),
+            "pos_seg": tf.io.FixedLenFeature([], tf.string),
+            "neg_bert_input": tf.io.FixedLenFeature([], tf.string),
+            "neg_mask": tf.io.FixedLenFeature([], tf.string),
+            "neg_seg": tf.io.FixedLenFeature([], tf.string),
             "label": tf.io.FixedLenFeature([], tf.string),
         }
 
@@ -91,12 +91,12 @@ class BertPassage(Extractor):
                 value = value.numpy()  # get value of tensor
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-        posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
+        posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["posdoc_mask"],
-            sample["posdoc_seg"],
-            sample["negdoc_mask"],
-            sample["negdoc_seg"],
+            sample["pos_mask"],
+            sample["pos_seg"],
+            sample["neg_mask"],
+            sample["neg_seg"],
         )
         label = sample["label"]
         features = []
@@ -115,12 +115,12 @@ class BertPassage(Extractor):
                 continue
 
             feature = {
-                "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
-                "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
-                "posdoc_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg[i])),
-                "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc[i])),
-                "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask[i])),
-                "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg[i])),
+                "pos_bert_input": _bytes_feature(tf.io.serialize_tensor(posdoc[i])),
+                "pos_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask[i])),
+                "pos_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg[i])),
+                "neg_bert_input": _bytes_feature(tf.io.serialize_tensor(negdoc[i])),
+                "neg_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask[i])),
+                "neg_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg[i])),
                 "label": _bytes_feature(tf.io.serialize_tensor(label[i])),
             }
             features.append(feature)
@@ -132,12 +132,12 @@ class BertPassage(Extractor):
         Unlike the train feature, the dev set uses all passages. Both the input and the output are dicts with the shape
         [batch_size, num_passages, maxseqlen]
         """
-        posdoc, negdoc, negdoc_id = sample["posdoc"], sample["negdoc"], sample["negdocid"]
+        posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["posdoc_mask"],
-            sample["posdoc_seg"],
-            sample["negdoc_mask"],
-            sample["negdoc_seg"],
+            sample["pos_mask"],
+            sample["pos_seg"],
+            sample["neg_mask"],
+            sample["neg_seg"],
         )
         label = sample["label"]
 
@@ -148,12 +148,12 @@ class BertPassage(Extractor):
             return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
         feature = {
-            "posdoc": _bytes_feature(tf.io.serialize_tensor(posdoc)),
-            "posdoc_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask)),
-            "posdoc_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg)),
-            "negdoc": _bytes_feature(tf.io.serialize_tensor(negdoc)),
-            "negdoc_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)),
-            "negdoc_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
+            "pos_bert_input": _bytes_feature(tf.io.serialize_tensor(posdoc)),
+            "pos_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask)),
+            "pos_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg)),
+            "neg_bert_input": _bytes_feature(tf.io.serialize_tensor(negdoc)),
+            "neg_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)),
+            "neg_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
             "label": _bytes_feature(tf.io.serialize_tensor(label)),
         }
 
@@ -201,12 +201,12 @@ class BertPassage(Extractor):
 
             return parsed_tensor
 
-        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc"], dtype=tf.int64)
-        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_mask"], dtype=tf.int64)
-        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["posdoc_seg"], dtype=tf.int64)
-        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc"], dtype=tf.int64)
-        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_mask"], dtype=tf.int64)
-        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["negdoc_seg"], dtype=tf.int64)
+        pos_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["pos_bert_input"], dtype=tf.int64)
+        pos_mask = tf.map_fn(parse_tensor_as_int, parsed_example["pos_mask"], dtype=tf.int64)
+        pos_seg = tf.map_fn(parse_tensor_as_int, parsed_example["pos_seg"], dtype=tf.int64)
+        neg_bert_input = tf.map_fn(parse_tensor_as_int, parsed_example["neg_bert_input"], dtype=tf.int64)
+        neg_mask = tf.map_fn(parse_tensor_as_int, parsed_example["neg_mask"], dtype=tf.int64)
+        neg_seg = tf.map_fn(parse_tensor_as_int, parsed_example["neg_seg"], dtype=tf.int64)
         label = tf.map_fn(parse_label_tensor, parsed_example["label"], dtype=tf.float32)
 
         return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
@@ -247,24 +247,20 @@ class BertPassage(Extractor):
 
     def _build_vocab(self, qids, docids, topics):
         if self.is_state_cached(qids, docids) and self.config["usecache"]:
-            try:
-                self.load_state(qids, docids)
-                logger.info("Vocabulary loaded from cache")
-                return
-            except Exception as e:
-                logger.warning("Fail to load cached state. Error message: ", e)
+            self.load_state(qids, docids)
+            logger.info("Vocabulary loaded from cache")
+        else:
+            logger.info("Building bertpassage vocabulary")
+            self.docid2passages = {}
 
-        logger.info("Building bertpassage vocabulary")
-        self.docid2passages = {}
+            for docid in tqdm(docids, "extract passages"):
+                # Naive tokenization based on white space
+                doc = self.index.get_doc(docid).split()
+                passages = self.get_passages_for_doc(doc)
+                self.docid2passages[docid] = passages
 
-        for docid in tqdm(docids, "extract passages"):
-            # Naive tokenization based on white space
-            doc = self.index.get_doc(docid).split()
-            passages = self.get_passages_for_doc(doc)
-            self.docid2passages[docid] = passages
-
-        self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
-        self.cache_state(qids, docids)
+            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            self.cache_state(qids, docids)
 
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
@@ -306,15 +302,16 @@ class BertPassage(Extractor):
             pos_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
             pos_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
 
+        # TODO: Rename the posdoc key in the below dict to 'pos_bert_input'
         data = {
             "posdocid": posid,
-            "posdoc": np.array(pos_bert_inputs, dtype=np.long),
-            "posdoc_mask": np.array(pos_bert_masks, dtype=np.long),
-            "posdoc_seg": np.array(pos_bert_segs, dtype=np.long),
+            "pos_bert_input": np.array(pos_bert_inputs, dtype=np.long),
+            "pos_mask": np.array(pos_bert_masks, dtype=np.long),
+            "pos_seg": np.array(pos_bert_segs, dtype=np.long),
             "negdocid": "",
-            "negdoc": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "negdoc_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
-            "negdoc_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "neg_bert_input": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "neg_mask": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
+            "neg_seg": np.zeros((self.config["numpassages"], self.config["maxseqlen"]), dtype=np.long),
             "label": np.repeat(np.array([label], dtype=np.float32), self.config["numpassages"], 0),
         }
 
@@ -338,8 +335,8 @@ class BertPassage(Extractor):
                 raise MissingDocError(qid, negid)
 
             data["negdocid"] = negid
-            data["negdoc"] = np.array(neg_bert_inputs, dtype=np.long)
-            data["negdoc_mask"] = np.array(neg_bert_masks, dtype=np.long)
-            data["negdoc_seg"] = np.array(neg_bert_segs, dtype=np.long)
+            data["neg_bert_input"] = np.array(neg_bert_inputs, dtype=np.long)
+            data["neg_mask"] = np.array(neg_bert_masks, dtype=np.long)
+            data["neg_seg"] = np.array(neg_bert_segs, dtype=np.long)
 
         return data
