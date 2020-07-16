@@ -96,8 +96,13 @@ class SampledRobust04(Robust04):
         qid_n_judgement = [(qid, len(docs)) for qid, docs in pruned_qrels.items()]
         qid_n_judgement = sorted(qid_n_judgement, key=lambda q_n: q_n[1])  # sort qid according to num_judgement
 
+        def gen_qid(revert=False):
+            while True:
+                for qid, n in qid_n_judgement[::-1] if revert else qid_n_judgement:
+                    yield qid, n
+
         if mode == "deep":  # higher priority to trim query
-            for qid, n in qid_n_judgement:  # query with less judgement will be dropped first
+            for qid, n in gen_qid(revert=False):
                 if n_remove == 0:
                     break
 
@@ -111,7 +116,7 @@ class SampledRobust04(Robust04):
                     n_remove -= n_remove  # or directly break
 
         elif mode == "shallow":  # higher priority to trim document
-            for qid, n in qid_n_judgement[::-1]:  # document from queries with more judgement will be dropped
+            for qid, n in gen_qid(revert=True):  # document from queries with more judgement will be dropped
                 if n_remove == 0:
                     break
 
@@ -168,11 +173,13 @@ class SampledRobust04(Robust04):
                 n_expected_docids = math.ceil(len(docs) * rate)
                 assert n_expected_docids > 0, f"{qid} has zero document after sampling with rate {rate}"
                 sampled_docids = random.sample(docs.keys(), n_expected_docids)
+
                 if self.contain_empty_label(sampled_docids, docs):  # skip if run out of either pos or neg judged doc
                     logger.info(f"Potential empty pos/neg is detected, skip dropping qid {qid}"
                                 f"(#judgement left: {len(docs)}")
-                    continue
-                sampled_qrels[qid] = {docid: docs[docid] for docid in sampled_docids}
+                    sampled_qrels[qid] = docs
+                else:
+                    sampled_qrels[qid] = {docid: docs[docid] for docid in sampled_docids}
 
         else:
             raise ValueError(f"Unexpected sampling mode: {mode}")
