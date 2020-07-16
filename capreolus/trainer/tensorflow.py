@@ -30,7 +30,7 @@ class TensorflowTrainer(Trainer):
     bertlr ConfigOption
     """
 
-    module_name = "berttputrainer"
+    module_name = "tensorflow"
     config_spec = [
         ConfigOption("batch", 32, "batch size"),
         ConfigOption("niters", 20, "number of iterations to train for"),
