@@ -47,6 +47,23 @@ class BertPassage(Extractor):
         ),
     ]
 
+    def _build_vocab(self, qids, docids, topics):
+        if self.is_state_cached(qids, docids) and self.config["usecache"]:
+            self.load_state(qids, docids)
+            logger.info("Vocabulary loaded from cache")
+        else:
+            logger.info("Building bertpassage vocabulary")
+            self.docid2passages = {}
+
+            for docid in tqdm(docids, "extract passages"):
+                # Naive tokenization based on white space
+                doc = self.index.get_doc(docid).split()
+                passages = self.get_passages_for_doc(doc)
+                self.docid2passages[docid] = passages
+
+            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            self.cache_state(qids, docids)
+
     def load_state(self, qids, docids):
         cache_fn = self.get_state_cache_file_path(qids, docids)
         with open(cache_fn, "rb") as f:
@@ -245,23 +262,6 @@ class BertPassage(Extractor):
         assert len(passages) == self.config["numpassages"]
         return passages
 
-    def _build_vocab(self, qids, docids, topics):
-        if self.is_state_cached(qids, docids) and self.config["usecache"]:
-            self.load_state(qids, docids)
-            logger.info("Vocabulary loaded from cache")
-        else:
-            logger.info("Building bertpassage vocabulary")
-            self.docid2passages = {}
-
-            for docid in tqdm(docids, "extract passages"):
-                # Naive tokenization based on white space
-                doc = self.index.get_doc(docid).split()
-                passages = self.get_passages_for_doc(doc)
-                self.docid2passages[docid] = passages
-
-            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
-            self.cache_state(qids, docids)
-
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
 
@@ -281,9 +281,6 @@ class BertPassage(Extractor):
         """
         assert label is not None
 
-        tokenizer = self.tokenizer
-        maxseqlen = self.config["maxseqlen"]
-
         query_toks = self.qid2toks[qid]
         pos_bert_inputs = []
         pos_bert_masks = []
@@ -292,17 +289,11 @@ class BertPassage(Extractor):
         # N.B: The passages in self.docid2passages are not bert tokenized
         pos_passages = self.docid2passages[posid]
         for tokenized_passage in pos_passages:
-            input_line = ["[CLS]"] + query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
-            if len(input_line) > maxseqlen:
-                input_line = input_line[:maxseqlen]
-                input_line[-1] = "[SEP]"
+            inputs, segs, masks = self.tok2bertinput(query_toks, tokenized_passage)
+            pos_bert_inputs.append(inputs)
+            pos_bert_masks.append(masks)
+            pos_bert_segs.append(segs)
 
-            padded_input_line = padlist(input_line, padlen=self.config["maxseqlen"], pad_token=self.pad_tok)
-            pos_bert_masks.append([1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line)))
-            pos_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
-            pos_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
-
-        # TODO: Rename the posdoc key in the below dict to 'pos_bert_input'
         data = {
             "posdocid": posid,
             "pos_bert_input": np.array(pos_bert_inputs, dtype=np.long),
@@ -321,15 +312,10 @@ class BertPassage(Extractor):
             neg_bert_segs = []
             neg_passages = self.docid2passages[negid]
             for tokenized_passage in neg_passages:
-                input_line = ["[CLS]"] + query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
-                if len(input_line) > maxseqlen:
-                    input_line = input_line[:maxseqlen]
-                    input_line[-1] = "[SEP]"
-
-                padded_input_line = padlist(input_line, padlen=self.config["maxseqlen"], pad_token=self.pad_tok)
-                neg_bert_masks.append([1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line)))
-                neg_bert_segs.append([0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2))
-                neg_bert_inputs.append(tokenizer.convert_tokens_to_ids(padded_input_line))
+                inputs, segs, masks = self.tok2bertinput(query_toks, tokenized_passage)
+                neg_bert_inputs.append(inputs)
+                neg_bert_masks.append(masks)
+                neg_bert_segs.append(segs)
 
             if not neg_bert_inputs:
                 raise MissingDocError(qid, negid)
@@ -340,3 +326,17 @@ class BertPassage(Extractor):
             data["neg_seg"] = np.array(neg_bert_segs, dtype=np.long)
 
         return data
+
+    def tok2bertinput(self, query_toks, tokenized_passage):
+        maxseqlen = self.config["maxseqlen"]
+
+        input_line = ["[CLS]"] + query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
+        if len(input_line) > maxseqlen:
+            input_line = input_line[:maxseqlen]
+            input_line[-1] = "[SEP]"
+
+        padded_input_line = padlist(input_line, padlen=maxseqlen, pad_token=self.pad_tok)
+        masks = [1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line))
+        segs = [0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2)
+        inputs = self.tokenizer.convert_tokens_to_ids(padded_input_line)
+        return inputs, segs, masks
