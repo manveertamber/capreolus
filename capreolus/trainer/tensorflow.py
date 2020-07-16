@@ -121,7 +121,7 @@ class TensorflowTrainer(Trainer):
             bert_variables = [
                 (gradients[i], variable)
                 for i, variable in enumerate(wrapped_model.trainable_variables)
-                if "bert" in variable.name
+                if "bert" in variable.name and "classifier" not in variable.name
             ]
             classifier_vars = [
                 (gradients[i], variable)
