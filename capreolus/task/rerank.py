@@ -33,6 +33,8 @@ class RerankTask(Task):
     commands = ["train", "evaluate", "traineval"] + Task.help_commands
     default_command = "describe"
 
+    metrics = evaluator.DEFAULT_METRICS + ["bpref"]
+
     def traineval(self):
         self.train()
         self.evaluate()
@@ -176,12 +178,12 @@ class RerankTask(Task):
             raise ValueError("could not find predictions; run the train command first")
 
         fold_dev_metrics = evaluator.eval_runs(
-            reranker_runs[fold]["dev"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+            reranker_runs[fold]["dev"], self.benchmark.qrels, self.metrics, self.benchmark.relevance_level
         )
         logger.info("rerank: fold=%s dev metrics: %s", fold, fold_dev_metrics)
 
         fold_test_metrics = evaluator.eval_runs(
-            reranker_runs[fold]["test"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+            reranker_runs[fold]["test"], self.benchmark.qrels, self.metrics, self.benchmark.relevance_level
         )
         logger.info("rerank: fold=%s test metrics: %s", fold, fold_test_metrics)
 
@@ -207,10 +209,10 @@ class RerankTask(Task):
                     all_preds[qid][docid] = score
 
         cv_metrics = evaluator.eval_runs(
-            all_preds, self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+            all_preds, self.benchmark.qrels, self.metrics, self.benchmark.relevance_level
         )
         interpolated_results = evaluator.interpolated_eval(
-            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], evaluator.DEFAULT_METRICS
+            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], self.metrics
         )
 
         for metric, score in sorted(cv_metrics.items()):

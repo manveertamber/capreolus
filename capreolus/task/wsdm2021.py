@@ -1,9 +1,9 @@
 from pathlib import Path
 from collections import defaultdict
 
+from capreolus import evaluator
 from capreolus.task import Task, RerankTask
 from capreolus.sampler import TrainTripletSampler, PredSampler
-from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
@@ -12,6 +12,7 @@ logger = get_logger(__name__)
 @Task.register
 class WSDM2021(RerankTask):
     module_name = "wsdm2021"
+    metrics = evaluator.DEFAULT_METRICS + ["bpref"]
 
     def rerank_run(self, best_search_run, train_output_path, include_train=False):
         if not isinstance(train_output_path, Path):
