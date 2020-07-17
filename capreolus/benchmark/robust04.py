@@ -102,6 +102,9 @@ class SampledRobust04(Robust04Yang19):
         """ keep same number of judgements in qrels while try to keep the pos & neg label ratio same as before """
         # expected_pos_neg_rate = self.get_pos_neg_ratio(self.qrels)  # TODO: add pos/neg ratio
 
+        if mode not in ["deep", "shallow"]:
+            raise ValueError(f"Unexpected mode: {mode}, should be one of 'deep', 'shallow']")
+
         n_judgement = self.get_judgement_stat(sampled_qrels, "sum")
         n_remove = n_judgement - n_expected_judgement
         assert n_remove >= 0, f"expect {n_expected_judgement} judgements but the input contains only {n_judgement} judegment. current mode: {mode}, rate: {self.config['rate']}"
@@ -119,20 +122,27 @@ class SampledRobust04(Robust04Yang19):
                     yield qid, n
 
         if mode == "deep":  # higher priority to trim query
-            for qid, n in gen_qid(revert=False):
-                if n_remove == 0:
-                    break
+            for qid, n in gen_qid(revert=False):  # only drop one more query
+                assert n <= n_remove
+                del pruned_qrels[qid]
+                mode = "shallow"
+                break
 
-                if n <= n_remove:
-                    del pruned_qrels[qid]
-                    n_remove -= n
-                else:
-                    docs_to_remove = random.sample(pruned_qrels[qid].keys(), n_remove)
-                    for docid in docs_to_remove:
-                        del pruned_qrels[qid][docid]
-                    n_remove -= n_remove  # or directly break
+            #     if n_remove == 0:
+            #         break
+            #
+            #     if n <= n_remove:
+            #         del pruned_qrels[qid]
+            #         n_remove -= n
+            #     else:
+            #         mode = "shallow"  # switch to shallow mode
+            #         break
+            #         docs_to_remove = random.sample(pruned_qrels[qid].keys(), n_remove)
+            #         for docid in docs_to_remove:
+            #             del pruned_qrels[qid][docid]
+            #         n_remove -= n_remove  # or directly break
 
-        elif mode == "shallow":  # higher priority to trim document
+        if mode == "shallow":  # higher priority to trim document
             for qid, n in gen_qid(revert=True):  # document from queries with more judgement will be dropped
                 if n_remove == 0:
                     break
@@ -150,9 +160,6 @@ class SampledRobust04(Robust04Yang19):
 
                 del pruned_qrels[qid][doc_to_drop]
                 n_remove -= 1
-
-        else:
-            raise ValueError()
 
         assert self.get_judgement_stat(pruned_qrels, "sum") == n_expected_judgement
         return pruned_qrels
