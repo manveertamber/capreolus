@@ -95,7 +95,7 @@ class SampledRobust04(Robust04Yang19):
         self.unsampled_qrel_file = self.qrel_file
         self.unsampled_fold_file = self.fold_file
         self.qrel_file = self.file_fn / (f"{mode}.%.2f.qrels.txt"%rate)
-        self.qrel_file = self.file_fn / (f"{mode}.%.2f.fold.json"%rate)
+        self.fold_file = self.file_fn / (f"{mode}.%.2f.fold.json"%rate)
         self.download_if_missing()
 
     def prune_redundant_judgement(self, sampled_qrels, n_expected_judgement, mode):
@@ -122,46 +122,41 @@ class SampledRobust04(Robust04Yang19):
                     yield qid, n
 
         if mode == "deep":  # higher priority to trim query
-            for qid, n in gen_qid(revert=False):  # only drop one more query
-                assert n <= n_remove
-                del pruned_qrels[qid]
-                mode = "shallow"
+            smallest_qid, n1 = next(gen_qid(revert=False))
+            random_qid, n2 = random.sample(qid_n_judgement, 1)[0]
+            if n2 < n_remove:
+                n_remove -= n2
+                del pruned_qrels[random_qid]
+            else:
+                assert n1 <= n_remove
+                n_remove -= n1
+                del pruned_qrels[smallest_qid]
+
+        for qid, n in gen_qid(revert=True):  # document from queries with more judgement will be dropped
+            if n_remove == 0:
                 break
 
-            #     if n_remove == 0:
-            #         break
-            #
-            #     if n <= n_remove:
-            #         del pruned_qrels[qid]
-            #         n_remove -= n
-            #     else:
-            #         mode = "shallow"  # switch to shallow mode
-            #         break
-            #         docs_to_remove = random.sample(pruned_qrels[qid].keys(), n_remove)
-            #         for docid in docs_to_remove:
-            #             del pruned_qrels[qid][docid]
-            #         n_remove -= n_remove  # or directly break
-
-        if mode == "shallow":  # higher priority to trim document
-            for qid, n in gen_qid(revert=True):  # document from queries with more judgement will be dropped
-                if n_remove == 0:
-                    break
-
-                if not pruned_qrels[qid]:  # has already been emptied
+            if not pruned_qrels[qid]:  # has already been emptied
+                if mode == "shallow":
                     raise ValueError(f"Lost {qid} during pruning")
-
-                doc_to_drop = random.sample(pruned_qrels[qid].keys(), 1)[0]
-                if self.contain_empty_label(  # don't remove if we run out of either pos or neg judged doc
-                        docs=[d for d in pruned_qrels[qid] if d != doc_to_drop],
-                        docs2label=pruned_qrels[qid]):
-                    logger.info(f"Potential empty pos/neg is detected, skip dropping qid {qid} "
-                                f"(#judgement left: {len(pruned_qrels[qid])})")
+                else:
+                    logger.warning(f"{qid} is removed during qrel pruning at {mode} mode. "
+                                   f"This is expected if {qid} is the only query removed at this stage")
                     continue
 
-                del pruned_qrels[qid][doc_to_drop]
-                n_remove -= 1
+            doc_to_drop = random.sample(pruned_qrels[qid].keys(), 1)[0]
+            if self.contain_empty_label(  # don't remove if we run out of either pos or neg judged doc
+                    docs=[d for d in pruned_qrels[qid] if d != doc_to_drop],
+                    docs2label=pruned_qrels[qid]):
+                logger.info(f"Potential empty pos/neg is detected, skip dropping qid {qid} "
+                            f"(#judgement left: {len(pruned_qrels[qid])})")
+                continue
 
-        assert self.get_judgement_stat(pruned_qrels, "sum") == n_expected_judgement
+            del pruned_qrels[qid][doc_to_drop]
+            n_remove -= 1
+
+        n_after_judgement = self.get_judgement_stat(pruned_qrels, "sum")
+        assert n_after_judgement == n_expected_judgement, f"expect {n_expected_judgement} yet got {n_after_judgement}"
         return pruned_qrels
 
     def download_if_missing(self):
@@ -172,7 +167,7 @@ class SampledRobust04(Robust04Yang19):
         self.qrel_file.parent.mkdir(parents=True, exist_ok=True)
         self.fold_file.parent.mkdir(parents=True, exist_ok=True)
 
-        mode, rate, qrels = self.config["mode"], self.config["rate"], self.qrels
+        mode, rate, qrels = self.config["mode"], self.config["rate"], self.unsampled_qrels
 
         if rate <= 0 or rate > 1:
             raise ValueError(f"Sampling rate out of range: expect it from (0, 1], yet got {rate}")
@@ -185,15 +180,20 @@ class SampledRobust04(Robust04Yang19):
 
         sampled_qrels = defaultdict(dict)
         if mode == "deep":  # sample `rate` percent queries from qrels.
-            for fold, split in self.folds.items():
+            for fold, split in self.unsampled_folds.items():
                 # sampling within each fold's test qids s.t. the train qids in each would be kept uniformly
                 test_qids = split["predict"]["test"]
+                for qid in copy.deepcopy(test_qids):
+                    if qid not in qrels:
+                        logger.warning(f"{qid} unfound in qrels, removed")
+                        test_qids.remove(qid)
+
                 n_expected_qids = math.ceil(len(test_qids) * rate) + 1  # add one to avoid over-trim
                 sampled_qids = random.sample(test_qids, n_expected_qids)
                 sampled_qrels.update({qid: qrels[qid] for qid in sampled_qids})
 
         elif mode == "shallow":  # sample `rate` percent of documents from qrels
-            for qid, docs in self.qrels.items():
+            for qid, docs in self.unsampled_qrels.items():
                 n_expected_docids = math.ceil(len(docs) * rate)
                 assert n_expected_docids > 0, f"{qid} has zero document after sampling with rate {rate}"
                 sampled_docids = random.sample(docs.keys(), n_expected_docids)
@@ -221,7 +221,7 @@ class SampledRobust04(Robust04Yang19):
 
         # update train and dev qids in each fold accordingly
         new_folds = {}
-        for fold_name, split in self.folds.items():
+        for fold_name, split in self.unsampled_folds.items():
             train_qids, dev_qids = split["train_qids"], split["predict"]["dev"]
             new_folds[fold_name] = {
                 "train_qids": [qid for qid in train_qids if qid in sampled_qrels],

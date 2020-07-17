@@ -110,9 +110,9 @@ def test_csn_challenge_download_if_missing():
 
 
 def test_sampled_roubst04():
-    for mode in ["shallow", "deep"]:
+    for mode in ["deep"]:
         for rate in np.arange(0.1, 1, 0.1):
             config = {"name": "sampled_robust04", "mode": mode, "rate": rate}
             benchmark = SampledRobust04(config)
             benchmark.download_if_missing()
-            assert benchmark.sampled_qrel_file.exists() and benchmark.sampled_fold_file.exists()
+            assert benchmark.qrel_file.exists() and benchmark.fold_file.exists()
