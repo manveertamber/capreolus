@@ -80,13 +80,13 @@ class SampledRobust04(Robust04Yang19):
 
     @property
     def unsampled_qrels(self):
-        if not hasattr(self, "_qrels"):
+        if not hasattr(self, "_unsampled_qrels"):
             self._unsampled_qrels = load_qrels(self.unsampled_qrel_file)
         return self._unsampled_qrels
 
     @property
     def unsampled_folds(self):
-        if not hasattr(self, "_folds"):
+        if not hasattr(self, "_unsampled_folds"):
             self._unsampled_folds = json.load(open(self.unsampled_fold_file, "rt"))
         return self._unsampled_folds
 
