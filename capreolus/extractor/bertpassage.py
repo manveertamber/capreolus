@@ -48,6 +48,40 @@ class BertPassage(Extractor):
         ),
     ]
 
+    def get_passages_for_doc(self, doc):
+        """
+        Extract passages from the doc.
+        If there are too many passages, keep the first and the last one and sample from the rest.
+        If there are not enough packages, pad.
+        """
+        tokenize = self.tokenizer.tokenize
+        numpassages = self.config["numpassages"]
+        passages = []
+
+        for i in range(0, len(doc), self.config["stride"]):
+            if i >= len(doc):
+                assert len(passages) > 0, f"no passage can be built from empty document {doc}"
+                break
+            else:
+                passage = doc[i:i + self.config["passagelen"]]
+
+            passages.append(tokenize(" ".join(passage)))
+
+        n_actual_passages = len(passages)
+        # If we have a more passages than required, keep the first and last, and sample from the rest
+        if n_actual_passages > numpassages:
+            if numpassages > 1:
+                passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
+            else:
+                passages = [passages[0]]
+        else:
+            # Pad until we have the required number of passages
+            for _ in range(numpassages - n_actual_passages):
+                passages.append(["[PAD]"])
+
+        assert len(passages) == numpassages
+        return passages
+
     def _build_vocab(self, qids, docids, topics):
         if self.is_state_cached(qids, docids) and self.config["usecache"]:
             self.load_state(qids, docids)
@@ -229,40 +263,6 @@ class BertPassage(Extractor):
 
         return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
 
-    def get_passages_for_doc(self, doc):
-        """
-        Extract passages from the doc.
-        If there are too many passages, keep the first and the last one and sample from the rest.
-        If there are not enough packages, pad.
-        """
-        tokenize = self.tokenizer.tokenize
-        numpassages = self.config["numpassages"]
-        passages = []
-
-        for i in range(0, len(doc), self.config["stride"]):
-            if i >= len(doc):
-                assert len(passages) > 0, f"no passage can be built from empty document {doc}"
-                break
-            else:
-                passage = doc[i : i + self.config["passagelen"]]
-
-            passages.append(tokenize(" ".join(passage)))
-
-        n_actual_passages = len(passages)
-        # If we have a more passages than required, keep the first and last, and sample from the rest
-        if n_actual_passages > numpassages:
-            if numpassages > 1:
-                passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
-            else:
-                passages = [passages[0]]
-        else:
-            # Pad until we have the required number of passages
-            for _ in range(numpassages - n_actual_passages):
-                passages.append(["[PAD]"])
-
-        assert len(passages) == self.config["numpassages"]
-        return passages
-
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
 
@@ -282,7 +282,10 @@ class BertPassage(Extractor):
         """
         assert label is not None
 
+        qlen = self.config["maxqlen"]
         query_toks = self.qid2toks[qid]
+        query_toks = query_toks[:qlen] + [self.pad_tok] * (qlen - len(query_toks))
+
         pos_bert_inputs = []
         pos_bert_masks = []
         pos_bert_segs = []
