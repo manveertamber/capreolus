@@ -35,6 +35,7 @@ class BertPassage(Extractor):
     pad_tok = "[PAD]"
 
     config_spec = [
+        ConfigOption("maxqlen", 20, "Maximum query length for BERT"),
         ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("passagelen", 150, "Length of the extracted passage"),

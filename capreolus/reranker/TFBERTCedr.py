@@ -42,7 +42,8 @@ class CEDRKNRM(object):
                 RBFKernel(init_mu=mu, init_sigma=sigma, trainable=train_kernels, postfix=i)
                 for i, (mu, sigma) in enumerate(zip(mus, sigmas))]
 
-    def call(self, query_reps, query_mask, doc_reps, doc_mask):
+    def call(self, query_reps, doc_reps, query_mask, doc_mask):
+        """ mask: 1 represents valid positions, 0 represents padded positions """
         query_mask, doc_mask = tf.cast(query_mask, dtype=tf.float32), tf.cast(doc_mask, dtype=tf.float32)
         masks = tf.expand_dims(query_mask, 2) * tf.expand_dims(doc_mask, 1)  # (B, Q, D)
         masks = tf.expand_dims(masks, 1)  # (B, 1, Q, D)
@@ -73,17 +74,28 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         )
         self.nir = CEDRKNRM(train_kernels=config["knrm_trainkernel"])
 
+    def parse_bert_output(self, bert_output):
+        """ (B, T, H) -> (B, Q, H), (B, D, H) """
+        qlen = self.extractor.config["maxqlen"]
+        queries, docs = bert_output[:, :qlen+2, :], bert_output[:, qlen+2:, :]
+        query_mask = tf.cast(tf.equal(queries, 0), tf.float32)
+        doc_mask = tf.cast(tf.equal(docs, 0), tf.float32)
+        return queries, docs, query_mask, doc_mask
+
     def call(self, x, **kwargs):
         """ Returns logits of shape [2] """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
         outputs = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)
         last_layer_output, pooled_output = outputs[0], outputs[1]  # (B, H)
-
-        # nir_output = self.nir.call(last_layer_output)  # (B, T, H) -> (B, K)
         pooled_output = self.dropout(pooled_output, training=kwargs.get("training", False))
 
-        # cedr_output = tf.concat([pooled_output, nir_output], axis=-1)
-        cedr_output = pooled_output
+        if self.config["modeltype"] == "vbert":
+            cedr_output = pooled_output
+        else:
+            parsed_inputs = self.parse_bert_output(last_layer_output)
+            nir_output = self.nir.call(*parsed_inputs)  # (B, T, H) -> (B, K)
+            cedr_output = nir_output if self.config["modeltype"] == "nir" else tf.concat([pooled_output, nir_output], axis=-1)
+
         logits = self.classifier(cedr_output)  # (B, config.num_labels)
         return logits
 
