@@ -282,8 +282,8 @@ class BertPassage(Extractor):
         """
         assert label is not None
 
-        qlen = self.config["maxqlen"]
         query_toks = self.qid2toks[qid]
+        qlen = self.config["maxqlen"]
         query_toks = query_toks[:qlen] + [self.pad_tok] * (qlen - len(query_toks))
 
         pos_bert_inputs = []
