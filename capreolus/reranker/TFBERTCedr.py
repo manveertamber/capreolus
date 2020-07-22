@@ -83,19 +83,45 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
             self.nir = CEDRKNRM(train_kernels=config["knrm_trainkernel"])
 
     def parse_bert_output(self, bert_output):
-        """ (B, 12, T, H) -> (B, 12, Q, H), (B, 12, Q), (B, 12, D, H), (B, 12, D) """
+        """
+        (B, 12, T, H) -> (B, 12, Q, H), (B, 12, Q), (B, 12, D, H), (B, 12, D)
+        where B = batch_size * num_passage
+        """
         qlen = self.extractor.config["maxqlen"]
         queries, docs = bert_output[:, :, :qlen+2, :], bert_output[:, :, qlen+2:, :]
         query_mask = tf.cast(tf.not_equal(tf.reduce_sum(queries, axis=-1), 0), tf.float32)
         doc_mask = tf.cast(tf.not_equal(tf.reduce_sum(docs, axis=-1), 0), tf.float32)
+
+        def unbatch_psg(x):
+            if len(x.shape) == 4:
+                _, n_layers, psg_length, n_hidden = x.shape
+                x = tf.reshape(x, (-1, num_passage, n_layers, psg_length, n_hidden))
+            elif len(x.shape) == 3:
+                _, n_layers, psg_length = x.shape
+                x = tf.reshape(x, (-1, num_passage, n_layers, psg_length))
+            else:
+                raise ValueError(f"Unexpected input shape: ", x.shape)
+
+            x_list = [x[:, i] for i in range(num_passage)]  # each element: [B, n_layer, psg_length, (n_hidden)]
+            x = tf.concat(x_list, axis=2)  # concate along the psg_length axis
+
+            return x
+
+        num_passage = self.extractor.config["numpassages"]
+        queries, docs, query_mask, doc_mask = [unbatch_psg(x) for x in [queries, docs, query_mask, doc_mask]]
+
         return queries, docs, query_mask, doc_mask
 
     def call(self, x, **kwargs):
         """ Returns logits of shape [2] """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
+
         outputs = self.bert(
             doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg, output_hidden_states=True)
-        pooled_output = outputs[1]  # (B, H)
+        pooled_output = outputs[1]  # (B * num_passage, H)
+        _, n_hidden = pooled_output.shape
+        pooled_output = tf.reshape(pooled_output, (-1, self.extractor.config["numpassages"], n_hidden))
+        pooled_output = tf.reduce_mean(pooled_output, axis=1)
 
         if self.config["modeltype"] == "vbert":
             cedr_output = pooled_output
@@ -110,7 +136,7 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         logits = self.classifier(cedr_output)  # (B, config.num_labels)
         return logits
 
-    def predict_step(self, data):
+    def predict_step(self, data, **kwargs):
         """
         Scores each passage and applies max pooling over it.
         """
@@ -125,20 +151,27 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
 
         # feed input to model
-        passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 1]
-        tf.debugging.assert_equal(tf.shape(passage_scores), (batch_size * num_passages))
-        passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
-        passage_scores = tf.math.reduce_max(passage_scores, axis=1)
-
+        passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False, **kwargs)[:, 1]
+        tf.debugging.assert_equal(tf.shape(passage_scores), batch_size)
         return passage_scores
 
     def score(self, x, **kwargs):
-        posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
-
-        return self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)
+        return self.predict_step(x)
 
     def score_pair(self, x, **kwargs):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
+
+        batch_size = tf.shape(posdoc_bert_input)[0]
+        num_passages = self.extractor.config["numpassages"]
+        maxseqlen = self.extractor.config["maxseqlen"]
+
+        posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])
+        posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
+        posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
+
+        negdoc_bert_input = tf.reshape(negdoc_bert_input, [batch_size * num_passages, maxseqlen])
+        negdoc_mask = tf.reshape(negdoc_mask, [batch_size * num_passages, maxseqlen])
+        negdoc_seg = tf.reshape(negdoc_seg, [batch_size * num_passages, maxseqlen])
 
         pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)[:, 1]
         neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, 1]

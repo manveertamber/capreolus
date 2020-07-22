@@ -41,6 +41,7 @@ class BertPassage(Extractor):
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("stride", 100, "Stride"),
         ConfigOption("numpassages", 16, "Number of passages per document"),
+        ConfigOption("scatter_passage", True, "Whether to treat passages from the same document as independent training instances"),
         ConfigOption(
             "prob",
             0.1,
@@ -145,14 +146,22 @@ class BertPassage(Extractor):
 
         posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["pos_mask"],
-            sample["pos_seg"],
-            sample["neg_mask"],
-            sample["neg_seg"],
-        )
+            sample["pos_mask"], sample["pos_seg"], sample["neg_mask"], sample["neg_seg"])
         label = sample["label"]
-        features = []
 
+        if not self.config["scatter_passage"]:
+            feature = {
+                "pos_bert_input": _bytes_feature(tf.io.serialize_tensor(posdoc)),
+                "pos_mask": _bytes_feature(tf.io.serialize_tensor(posdoc_mask)),
+                "pos_seg": _bytes_feature(tf.io.serialize_tensor(posdoc_seg)),
+                "neg_bert_input": _bytes_feature(tf.io.serialize_tensor(negdoc)),
+                "neg_mask": _bytes_feature(tf.io.serialize_tensor(negdoc_mask)),
+                "neg_seg": _bytes_feature(tf.io.serialize_tensor(negdoc_seg)),
+                "label": _bytes_feature(tf.io.serialize_tensor(label)),
+            }
+            return [feature]
+
+        features = []
         for i in range(num_passages):
             # Always use the first passage, then sample from the remaining passages
             if i > 0 and self.rng.random() > self.config["prob"]:
@@ -186,11 +195,7 @@ class BertPassage(Extractor):
         """
         posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
-            sample["pos_mask"],
-            sample["pos_seg"],
-            sample["neg_mask"],
-            sample["neg_seg"],
-        )
+            sample["pos_mask"], sample["pos_seg"], sample["neg_mask"], sample["neg_seg"])
         label = sample["label"]
 
         def _bytes_feature(value):
@@ -217,13 +222,20 @@ class BertPassage(Extractor):
 
         def parse_tensor_as_int(x):
             parsed_tensor = tf.io.parse_tensor(x, tf.int64)
-            parsed_tensor.set_shape([self.config["maxseqlen"]])
+            if self.config["scatter_passage"]:
+                parsed_tensor.set_shape([self.config["maxseqlen"]])
+            else:
+                parsed_tensor.set_shape([self.config["numpassages"], self.config["maxseqlen"]])
 
             return parsed_tensor
 
         def parse_label_tensor(x):
             parsed_tensor = tf.io.parse_tensor(x, tf.float32)
-            parsed_tensor.set_shape([2])
+            if self.config["scatter_passage"]:
+                parsed_tensor.set_shape([2])
+            else:
+                parsed_tensor.set_shape([self.config["numpassages"], 2])
+                parsed_tensor = parsed_tensor[0, :]  # use the label for the first passage
 
             return parsed_tensor
 
@@ -283,8 +295,6 @@ class BertPassage(Extractor):
         assert label is not None
 
         query_toks = self.qid2toks[qid]
-        qlen = self.config["maxqlen"]
-        query_toks = query_toks[:qlen] + [self.pad_tok] * (qlen - len(query_toks))
 
         pos_bert_inputs = []
         pos_bert_masks = []
@@ -332,15 +342,19 @@ class BertPassage(Extractor):
         return data
 
     def tok2bertinput(self, query_toks, tokenized_passage):
-        maxseqlen = self.config["maxseqlen"]
+        qlen, maxseqlen = self.config["maxqlen"], self.config["maxseqlen"]
+        padded_query_toks = padlist(query_toks, padlen=qlen, pad_token=self.pad_tok)
 
-        input_line = ["[CLS]"] + query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
+        input_line = ["[CLS]"] + padded_query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
         if len(input_line) > maxseqlen:
             input_line = input_line[:maxseqlen]
             input_line[-1] = "[SEP]"
 
         padded_input_line = padlist(input_line, padlen=maxseqlen, pad_token=self.pad_tok)
-        masks = [1] * len(input_line) + [0] * (len(padded_input_line) - len(input_line))
-        segs = [0] * (len(query_toks) + 2) + [1] * (len(padded_input_line) - len(query_toks) - 2)
+
+        qmask = [1] * (min(len(query_toks), qlen) + 1) + [0] * max(0, qlen - len(query_toks))
+        docmask = [1] * (len(input_line) - qlen - 1)
+        masks = qmask + docmask + [0] * (len(padded_input_line) - len(input_line))
+        segs = [0] * (len(padded_query_toks) + 2) + [1] * (len(padded_input_line) - len(padded_query_toks) - 2)
         inputs = self.tokenizer.convert_tokens_to_ids(padded_input_line)
         return inputs, segs, masks

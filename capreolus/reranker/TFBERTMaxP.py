@@ -19,9 +19,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         Returns logits of shape [2]
         """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
-
         passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
-
         return passage_scores
 
     def predict_step(self, data):
