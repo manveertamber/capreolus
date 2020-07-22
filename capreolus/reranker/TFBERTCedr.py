@@ -88,6 +88,8 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         where B = batch_size * num_passage
         """
         qlen = self.extractor.config["maxqlen"]
+        num_passage = self.extractor.config["numpassages"]
+
         queries, docs = bert_output[:, :, :qlen+2, :], bert_output[:, :, qlen+2:, :]
         query_mask = tf.cast(tf.not_equal(tf.reduce_sum(queries, axis=-1), 0), tf.float32)
         doc_mask = tf.cast(tf.not_equal(tf.reduce_sum(docs, axis=-1), 0), tf.float32)
@@ -107,7 +109,6 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
 
             return x
 
-        num_passage = self.extractor.config["numpassages"]
         queries, docs, query_mask, doc_mask = [unbatch_psg(x) for x in [queries, docs, query_mask, doc_mask]]
 
         return queries, docs, query_mask, doc_mask
@@ -116,12 +117,11 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         """ Returns logits of shape [2] """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
 
-        outputs = self.bert(
-            doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg, output_hidden_states=True)
+        outputs = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg, output_hidden_states=True)
         pooled_output = outputs[1]  # (B * num_passage, H)
         _, n_hidden = pooled_output.shape
         pooled_output = tf.reshape(pooled_output, (-1, self.extractor.config["numpassages"], n_hidden))
-        pooled_output = tf.reduce_mean(pooled_output, axis=1)
+        pooled_output = tf.reduce_mean(pooled_output, axis=1)  # (B, H)
 
         if self.config["modeltype"] == "vbert":
             cedr_output = pooled_output
@@ -129,7 +129,7 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
             all_layer_output = outputs[2]
             all_layer_output = tf.stack(all_layer_output, axis=1)  # (B, n_layers, H)
             parsed_inputs = self.parse_bert_output(all_layer_output)  # [queries, docs, query_mask, doc_mask]
-            nir_output = self.nir.call(parsed_inputs)  # (B, T, H) -> (B, K)
+            nir_output = self.nir.call(parsed_inputs)  # (B, Q, H) -> (B, K)
             cedr_output = nir_output if self.config["modeltype"] == "nir" else tf.concat([pooled_output, nir_output], axis=-1)
 
         cedr_output = self.dropout(cedr_output, training=kwargs.get("training", False))
@@ -194,7 +194,7 @@ class TFBERTCedr(Reranker):
         ConfigOption("nirmodel", "KRNM", "which Neural IR model to to integrate with bert. Options: KNRM, DRMM, PACRR"),
 
         # for knrm:
-        ConfigOption(f"knrm_trainkernel", True, "Whether to train KNRM kernel.")
+        ConfigOption(f"knrm_trainkernel", False, "Whether to train KNRM kernel.")
     ]
 
     def build_model(self):
