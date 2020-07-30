@@ -1,7 +1,7 @@
 import sys
 import tensorflow as tf
 from tensorflow.python.keras.engine import data_adapter
-from transformers import TFBertForSequenceClassification
+from transformers import TFAutoModelForSequenceClassification, TFElectraModel  # TFBertForSequenceClassification
 
 from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
@@ -11,7 +11,15 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFBERTMaxP_Class, self).__init__(*args, **kwargs)
         self.extractor = extractor
-        self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
+        if "electra" in config["pretrained"]:
+            self.bert = TFElectraModel.from_pretrained(config["pretrained"])
+            self.classifier = tf.keras.layers.Dense(
+                2,
+                kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
+                name="classifier",
+            )
+        else:
+            self.bert = TFAutoModelForSequenceClassification.from_pretrained(config["pretrained"])  #, hidden_dropout_prob=0.1)
         self.config = config
 
     def call(self, x, **kwargs):
@@ -19,7 +27,12 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         Returns logits of shape [2]
         """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
-        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+        if "electra" in self.config["pretrained"]:
+            last_hidden_states = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+            pooled_output = last_hidden_states[:, 0]   # (B, 512, H) -> (B, H)
+            passage_scores = self.classifier(pooled_output)  # (B, 2)
+        else:
+            passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
         return passage_scores
 
     def predict_step(self, data):
