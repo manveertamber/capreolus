@@ -45,6 +45,7 @@ class CEDRKNRM(tf.keras.layers.Layer):
     def call(self, x, **kwargs):
         """ mask: 1 represents valid positions, 0 represents padded positions """
         query_reps, doc_reps, query_mask, doc_mask = x
+
         query_mask, doc_mask = tf.cast(query_mask, dtype=tf.float32), tf.cast(doc_mask, dtype=tf.float32)
         masks = tf.expand_dims(query_mask, -1) * tf.expand_dims(doc_mask, -2)  # (B, n_layer, Q, D)
 
@@ -82,7 +83,7 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         if not_vbert:
             self.nir = CEDRKNRM(train_kernels=config["knrm_trainkernel"])
 
-    def parse_bert_output(self, bert_output):
+    def parse_bert_output(self, bert_output, masks):
         """
         (B, 12, T, H) -> (B, 12, Q, H), (B, 12, Q), (B, 12, D, H), (B, 12, D)
         where B = batch_size * num_passage
@@ -90,27 +91,25 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         qlen = self.extractor.config["maxqlen"]
         num_passage = self.extractor.config["numpassages"]
 
-        queries, docs = bert_output[:, :, :qlen+2, :], bert_output[:, :, qlen+2:, :]
-        query_mask = tf.cast(tf.not_equal(tf.reduce_sum(queries, axis=-1), 0), tf.float32)
-        doc_mask = tf.cast(tf.not_equal(tf.reduce_sum(docs, axis=-1), 0), tf.float32)
+        def unbatch_psg(x, mode):
+            if len(x.shape) == 2:  # mask
+                x = tf.expand_dims(x, axis=1)  # from (B, T) to (B, 1, T)
 
-        def unbatch_psg(x):
-            if len(x.shape) == 4:
-                _, n_layers, psg_length, n_hidden = x.shape
-                x = tf.reshape(x, (-1, num_passage, n_layers, psg_length, n_hidden))
-            elif len(x.shape) == 3:
-                _, n_layers, psg_length = x.shape
-                x = tf.reshape(x, (-1, num_passage, n_layers, psg_length))
-            else:
-                raise ValueError(f"Unexpected input shape: ", x.shape)
+            batch_size = int(x.shape[0] // num_passage)
+            x_list = [x[i*batch_size:(i+1)*batch_size] for i in range(num_passage)]
+            if mode == "concat":
+                return tf.concat(x_list, axis=2)  # -> (B, 1, T * n_psg) or (B, n_layer, T * n_psg, H)
+            elif mode == "avg":
+                return tf.reduce_mean(tf.stack(x_list, axis=1), axis=1)
+            elif mode == "first":
+                return x_list[0]
 
-            x_list = [x[:, i] for i in range(num_passage)]  # each element: [B, n_layer, psg_length, (n_hidden)]
-            x = tf.concat(x_list, axis=2)  # concate along the psg_length axis
+            raise ValueError(f"Unexpected mode: {mode}")
 
-            return x
-
-        queries, docs, query_mask, doc_mask = [unbatch_psg(x) for x in [queries, docs, query_mask, doc_mask]]
-
+        queries, docs = bert_output[:, :, 1:qlen+1, :], bert_output[:, :, qlen+2:-1, :]
+        query_mask, doc_mask = masks[:, 1:qlen+1], masks[:, qlen+2:-1]
+        queries, query_mask = [unbatch_psg(x, mode="first") for x in [queries, query_mask]]
+        docs, doc_mask = [unbatch_psg(x, mode="concat") for x in [docs, doc_mask]]
         return queries, docs, query_mask, doc_mask
 
     def call(self, x, **kwargs):
@@ -126,9 +125,9 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         if self.config["modeltype"] == "vbert":
             cedr_output = pooled_output
         else:
-            all_layer_output = outputs[2]
+            all_layer_output = outputs[2]  # size: 13
             all_layer_output = tf.stack(all_layer_output, axis=1)  # (B, n_layers, H)
-            parsed_inputs = self.parse_bert_output(all_layer_output)  # [queries, docs, query_mask, doc_mask]
+            parsed_inputs = self.parse_bert_output(all_layer_output, doc_mask)  # [queries, docs, query_mask, doc_mask]
             nir_output = self.nir.call(parsed_inputs)  # (B, Q, H) -> (B, K)
             cedr_output = nir_output if self.config["modeltype"] == "nir" else tf.concat([pooled_output, nir_output], axis=-1)
 
