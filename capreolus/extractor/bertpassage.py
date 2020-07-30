@@ -31,9 +31,6 @@ class BertPassage(Extractor):
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
 
-    pad = 0
-    pad_tok = "[PAD]"
-
     config_spec = [
         ConfigOption("maxqlen", 20, "Maximum query length for BERT"),
         ConfigOption("maxseqlen", 256, "Maximum input length for BERT"),
@@ -78,7 +75,7 @@ class BertPassage(Extractor):
         else:
             # Pad until we have the required number of passages
             for _ in range(numpassages - n_actual_passages):
-                passages.append(["[PAD]"])
+                passages.append([self.pad_tok])
 
         assert len(passages) == numpassages
         return passages
@@ -169,10 +166,10 @@ class BertPassage(Extractor):
 
             bert_input_line = posdoc[i]
             bert_input_line = " ".join(self.tokenizer.bert_tokenizer.convert_ids_to_tokens(list(bert_input_line)))
-            passage = bert_input_line.split("[SEP]")[-2]
+            passage = bert_input_line.split(self.tokenizer.bert_tokenizer.sep_token)[-2]
 
             # Ignore empty passages as well
-            if passage.strip() == "[PAD]":
+            if passage.strip() == self.pad_tok:
                 continue
 
             feature = {
@@ -279,6 +276,8 @@ class BertPassage(Extractor):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
 
     def preprocess(self, qids, docids, topics):
+        self.pad = 0
+        self.pad_tok = self.tokenizer.bert_tokenizer.pad_token
         if self.exist():
             return
 
@@ -343,16 +342,19 @@ class BertPassage(Extractor):
 
     def tok2bertinput(self, query_toks, tokenized_passage):
         qlen, maxseqlen = self.config["maxqlen"], self.config["maxseqlen"]
+        CLS, SEP = self.tokenizer.bert_tokenizer.cls_token, self.tokenizer.bert_tokenizer.sep_token
         padded_query_toks = padlist(query_toks, padlen=qlen, pad_token=self.pad_tok)
 
-        input_line = ["[CLS]"] + padded_query_toks + ["[SEP]"] + tokenized_passage + ["[SEP]"]
+        input_line = [CLS] + padded_query_toks + [SEP] + tokenized_passage + [SEP]
         if len(input_line) > maxseqlen:
             input_line = input_line[:maxseqlen]
-            input_line[-1] = "[SEP]"
+            input_line[-1] = SEP
 
         padded_input_line = padlist(input_line, padlen=maxseqlen, pad_token=self.pad_tok)
 
-        qmask = [1] * (min(len(query_toks), qlen) + 1) + [0] * max(0, qlen - len(query_toks))
+        real_qlen, q_padlen = min(len(query_toks), qlen), max(0, qlen - len(query_toks))
+        assert real_qlen + q_padlen == qlen
+        qmask = [1] * (real_qlen + 1) + [0] * q_padlen
         docmask = [1] * (len(input_line) - qlen - 1)
         masks = qmask + docmask + [0] * (len(padded_input_line) - len(input_line))
         segs = [0] * (len(padded_query_toks) + 2) + [1] * (len(padded_input_line) - len(padded_query_toks) - 2)
