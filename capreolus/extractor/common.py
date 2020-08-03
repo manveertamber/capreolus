@@ -60,6 +60,6 @@ def load_vocab_file(fn):
 
 
 def save_vocab_file(itos, fn):
-    with open(fn, "wt") as outf:
+    with open(fn, "wt", encoding="utf-8") as outf:
         for idx, term in sorted(itos.items()):
             print(term, file=outf)
