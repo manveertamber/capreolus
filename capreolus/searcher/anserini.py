@@ -5,7 +5,7 @@ import subprocess
 import numpy as np
 
 from capreolus import ConfigOption, Dependency, constants
-from capreolus.utils.common import Anserini
+from capreolus.utils.common import Anserini, download_file
 from capreolus.utils.loginit import get_logger
 
 from . import Searcher
@@ -53,6 +53,7 @@ class AnseriniSearcherMixIn:
             f"java -classpath {anserini_fat_jar} "
             f"-Xms512M -Xmx31G -Dapp.name=SearchCollection io.anserini.search.SearchCollection "
             f"-topicreader Trec -index {index_path} {indexopts} -topics {topicsfn} -output {output_path} "
+            f"-querygenerator BagOfWordsQueryGenerator "
             f"-topicfield {topicfield} -inmem -threads {MAX_THREADS} {anserini_param_str}"
         )
         logger.info("Anserini writing runs to %s", output_path)
@@ -96,6 +97,7 @@ class PostprocessMixin:
         return run_dir
 
     def _filter(self, runfile, docs_to_remove, docs_to_keep, topn):
+        print(">>.", runfile)
         runs = Searcher.load_trec_run(runfile)
 
         # filtering
@@ -240,6 +242,64 @@ class BM25PostProcess(BM25, PostprocessMixin):
 
     def query_from_file(self, topicsfn, output_path, docs_to_remove=None):
         output_path = super().query_from_file(topicsfn, output_path)  # will call _query_from_file() from BM25
+
+        if docs_to_remove:
+            output_path = self.filter(output_path, docs_to_remove=docs_to_remove, topn=self.config["topn"])
+        if self.config["dedup"]:
+            output_path = self.dedup(output_path, topn=self.config["topn"])
+
+        return output_path
+
+
+@Searcher.register
+class BM25RM3PostProcess(BM25RM3, PostprocessMixin):
+    module_name = "BM25RM3Postprocess"
+
+    config_spec = BM25RM3.config_spec + [
+        ConfigOption("topn", 1000, "number of results expected after the filtering (if any)"),
+        ConfigOption("dedup", False),
+    ]
+
+    def query_from_file(self, topicsfn, output_path, docs_to_remove=None):
+        output_path = super().query_from_file(topicsfn, output_path)  # will call _query_from_file() from BM25
+
+        if docs_to_remove:
+            output_path = self.filter(output_path, docs_to_remove=docs_to_remove, topn=self.config["topn"])
+        if self.config["dedup"]:
+            output_path = self.dedup(output_path, topn=self.config["topn"])
+
+        return output_path
+
+
+@Searcher.register
+class CovidFusion(Searcher, PostprocessMixin):
+    module_name = "fusion"
+    dependencies = [
+        Dependency(key="collection", module="collection", name="covid")
+    ]
+    config_spec = [
+        ConfigOption("fusiontype", "1", "1 for 1-3-5, 2 for 2-4-6"),
+        ConfigOption("topn", 1000, "number of results expected after the filtering (if any)"),
+        ConfigOption("dedup", False),
+    ]
+
+    def query_from_file(self, topicsfn, output_path, docs_to_remove=None):
+        # if (output_path / "done").exists():
+        urls = [
+            {},  # round 1
+            {},  # round 2
+            {},  # round 3
+            {"1": "https://www.dropbox.com/s/zjc0069do0a4gu3/anserini.covid-r4.fusion1.txt",
+             "2": "https://www.dropbox.com/s/qekc9vr3oom777n/anserini.covid-r4.fusion2.txt"},  # round 4,
+            {"1": "https://www.dropbox.com/s/mq94s9t7snqlizw/anserini.covid-r5.fusion1.txt",
+             "2": "https://www.dropbox.com/s/4za9i29gxv090ut/anserini.covid-r5.fusion2.txt"},  # round 5,
+        ]
+        url = urls[self.collection.config["round"] - 1][self.config["fusiontype"]]
+        output_path.mkdir(exist_ok=True, parents=True)
+        if not (output_path / "searcher").exists():
+            download_file(url, (output_path / "searcher"))
+        with open(output_path / "done", "w") as f:
+            f.write("done")
 
         if docs_to_remove:
             output_path = self.filter(output_path, docs_to_remove=docs_to_remove, topn=self.config["topn"])
