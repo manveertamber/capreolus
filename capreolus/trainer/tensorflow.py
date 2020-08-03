@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import os
 import uuid
@@ -82,6 +83,19 @@ class TensorflowTrainer(Trainer):
         if self.tpu and self.config["storage"] and not self.config["storage"].startswith("gs://"):
             raise ValueError("For TPU utilization, the storage config should start with 'gs://'")
 
+    def generate_train_predict_tfrecord(self, reranker, train_dataset, dev_data, pred_data):
+        logger.info(f"preparing training dataset")
+        train_records = self.get_tf_train_records(reranker, train_dataset)
+        logger.info(f"preparing dev dataset")
+        dev_records = self.get_tf_dev_records(reranker, dev_data)
+        logger.info(f"preparing pred dataset")
+        pred_records = self.get_tf_dev_records(reranker, pred_data)
+
+        del reranker.extractor.docid2passages
+        del reranker.extractor.qid2toks
+        gc.collect()
+        return train_records, dev_records, pred_records
+
     def train(self, reranker, train_dataset, train_output_path, dev_data, dev_output_path, qrels, metric, relevance_level=1):
         if self.tpu:
             train_output_path = "{0}/{1}/{2}".format(
@@ -92,6 +106,7 @@ class TensorflowTrainer(Trainer):
 
         train_records = self.get_tf_train_records(reranker, train_dataset)
         dev_records = self.get_tf_dev_records(reranker, dev_data)
+
         dev_dist_dataset = self.strategy.experimental_distribute_dataset(dev_records)
 
         # Does not very much from https://www.tensorflow.org/tutorials/distribute/custom_training
@@ -205,6 +220,9 @@ class TensorflowTrainer(Trainer):
                             dev_predictions.extend(p)
 
                     trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
+                    # tmp
+                    trec_preds = reranker.filter(trec_preds)
+                    # metrics = evaluator.eval_runs(filtered_trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                     metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
@@ -241,6 +259,8 @@ class TensorflowTrainer(Trainer):
                 predictions.extend(p)
 
         trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
+        trec_preds = reranker.filter(trec_preds)
+
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
         Searcher.write_trec_run(trec_preds, pred_fn)
 
