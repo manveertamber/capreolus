@@ -81,7 +81,7 @@ class CodeSearchNetCorpus(Benchmark):
 
         lang = self.config["lang"]
 
-        tmp_dir = Path("/tmp")
+        tmp_dir = self.get_cache_path() / "tmp"
         zip_fn = tmp_dir / f"{lang}.zip"
         if not zip_fn.exists():
             download_file(f"{self.url}/{lang}.zip", zip_fn)
@@ -201,7 +201,7 @@ class CodeSearchNetChallenge(Benchmark):
         if self.topic_file.exists() and self.qid_map_file.exists():
             return
 
-        tmp_dir = Path("/tmp")
+        tmp_dir = self.get_cache_path() / "tmp"
         tmp_dir.mkdir(exist_ok=True, parents=True)
         self.file_fn.mkdir(exist_ok=True, parents=True)
 
