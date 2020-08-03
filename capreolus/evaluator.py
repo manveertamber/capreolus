@@ -17,6 +17,7 @@ DEFAULT_METRICS = [
     "judged_20",
     "judged_200",
     "map",
+    "bpref",
     "ndcg_cut_5",
     "ndcg_cut_10",
     "ndcg_cut_20",
