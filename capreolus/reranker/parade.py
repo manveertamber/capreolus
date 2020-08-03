@@ -1,7 +1,7 @@
 import sys
 import tensorflow as tf
 from tensorflow.python.keras.engine import data_adapter
-from transformers import TFBertModel, TFBertForSequenceClassification
+from transformers import TFAutoModel, TFElectraModel, TFBertForSequenceClassification
 from transformers.modeling_tf_bert import TFBertLayer
 
 from profane import ConfigOption, Dependency
@@ -13,7 +13,7 @@ class TFParade_Class(tf.keras.layers.Layer):
         super(TFParade_Class, self).__init__(*args, **kwargs)
         self.extractor = extractor
         self.config = config
-        self.bert = TFBertModel.from_pretrained("bert-base-uncased")
+        self.bert = TFAutoModel.from_pretrained(self.config["pretrained"])
         self.transformer_layer_1 = TFBertLayer(self.bert.config)
         self.transformer_layer_2 = TFBertLayer(self.bert.config)
         # self.num_passages = (self.extractor.cfg["maxdoclen"] - config["passagelen"]) // self.config["stride"]
