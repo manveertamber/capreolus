@@ -33,6 +33,17 @@ class COVID(Benchmark):
         ConfigOption("useprevqrels", True),
     ]
 
+    @property
+    def prev_qrels(self):
+        if not hasattr(self, "_prev_qrels"):
+            self._prev_qrels = load_qrels(self.prevrun_qrel_file)
+        return self._prev_qrels
+
+    def ignore_qrels(self):
+        if not hasattr(self, "_ignore_qrels"):
+            self._ignore_qrels = load_qrels(self.qrel_ignore)
+        return self._ignore_qrels
+
     def build(self):
         if self.collection.config["round"] == self.lastest_round and not self.config["useprevqrels"]:
             logger.warning(f"No evaluation can be done for the lastest round without using previous qrels")
@@ -41,6 +52,7 @@ class COVID(Benchmark):
         data_dir.mkdir(exist_ok=True, parents=True)
 
         self.qrel_ignore = f"{data_dir}/ignore.qrel.txt"
+        self.prevrun_qrel_file = f"{data_dir}/prev.qrel.txt"
         self.qrel_file = f"{data_dir}/qrel.txt"
         self.topic_file = f"{data_dir}/topic.txt"
         self.fold_file = f"{data_dir}/fold.json"
@@ -48,7 +60,7 @@ class COVID(Benchmark):
         self.download_if_missing()
 
     def download_if_missing(self):
-        if all([os.path.exists(fn) for fn in [self.qrel_file, self.qrel_ignore, self.topic_file, self.fold_file]]):
+        if all([os.path.exists(fn) for fn in [self.qrel_file, self.qrel_ignore, self.prevrun_qrel_file, self.topic_file, self.fold_file]]):
             return
 
         rnd_i, useprevqrels = self.collection.config["round"], self.config["useprevqrels"]
@@ -75,7 +87,6 @@ class COVID(Benchmark):
         # elif rnd_i == 5:
         #     prev_qrel_urls = [self.qrel_url_v2 % (4, 4), self.qrel_url_v1 % 5]
         qrel_fn = open(self.qrel_file, "w") if useprevqrels else open(self.qrel_ignore, "w")
-
         for qrel_url in prev_qrel_urls:
             qrel_tmp = tmp_dir / qrel_url.split("/")[-1]
             if not os.path.exists(qrel_tmp):
@@ -89,14 +100,13 @@ class COVID(Benchmark):
         if useprevqrels:  # for rounds without available qrels
             f = open(self.qrel_ignore, "w")  # no qrels to remove after search
             f.close()
+
         # if not use previous qrels: use judgement in current round to evaluate
         elif rnd_i == self.lastest_round:
             logger.warn(f"No evaluation qrel is available for current round {rnd_i}")
             f = open(self.qrel_file, "w")
             f.close()
-        elif rnd_i >= 3:  # special case since document id changes a lot from rnd 2 -> 3, or rnd 3 -> 4
-            self.prep_backward_compatible_qrels(tmp_dir, self.qrel_ignore, self.qrel_file)  # write results to self.qrel
-        else:  # not useprevqrels and rnd_i == 2,
+        elif rnd_i < 3:  # no docid need to be converted
             qrel_tmp = tmp_dir / f"qrel-{rnd_i}"
             if not os.path.exists(qrel_tmp):
                 qrel_url = self.qrel_url_v1 % rnd_i if rnd_i != 4 else self.qrel_url_v2 % (4, 4)
@@ -105,10 +115,21 @@ class COVID(Benchmark):
                 for line in fin:
                     fout.write(line)
 
+        # docids in both qrel_ignore and qrels need to be replaced by its old docid
+        # if rnd_i >= 3:  # special case since document id changes a lot from rnd 2 -> 3, or rnd 3 -> 4
+        else:
+            # tgt_file = self.qrel_file if useprevqrels else self.qrel_ignore
+            self.prep_backward_compatible_qrels(
+                tmp_dir, qerl_ignore_fn=self.qrel_ignore, qrel_fn=self.qrel_file)
+
+        qrel_fn = self.qrel_file if useprevqrels else self.qrel_ignore
+        with open(qrel_fn) as fin, open(self.prevrun_qrel_file, "w") as fout:
+            for line in fin:
+                fout.write(line)
         folds = {"s1": {"train_qids": list(labeled_qids), "predict": {"dev": list(labeled_qids), "test": all_qids}}}
         json.dump(folds, open(self.fold_file, "w"))
 
-    def prep_backward_compatible_qrels(self, tmp_dir, prev_qrels_fn, tgt_qrel_fn):
+    def prep_backward_compatible_qrels(self, tmp_dir, qerl_ignore_fn, qrel_fn):
         """
         Prepare qrels file for round 3 adaptable to previous rounds:
             convert the new docids in qrels-covid_d3_j0.5-3.txt back to its old id
@@ -118,8 +139,8 @@ class COVID(Benchmark):
         released since round 4, where docids are already updated
 
         :param tmp_dir: pathlib.Path object, sthe directory to store downloaded files
-        :param prev_qrels_fn: qrels file which store the qrels from previous rounds (round 1 and round 2)
-        :param tgt_qrel_fn: qrels file path where to store the processed round 3 qrels file
+        :param qerl_ignore_fn: qrels file which store the qrels from previous rounds (round 1 and round 2)
+        :param qrel_fn: qrels file path where to store the processed round 3 qrels file
         """
         DOCID2URL = {
             "rnd-3": "https://ir.nist.gov/covidSubmit/data/changedIds-May19.csv",
@@ -127,7 +148,6 @@ class COVID(Benchmark):
         }
         rnd_i = self.collection.config["round"]
         assert rnd_i in [3, 4, 5]
-        # assert self.collection.config["round"] == 3
 
         # donwload files
         qrel_url = f"https://ir.nist.gov/covidSubmit/data/qrels-covid_d{rnd_i}_j0.5-{rnd_i}.txt"
@@ -141,10 +161,10 @@ class COVID(Benchmark):
         with open(docid_map_tmp) as f:  # docids to revert in current qrels file
             new2old = {line.split(",")[1]: line.split(",")[0] for line in f}  # each line: old_docid, new_docid, type
 
-        with open(prev_qrels_fn) as f:  # qrels to exclude from current qrels file
+        with open(qerl_ignore_fn) as f:  # qrels to exclude from current qrels file
             prev_qrels = [line for line in f]
 
-        with open(qrel_tmp) as fin,  open(tgt_qrel_fn, "w") as fout:
+        with open(qrel_tmp) as fin,  open(qrel_fn, "w") as fout:
             for line in fin:
                 qid, tag, docid, label = line.strip().split()
                 docid = new2old.get(docid, docid)

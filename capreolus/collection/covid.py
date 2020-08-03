@@ -48,7 +48,7 @@ class COVID(Collection):
 
     def download_if_missing(self):
         cachedir = self.get_cache_path()
-        tmp_dir, document_dir = Path("/tmp"), cachedir / "documents"
+        tmp_dir, document_dir = cachedir / "tmp", cachedir / "documents"
         expected_fns = [document_dir / "metadata.csv", document_dir / "document_parses"]
         if all([os.path.exists(f) for f in expected_fns]):
             return document_dir
@@ -56,6 +56,7 @@ class COVID(Collection):
         url = self.url % self.date
         tar_file = tmp_dir / f"covid-19-{self.date}.tar.gz"
         if not tar_file.exists():
+            tmp_dir.mkdir(exist_ok=True, parents=True)
             download_file(url, tar_file)
 
         with tarfile.open(tar_file) as f:
