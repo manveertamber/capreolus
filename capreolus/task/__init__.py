@@ -58,6 +58,5 @@ from profane import import_all_modules
 
 from .rank import RankTask
 from .rerank import RerankTask
-from .wsdm2021 import WSDM2021
 
 import_all_modules(__file__, __package__)
