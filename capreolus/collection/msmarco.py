@@ -10,8 +10,8 @@ logger = get_logger(__name__)
 
 
 @Collection.register
-class MSMarco(Collection):
-    module_name = "msmarco"
+class MSMarcoDoc(Collection):
+    module_name = "msmarcodoc"
     config_keys_not_in_path = ["path"]
     collection_type = "TrecCollection"
     generator_type = "DefaultLuceneDocumentGenerator"
@@ -19,7 +19,7 @@ class MSMarco(Collection):
 
     def download_if_missing(self):
         coll_dir = self.get_cache_path() / "documents"
-        coll_fn = coll_dir / "msmarco.collection.txt"
+        coll_fn = coll_dir / "msmarco.doc.collection.txt"
         if coll_fn.exists():
             return coll_dir
 

@@ -28,12 +28,12 @@ from . import Benchmark
 class MSMarcoDoc(Benchmark):
     """ Currently only test fold query from TREC-DL 2019 is used """
     module_name = "msmarcodoc"
-    dependencies = [Dependency(key="collection", module="collection", name="msmarco")]
+    dependencies = [Dependency(key="collection", module="collection", name="msmarcodoc")]
     config_spec = [
         ConfigOption("judgementtype", "deep", "Whether to use deep or shallow qrels")
     ]
 
-    data_dir = PACKAGE_PATH / "data" / "msmarco"
+    data_dir = PACKAGE_PATH / "data" / "msmarcodoc"
     query_type = "title"
 
     @staticmethod
