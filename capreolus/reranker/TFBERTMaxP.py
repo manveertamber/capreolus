@@ -20,6 +20,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
             )
         else:
             self.bert = TFAutoModelForSequenceClassification.from_pretrained(config["pretrained"])  #, hidden_dropout_prob=0.1)
+
         self.config = config
 
     def call(self, x, **kwargs):
@@ -33,6 +34,7 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
             passage_scores = self.classifier(pooled_output)  # (B, 2)
         else:
             passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+
         return passage_scores
 
     def predict_step(self, data):
@@ -51,7 +53,16 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 1]
         tf.debugging.assert_equal(tf.shape(passage_scores), (batch_size * num_passages))
         passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
-        passage_scores = tf.math.reduce_max(passage_scores, axis=1)
+        # passage_scores = tf.math.reduce_max(passage_scores, axis=1)
+
+        if self.config["aggregation"] == "max":
+            passage_scores = tf.math.reduce_max(passage_scores, axis=1)
+        elif self.config["aggregation"] == "first":
+            passage_scores = passage_scores[:, 0]
+        elif self.config["aggregation"] == "sum":
+            passage_scores = tf.math.reduce_sum(tf.nn.softmax(passage_scores), axis=1)
+        else:
+            raise ValueError("Unknown aggregation method: {}".format(self.config["aggregation"]))
 
         return passage_scores
 
@@ -82,6 +93,7 @@ class TFBERTMaxP(Reranker):
         ConfigOption("passagelen", 100, "Passage length"),
         ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
         ConfigOption("stride", 20, "Stride"),
+        ConfigOption("aggregation", "max"),
     ]
 
     def build_model(self):

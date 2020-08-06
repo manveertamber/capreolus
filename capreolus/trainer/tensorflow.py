@@ -267,7 +267,7 @@ class TensorflowTrainer(Trainer):
 
         predictions = []
         for x in pred_dist_dataset:
-            pred_batch = distributed_test_step(x).values
+            pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
             for p in pred_batch:
                 predictions.extend(p)
 
@@ -363,7 +363,6 @@ class TensorflowTrainer(Trainer):
         raw_dataset = tf.data.TFRecordDataset(filenames)
         tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
-        )
 
         return tf_records_dataset
 
