@@ -48,7 +48,6 @@ class MSMarcoPsg(Collection):
     generator_type = "DefaultLuceneDocumentGenerator"
 
     def download_raw(self):
-        # url = "https://msmarco.blob.core.windows.net/msmarcoranking/collection.tar.gz"
         url = "https://msmarco.blob.core.windows.net/msmarcoranking/collectionandqueries.tar.gz"
         tmp_dir = self.get_cache_path() / "tmp"
         gz_dir =_download_and_extract(url, tmp_dir)
