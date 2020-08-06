@@ -1,16 +1,17 @@
-import pickle
 import os
-import tensorflow as tf
-import numpy as np
+import pickle
 from collections import defaultdict
-from profane import ConfigOption
-from profane.base import Dependency
-from tqdm import tqdm
 
-from capreolus.extractor import Extractor
+import numpy as np
+from tqdm import tqdm
+import tensorflow as tf
+from profane import ModuleBase, Dependency, ConfigOption, constants
+
 from capreolus import get_logger
 from capreolus.utils.common import padlist
 from capreolus.utils.exceptions import MissingDocError
+from capreolus.tokenizer.punkt import PunktTokenizer
+from capreolus.extractor import Extractor
 
 logger = get_logger(__name__)
 
@@ -37,48 +38,13 @@ class BertPassage(Extractor):
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("stride", 100, "Stride"),
-        ConfigOption("numpassages", 16, "Number of passages per document"),
         ConfigOption("scatter_passage", True, "Whether to treat passages from the same document as independent training instances"),
-        ConfigOption(
-            "prob",
-            0.1,
+        ConfigOption("sentences", False, "Use a sentence tokenizer to form passages"),
+        ConfigOption("numpassages", 16, "Number of passages per document"),
+        ConfigOption("prob", 0.1,
             "The probability that a passage from the document will be used for training (the first passage is always used)",
         ),
     ]
-
-    def get_passages_for_doc(self, doc):
-        """
-        Extract passages from the doc.
-        If there are too many passages, keep the first and the last one and sample from the rest.
-        If there are not enough packages, pad.
-        """
-        tokenize = self.tokenizer.tokenize
-        numpassages = self.config["numpassages"]
-        passages = []
-
-        for i in range(0, len(doc), self.config["stride"]):
-            if i >= len(doc):
-                assert len(passages) > 0, f"no passage can be built from empty document {doc}"
-                break
-            else:
-                passage = doc[i:i + self.config["passagelen"]]
-
-            passages.append(tokenize(" ".join(passage)))
-
-        n_actual_passages = len(passages)
-        # If we have a more passages than required, keep the first and last, and sample from the rest
-        if n_actual_passages > numpassages:
-            if numpassages > 1:
-                passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
-            else:
-                passages = [passages[0]]
-        else:
-            # Pad until we have the required number of passages
-            for _ in range(numpassages - n_actual_passages):
-                passages.append([self.pad_tok])
-
-        assert len(passages) == numpassages
-        return passages
 
     def _build_vocab(self, qids, docids, topics):
         if self.is_state_cached(qids, docids) and self.config["usecache"]:
@@ -193,6 +159,7 @@ class BertPassage(Extractor):
         posdoc, negdoc, negdoc_id = sample["pos_bert_input"], sample["neg_bert_input"], sample["negdocid"]
         posdoc_mask, posdoc_seg, negdoc_mask, negdoc_seg = (
             sample["pos_mask"], sample["pos_seg"], sample["neg_mask"], sample["neg_seg"])
+
         label = sample["label"]
 
         def _bytes_feature(value):
@@ -272,6 +239,104 @@ class BertPassage(Extractor):
 
         return (pos_bert_input, pos_mask, pos_seg, neg_bert_input, neg_mask, neg_seg), label
 
+    def get_passages_for_doc(self, doc):
+        """
+        Extract passages from the doc.
+        If there are too many passages, keep the first and the last one and sample from the rest.
+        If there are not enough packages, pad.
+        """
+        tokenize = self.tokenizer.tokenize
+        numpassages = self.config["numpassages"]
+        passages = []
+
+        for i in range(0, len(doc), self.config["stride"]):
+            if i >= len(doc):
+                assert len(passages) > 0, f"no passage can be built from empty document {doc}"
+                break
+            else:
+                passage = doc[i : i + self.config["passagelen"]]
+
+            passages.append(tokenize(" ".join(passage)))
+
+        n_actual_passages = len(passages)
+        # If we have a more passages than required, keep the first and last, and sample from the rest
+        if n_actual_passages > numpassages:
+            if numpassages > 1:
+                passages = [passages[0]] + list(self.rng.choice(passages[1:-1], numpassages - 2, replace=False)) + [passages[-1]]
+            else:
+                passages = [passages[0]]
+        else:
+            # Pad until we have the required number of passages
+            for _ in range(numpassages - n_actual_passages):
+                passages.append(["[PAD]"])
+
+        assert len(passages) == self.config["numpassages"]
+        return passages
+
+    # from https://github.com/castorini/birch/blob/2dd0401ebb388a1c96f8f3357a064164a5db3f0e/src/utils/doc_utils.py#L73
+    def _chunk_sent(self, sent, max_len):
+        words = self.tokenizer.tokenize(sent)
+
+        if len(words) <= max_len:
+            return [words]
+
+        chunked_sents = []
+        size = int(len(words) / max_len)
+        for i in range(0, size):
+            seq = words[i * max_len : (i + 1) * max_len]
+            chunked_sents.append(seq)
+        return chunked_sents
+
+    def _build_passages_from_sentences(self, docids):
+        punkt = PunktTokenizer()
+
+        for docid in tqdm(docids, "extract passages"):
+            passages = []
+            numpassages = self.config["numpassages"]
+            for sentence in punkt.tokenize(self.index.get_doc(docid)):
+                if len(passages) >= numpassages:
+                    break
+
+                passages.extend(self._chunk_sent(sentence, self.config["passagelen"]))
+
+            if numpassages != 0:
+                passages = passages[:numpassages]
+
+                n_actual_passages = len(passages)
+                for _ in range(numpassages - n_actual_passages):
+                    # randomly use one of previous passages when the document is exhausted
+                    # idx = random.randint(0, n_actual_passages - 1)
+                    # passages.append(passages[idx])
+
+                    # append empty passages
+                    passages.append([""])
+
+                assert len(passages) == self.config["numpassages"]
+
+            self.docid2passages[docid] = sorted(passages, key=len)
+
+    def _build_vocab(self, qids, docids, topics):
+        if self.is_state_cached(qids, docids) and self.config["usecache"]:
+            self.load_state(qids, docids)
+            logger.info("Vocabulary loaded from cache")
+        elif self.config["sentences"]:
+            self.docid2passages = {}
+            self._build_passages_from_sentences(docids)
+            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            self.cache_state(qids, docids)
+        else:
+            logger.info("Building bertpassage vocabulary")
+            self.docid2passages = {}
+
+            for docid in tqdm(docids, "extract passages"):
+                # Naive tokenization based on white space
+                doc = self.index.get_doc(docid).split()
+                passages = self.get_passages_for_doc(doc)
+                self.docid2passages[docid] = passages
+
+            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            self.cache_state(qids, docids)
+
     def exist(self):
         return hasattr(self, "docid2passages") and len(self.docid2passages)
 
@@ -308,6 +373,7 @@ class BertPassage(Extractor):
             pos_bert_segs.append(segs)
 
         data = {
+            "qid": qid,
             "posdocid": posid,
             "pos_bert_input": np.array(pos_bert_inputs, dtype=np.long),
             "pos_mask": np.array(pos_bert_masks, dtype=np.long),
