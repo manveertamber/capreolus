@@ -153,21 +153,9 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
     def predict_step(self, data, **kwargs):
         """ Scores each passage and applies max pooling over it. """
         # prepare input
-        # posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = data
         posdoc_bert_input, posdoc_mask, posdoc_seg, _, _, _ = data
-        # batch_size = tf.shape(posdoc_bert_input)[0]
-
         posdoc_bert_input, posdoc_mask, posdoc_seg = self.convert_input(posdoc_bert_input, posdoc_mask, posdoc_seg)
-        # num_passages = self.extractor.config["numpassages"]
-        # maxseqlen = self.extractor.config["maxseqlen"]
-        #
-        # posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])
-        # posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
-        # posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
-
-        # feed input to model
         passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False, **kwargs)[:, 1]
-        # tf.debugging.assert_equal(tf.shape(passage_scores), batch_size)
         return passage_scores
 
     def score(self, x, **kwargs):
@@ -180,18 +168,6 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         posdoc_bert_input, posdoc_mask, posdoc_seg, negdoc_bert_input, negdoc_mask, negdoc_seg = x
         posdoc_bert_input, posdoc_mask, posdoc_seg = self.convert_input(posdoc_bert_input, posdoc_mask, posdoc_seg)
         negdoc_bert_input, negdoc_mask, negdoc_seg = self.convert_input(negdoc_bert_input, negdoc_mask, negdoc_seg)
-
-        # batch_size = tf.shape(posdoc_bert_input)[0]
-        # num_passages = self.extractor.config["numpassages"]
-        # maxseqlen = self.extractor.config["maxseqlen"]
-
-        # posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])
-        # posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
-        # posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
-        #
-        # negdoc_bert_input = tf.reshape(negdoc_bert_input, [batch_size * num_passages, maxseqlen])
-        # negdoc_mask = tf.reshape(negdoc_mask, [batch_size * num_passages, maxseqlen])
-        # negdoc_seg = tf.reshape(negdoc_seg, [batch_size * num_passages, maxseqlen])
 
         pos_score = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), **kwargs)[:, 1]
         neg_score = self.call((negdoc_bert_input, negdoc_mask, negdoc_seg), **kwargs)[:, 1]
@@ -214,7 +190,7 @@ class TFBERTCedr(Reranker):
         ConfigOption("nirmodel", "KRNM", "which Neural IR model to to integrate with bert. Options: KNRM, DRMM, PACRR"),
 
         # for knrm:
-        ConfigOption(f"knrm_trainkernel", False, "Whether to train KNRM kernel.")
+        ConfigOption(f"knrm_trainkernel", True, "Whether to train KNRM kernel.")
     ]
 
     def build_model(self):
