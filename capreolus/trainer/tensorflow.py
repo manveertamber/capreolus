@@ -362,7 +362,7 @@ class TensorflowTrainer(Trainer):
     def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
         tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
-            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
+            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         return tf_records_dataset
 
