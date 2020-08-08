@@ -95,8 +95,12 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
             if len(x.shape) == 2:  # mask
                 x = tf.expand_dims(x, axis=1)  # from (B, T) to (B, 1, T)
 
-            batch_size = int(x.shape[0] // num_passage)
-            x_list = [x[i*batch_size:(i+1)*batch_size] for i in range(num_passage)]
+            bp, batch_size = int(x.shape[0]), int(x.shape[0] // num_passage)
+            x_list = []
+            for i in range(num_passage):
+                doc = tf.stack([x[j] for j in range(i, bp, num_passage)], axis=0)  # (B, ...)
+                x_list.append(doc)
+
             if mode == "concat":
                 return tf.concat(x_list, axis=2)  # -> (B, 1, T * n_psg) or (B, n_layer, T * n_psg, H)
             elif mode == "avg":
@@ -107,9 +111,9 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
             raise ValueError(f"Unexpected mode: {mode}")
 
         queries, docs = bert_output[:, :, 1:qlen+1, :], bert_output[:, :, qlen+2:-1, :]
-        query_mask, doc_mask = tf.expand_dims(masks[:, 1:qlen+1], axis=1), tf.expand_dims(masks[:, qlen+2:-1], axis=1)
-        # queries, query_mask = [unbatch_psg(x, mode="first") for x in [queries, query_mask]]
-        # docs, doc_mask = [unbatch_psg(x, mode="first") for x in [docs, doc_mask]]
+        query_mask, doc_mask = masks[:, 1:qlen+1], masks[:, qlen+2:-1]
+        queries, query_mask = [unbatch_psg(x, mode="first") for x in [queries, query_mask]]
+        docs, doc_mask = [unbatch_psg(x, mode="concat") for x in [docs, doc_mask]]
         return queries, docs, query_mask, doc_mask
 
     def call(self, x, **kwargs):
@@ -145,10 +149,9 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         num_passages = self.extractor.config["numpassages"]
         maxseqlen = self.extractor.config["maxseqlen"]
 
-        bert_input, mask, seg = bert_input[:, 0], mask[:, 0], seg[:, 0]
-        # bert_input = tf.reshape(bert_input, [batch_size * num_passages, maxseqlen])
-        # mask = tf.reshape(mask, [batch_size * num_passages, maxseqlen])
-        # seg = tf.reshape(seg, [batch_size * num_passages, maxseqlen])
+        bert_input = tf.reshape(bert_input, [batch_size * num_passages, maxseqlen])
+        mask = tf.reshape(mask, [batch_size * num_passages, maxseqlen])
+        seg = tf.reshape(seg, [batch_size * num_passages, maxseqlen])
         return bert_input, mask, seg
 
     def predict_step(self, data, **kwargs):
