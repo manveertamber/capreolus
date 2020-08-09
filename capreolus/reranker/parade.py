@@ -7,13 +7,21 @@ from transformers.modeling_tf_bert import TFBertLayer
 from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 
+pretrained2clsid = {
+    "bert-base-uncased": 101,
+    "bert-large-uncased": 101,
+    "google/electra-base-discriminator": 101,
+    "roberta-base": 0,
+    "albert-base-v2": 2,
+}
 
 class TFParade_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFParade_Class, self).__init__(*args, **kwargs)
+        pretrained = config["pretrained"]
         self.extractor = extractor
         self.config = config
-        self.bert = TFBertModel.from_pretrained("bert-base-uncased")
+        self.bert = TFBertModel.from_pretrained(pretrained)
         self.transformer_layer_1 = TFBertLayer(self.bert.config)
         self.transformer_layer_2 = TFBertLayer(self.bert.config)
         # self.num_passages = (self.extractor.cfg["maxdoclen"] - config["passagelen"]) // self.config["stride"]
@@ -25,7 +33,7 @@ class TFParade_Class(tf.keras.layers.Layer):
         elif config["aggregation"] == "transformer":
             self.aggregation = self.aggregate_using_transformer
             input_embeddings = self.bert.get_input_embeddings()
-            cls_token_id = tf.convert_to_tensor([101])
+            cls_token_id = tf.convert_to_tensor([pretrained2clsid[pretrained]])
             cls_token_id = tf.reshape(cls_token_id, [1, 1])
             self.initial_cls_embedding = input_embeddings([cls_token_id, None, None, None])
             self.initial_cls_embedding = tf.reshape(self.initial_cls_embedding, [1, self.bert.config.hidden_size])
