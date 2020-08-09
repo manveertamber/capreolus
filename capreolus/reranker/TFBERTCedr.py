@@ -126,19 +126,23 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
 
         outputs = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg, output_hidden_states=True)
-        pooled_output = outputs[1]  # (B * num_passage, H)
+        sequence_output, pooled_output = outputs[0], outputs[1]  # (B * num_passage, H)
         _, n_hidden = pooled_output.shape
-        pooled_output = tf.reshape(pooled_output, (-1, self.extractor.config["numpassages"], n_hidden))
-        pooled_output = tf.reduce_mean(pooled_output, axis=1)  # (B, H)
 
         if self.config["modeltype"] == "vbert":
-            cedr_output = pooled_output
+            pooled_output = tf.reshape(pooled_output, (-1, self.extractor.config["numpassages"], n_hidden))
+            cedr_output = tf.reduce_mean(pooled_output, axis=1)  # (B, H)
         else:
             all_layer_output = outputs[2]  # size: 13
             all_layer_output = tf.stack(all_layer_output, axis=1)  # (B, n_layers, H)
             parsed_inputs = self.parse_bert_output(all_layer_output, doc_mask)  # [queries, docs, query_mask, doc_mask]
-            nir_output = self.nir.call(parsed_inputs)  # (B, Q, H) -> (B, K)
-            cedr_output = nir_output if self.config["modeltype"] == "nir" else tf.concat([pooled_output, nir_output], axis=-1)
+            cedr_output = self.nir.call(parsed_inputs)  # (B, Q, H) -> (B, K)
+
+            if self.config["modeltype"] == "cedr":
+                cls = sequence_output[:, 0, :]  # (B * P, H)
+                cls = tf.reshape(cls, (-1, self.extractor.config["numpassages"], n_hidden))  # (B, P, H)
+                cls = tf.reduce_mean(cls, axis=1)  # (B, H)
+                cedr_output = tf.concat([cls, cedr_output], axis=-1)
 
         cedr_output = self.dropout(cedr_output, training=kwargs.get("training", False))
         logits = self.classifier(cedr_output)  # (B, config.num_labels)
