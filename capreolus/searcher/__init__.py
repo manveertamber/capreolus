@@ -88,5 +88,6 @@ class Searcher(ModuleBase):
 from profane import import_all_modules
 
 from .anserini import BM25, BM25RM3, SDM
+from .msmarco import MsmarcoPsg
 
 import_all_modules(__file__, __package__)
