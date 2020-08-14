@@ -17,6 +17,7 @@ DEFAULT_METRICS = [
     "judged_20",
     "judged_200",
     "map",
+    "mrr",
     "ndcg_cut_5",
     "ndcg_cut_10",
     "ndcg_cut_20",
@@ -41,14 +42,49 @@ def judged(qrels, runs, n):
         score = sum(docid in qrels[q] for docid in topn) / len(topn)
         scores.append(score)
 
+    if len(scores) == 0:
+        return 0
+
     return sum(scores) / len(scores)
+
+
+def _mrr(qrel, rundoc):
+    """
+    calculate the mrr for a list of docs from same query
+    :param qrel: dict, mapping the doc id into ground truth label
+    :param rundoc: dict, mapping the doc id into doc score
+    :return: float, the mrr score
+    """
+    if (not rundoc) or (not qrel):
+        return 0.
+
+    pos_docids, pos_doc_ranks = [d for d in rundoc if qrel.get(d, 0) > 0], []
+    if not pos_docids:  # or all([d not in rundoc for d in pos_docids]):
+        return 0.
+
+    rundoc = sorted(rundoc.items(), key=lambda doc_score: float(doc_score[1]), reverse=True)
+    rundoc = [d for d, i in rundoc]
+
+    pos_doc_ranks = [rundoc.index(d) + 1 for d in pos_docids]
+    return 1 / min(pos_doc_ranks)
+
+
+def mrr(qrels, runs, qids=None, aggregate=True):
+    qids = set(qrels.keys()) & set(runs.keys()) & set(qids) if qids else set(qrels.keys()) & set(runs.keys())
+    qrel_rundoc = [(qrels.get(q, {}), runs.get(q, {})) for q in qids]
+    ranks = [_mrr(*qr) for qr in qrel_rundoc]
+
+    if aggregate:
+        return sum(ranks) / len(ranks)
+    else:
+        return dict(zip(qids, ranks))
 
 
 def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     assert isinstance(metrics, list)
-    calc_judged = [int(metric.split("_")[1]) for metric in metrics if metric.startswith("judged_")]
-    for n in calc_judged:
-        metrics.remove(f"judged_{n}")
+    notrec_metrics = [metric for metric in metrics if metric.startswith("judged_") or metric in ["mrr"]]
+    for m in notrec_metrics:
+        metrics.remove(m)
 
     dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
     evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=int(relevance_level))
@@ -56,10 +92,41 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     scores = np.array(scores).mean(axis=0).tolist()
     scores = dict(zip(metrics, scores))
 
-    for n in calc_judged:
-        scores[f"judged_{n}"] = judged(qrels, runs, n)
+    for metric in notrec_metrics:
+        if metric.startswith('judged_'):
+            n = int(metric.split("_")[1])
+            scores[f"judged_{n}"] = judged(qrels, runs, n)
+        if metric == "mrr":
+            scores["mrr"] = mrr(dev_qrels, runs)
 
     return scores
+
+
+def get_eval_runs(qrels, metrics, dev_qids, relevance_level):
+    assert isinstance(metrics, list)
+    notrec_metrics = [m for m in metrics if m.startswith("judged_") or m in ["mrr"]]
+    trec_metrics = [m for m in metrics if m not in notrec_metrics]
+
+    dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
+    # evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
+    # ^ uncomment the above line (and remove line 124 would delete some of the trec_metrics)
+    default_trec = {m: 0 for m in trec_metrics}
+
+    def _eval_runs(runs):
+        assert len(runs) == 1
+        qid = list(runs.keys())[0]
+        evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
+        score = evaluator.evaluate(runs).get(qid, default_trec)
+        for metric in notrec_metrics:
+            if metric.startswith('judged_'):
+                n = int(metric.split("_")[1])
+                score[f"judged_{n}"] = judged(qrels, runs, n)
+            if metric == "mrr":
+                score["mrr"] = mrr(dev_qrels, runs, aggregate=False).get(qid, 0)
+
+        return {qid: score}
+
+    return _eval_runs
 
 
 def eval_runs(runs, qrels, metrics, relevance_level=1):
