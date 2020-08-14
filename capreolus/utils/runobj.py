@@ -107,79 +107,50 @@ class Runs:
         :param evaluator: pytrec Evaluator
         :return: evaluated runs
         """
-        scores = {}
-        batch_runs = []
-        # with Pool(10) as p:
-        # scores = {
-        #     q: s
-        #     for qid, doc2score in tqdm(self.items(), total=273633501)
-        #     for q, s in evaluator.evaluate({qid: doc2score}).items()
-        # }
-        total = 273633501 if not qids else len(qids)
+        # total = 273633501 if not qids else len(qids)
         scores = {
-            # qid: evaluator.evaluate({qid: doc2score})[qid]
-            # qid: evaluator.evaluate({qid: doc2score}).get(qid, {})
-            qid: eval_fn({qid: doc2score}).get(qid, {})
-            for qid, doc2score in tqdm(self.items(), total=total)
+            qid: eval_fn({qid: doc2score})[qid]
+            for qid, doc2score in self.items()
             if not qid or qid in qids
         }
-        # for qid, doc2score in tqdm(self.items(), total=273633501):
-        #     scores[qid] = evaluator.evaluate({qid: doc2score})[qid]
-
-        # scores = {q: s for score in scores for q, s in score}
-        if False:
-            pass
-            # for single_run in self.items():
-            #     batch_runs.append(single_run)
-            #     if len(batch_runs) == 100:
-            #         print("evaluating", end="\t")
-            #         batch_scores = p.map(evaluator.evaluate, batch_runs)
-            #         print("got result", end="\t")
-            #         scores.update({q: s for single_score in batch_scores for q, s in single_score})
-            #         print("combined result")
         return scores
 
 
 def run_test():
-    runfile = "/home/xinyu1zhang/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/searcher-msmarcopsg_searcher/task-rank_filter-False/searcher"
+    # runfile = "/home/xinyu1zhang/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/searcher-msmarcopsg_searcher/task-rank_filter-False/searcher"
+    runfile = "/home/xinyu1zhang/.capreolus/results/collection-robust04/benchmark-robust04/collection-robust04/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.4_fields-title_hits-1000_k1-0.9/task-rank_filter-False/searcher"
     runs = Runs(runfile)
-    # for i, k in enumerate(runs):
-    #     print(k)
-    #     if i == 10:
-    #         break
+    # qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/qrels.msmarcodoc.txt"
+    qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/qrels.robust2004.txt"
 
-    # for i, (qid, doc2score) in enumerate(runs.items()):
-    #     print(doc2score)
-    #     print(qid)
-    #     break
-
-    qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/qrels.msmarcodoc.txt"
     from nirtools.ir import load_qrels
-    from time import time
     import json
-    import os
     from capreolus.evaluator import get_eval_runs
+    from capreolus.evaluator import DEFAULT_METRICS
+    import numpy as np
 
+    metrics = DEFAULT_METRICS
     qrels = load_qrels(qrelfile)
-    fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/msmarcodoc.folds.json"
-    folds = json.load(open(fold_file))["s1"]
-    dev, test = folds["predict"]["dev"], folds["predict"]["test"]
+    # fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/msmarcodoc.folds.json"
+    fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/rob04_yang19_folds.json"
+    folds = json.load(open(fold_file))
 
-    t1 = time()
-    for i, qids in enumerate([dev]):
-        json_fn = f"msmarcopsgresult.{i}.json"
-        if os.path.exists(json_fn):
-            final_result = json.load(open(json_fn))
-        else:
-            eval_fn = get_eval_runs(qrels, ["mrr", "map"], dev_qids=dev, relevance_level=1)
+    scores_allfolds = []
+    for f in folds:
+        fold = folds[f]
+        dev, test = fold["predict"]["dev"], fold["predict"]["test"]
+
+        for i, qids in enumerate([test]):
+            json_fn = f"rob04.{i}.json"
+            eval_fn = get_eval_runs(qrels, metrics, dev_qids=qids, relevance_level=1)
             final_result = runs.evaluate(eval_fn, qids)
-            print(len(final_result), "time: ", time() - t1)
             json.dump(final_result, open(json_fn, "w"))
 
-        scores = [[metrics_dict.get(m, -1) for m in ["mrr", "map"]] for metrics_dict in final_result.values()]
-        import numpy as np
-        scores = np.array(scores).mean(axis=0).tolist()
-        scores = dict(zip(["mrr", "map"], scores))
-        print(scores)
+            scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in final_result.values()]
+            scores_allfolds.extend(scores)
+
+    from pprint import pprint
+    scores_allfolds = np.array(scores_allfolds).mean(axis=0).tolist()
+    pprint(dict(zip(metrics, scores_allfolds)))
 
 run_test()
