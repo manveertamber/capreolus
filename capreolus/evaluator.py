@@ -155,14 +155,14 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
     best_scores = {fold: {primary_metric: 0, "path": None} for fold in folds}
     eval_run_fns = {fold: get_runs_evaluator(
         benchmark.qrels, [primary_metric],
-        dev_qids=(set(qids["train_qids"]) | set(qids["predict"]["dev"])),
+        dev_qids=set(qids["predict"]["dev"]),
         relevance_level=benchmark.relevance_level
     ) for fold, qids in folds.items()}
     for runfile in runfiles:
         runs = Runs(runfile, buffer=benchmark.collection.is_large_collection)
-        for fold in folds:
+        for fold, qids in folds.items():
             eval_run_fn = eval_run_fns[fold]
-            qid2score = runs.evaluate(eval_run_fn)
+            qid2score = runs.evaluate(eval_run_fn, qids=set(qids["predict"]["dev"]))
             score = aggregate_score_list(qid2score.values())[primary_metric]
             if score > best_scores[fold][primary_metric]:
                 best_scores[fold] = {primary_metric: score, "path": runfile}
@@ -176,7 +176,7 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
             dev_qids=test_qids,
             relevance_level=benchmark.relevance_level
         )
-        scores.update(runs.evaluate(test_eval_fn))
+        scores.update(runs.evaluate(test_eval_fn, qids=test_qids))
 
     scores = aggregate_score_list(scores.values())
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
