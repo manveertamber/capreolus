@@ -1,11 +1,8 @@
 import tarfile
-from pathlib import Path
-from multiprocessing import Pool
 
 from capreolus.utils.common import OrderedDefaultDict
 from capreolus.utils.loginit import get_logger
 
-from tqdm import tqdm
 
 logger = get_logger(__name__)
 
@@ -13,13 +10,14 @@ logger = get_logger(__name__)
 class Runs:
     supported_format = ["trec", "tar"]
 
-    def __init__(self, runfile, format="trec"):
+    def __init__(self, runfile, format="trec", buffer=True):
         """ TODO: support init from runs """
         if format not in self.supported_format:
             raise ValueError(f"Unrecognized format: {format}, expected to be one of {' '.join(self.supported_format)}")
 
         self.runfile = runfile
         self.format = format
+        self.buffer = buffer
         self.qids = set()
 
     @staticmethod
@@ -109,43 +107,9 @@ class Runs:
             all qids of current run are returned if None
         :return: evaluated runs
         """
-        scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
-        scores = {qid: score for qid, score in scores.items() if score}
+        if self.buffer:
+            scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
+            scores = {qid: score for qid, score in scores.items() if score}
+        else:
+            scores = eval_runs_fn(self.load_trec_run(self.runfile))
         return scores
-
-
-def run_test():
-    runfile = "/home/xinyu1zhang/.capreolus/results/collection-robust04/benchmark-robust04/collection-robust04/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.4_fields-title_hits-1000_k1-0.9/task-rank_filter-False/searcher"
-    runs = Runs(runfile)
-    qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/qrels.robust2004.txt"
-
-    from nirtools.ir import load_qrels
-    import json
-    from capreolus.evaluator import get_runs_evaluator
-    from capreolus.evaluator import DEFAULT_METRICS
-    import numpy as np
-
-    metrics = DEFAULT_METRICS
-    qrels = load_qrels(qrelfile)
-    fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/rob04_yang19_folds.json"
-    folds = json.load(open(fold_file))
-
-    scores_allfolds = []
-    for f in folds:
-        fold = folds[f]
-        dev, test = fold["predict"]["dev"], fold["predict"]["test"]
-
-        for i, qids in enumerate([test]):
-            json_fn = f"rob04.{i}.json"
-            eval_fn = get_runs_evaluator(qrels, metrics, dev_qids=qids, relevance_level=1)
-            final_result = runs.evaluate(eval_fn)
-            json.dump(final_result, open(json_fn, "w"))
-
-            scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in final_result.values()]
-            scores_allfolds.extend(scores)
-
-    from pprint import pprint
-    scores_allfolds = np.array(scores_allfolds).mean(axis=0).tolist()
-    pprint(dict(zip(metrics, scores_allfolds)))
-
-run_test()
