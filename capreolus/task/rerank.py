@@ -169,26 +169,32 @@ class RerankTask(Task):
         train_output_path = self.get_results_path()
         logger.debug("results path: %s", train_output_path)
 
-        searcher_runs, reranker_runs = self.find_crossvalidated_results()
+        searcher_runfiles, reranker_runfiles = self.find_crossvalidated_results()
 
-        if fold not in reranker_runs:
+        if fold not in reranker_runfiles:
             logger.error("could not find predictions; run the train command first")
             raise ValueError("could not find predictions; run the train command first")
 
-        fold_dev_metrics = evaluator.eval_runs(
-            reranker_runs[fold]["dev"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+        fold_dev_metrics = evaluator.eval_runfile(
+            reranker_runfiles[fold]["dev"],
+            self.benchmark.qrels,
+            evaluator.DEFAULT_METRICS,
+            self.benchmark.relevance_level
         )
         logger.info("rerank: fold=%s dev metrics: %s", fold, fold_dev_metrics)
 
-        fold_test_metrics = evaluator.eval_runs(
-            reranker_runs[fold]["test"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+        fold_test_metrics = evaluator.eval_runfile(
+            reranker_runfiles[fold]["test"],
+            self.benchmark.qrels,
+            evaluator.DEFAULT_METRICS,
+            self.benchmark.relevance_level
         )
         logger.info("rerank: fold=%s test metrics: %s", fold, fold_test_metrics)
 
-        if len(reranker_runs) != len(self.benchmark.folds):
+        if len(reranker_runfiles) != len(self.benchmark.folds):
             logger.info(
                 "rerank: skipping cross-validated metrics because results exist for only %s/%s folds",
-                len(reranker_runs),
+                len(reranker_runfiles),
                 len(self.benchmark.folds),
             )
             return {
@@ -199,26 +205,18 @@ class RerankTask(Task):
             }
 
         logger.info("rerank: average cross-validated metrics when choosing iteration based on '%s':", self.config["optimize"])
-        all_preds = {}
-        for preds in reranker_runs.values():
-            for qid, docscores in preds["test"].items():
-                all_preds.setdefault(qid, {})
-                for docid, score in docscores.items():
-                    all_preds[qid][docid] = score
-
-        cv_metrics = evaluator.eval_runs(
-            all_preds, self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
-        )
-        interpolated_results = evaluator.interpolated_eval(
-            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], evaluator.DEFAULT_METRICS
-        )
-
+        fold2testrunfile = {fold: preds["test"] for fold, preds in reranker_runfiles.items()}
+        cv_metrics = evaluator.merge_test_runs(fold2testrunfile, self.benchmark, evaluator.DEFAULT_METRICS)
+        # interpolated_results = evaluator.interpolated_eval(
+        #     searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], evaluator.DEFAULT_METRICS
+        # )
+        interpolated_results = None
         for metric, score in sorted(cv_metrics.items()):
             logger.info("%25s: %0.4f", metric, score)
 
-        logger.info("interpolated with alphas = %s", sorted(interpolated_results["alphas"].values()))
-        for metric, score in sorted(interpolated_results["score"].items()):
-            logger.info("%25s: %0.4f", metric + " [interp]", score)
+        # logger.info("interpolated with alphas = %s", sorted(interpolated_results["alphas"].values()))
+        # for metric, score in sorted(interpolated_results["score"].items()):
+        #     logger.info("%25s: %0.4f", metric + " [interp]", score)
 
         return {
             "fold_test_metrics": fold_test_metrics,
@@ -228,13 +226,12 @@ class RerankTask(Task):
         }
 
     def find_crossvalidated_results(self):
-        searcher_runs = {}
+        searcher_runfiles = {}
         rank_results = self.rank.evaluate()
         for fold in self.benchmark.folds:
-            searcher_runs[fold] = {"dev": Searcher.load_trec_run(rank_results["path"][fold])}
-            searcher_runs[fold]["test"] = searcher_runs[fold]["dev"]
+            searcher_runfiles[fold] = {"dev": rank_results["path"][fold], "test": rank_results["path"][fold]}
 
-        reranker_runs = {}
+        reranker_runfiles = {}
         train_output_path = self.get_results_path()
         test_output_path = train_output_path / "pred" / "test" / "best"
         dev_output_path = train_output_path / "pred" / "dev" / "best"
@@ -242,9 +239,9 @@ class RerankTask(Task):
             # TODO fix by using multiple Tasks
             test_path = Path(test_output_path.as_posix().replace("fold-" + self.config["fold"], "fold-" + fold))
             if os.path.exists(test_path):
-                reranker_runs.setdefault(fold, {})["test"] = Searcher.load_trec_run(test_path)
+                reranker_runfiles.setdefault(fold, {})["test"] = test_path
 
                 dev_path = Path(dev_output_path.as_posix().replace("fold-" + self.config["fold"], "fold-" + fold))
-                reranker_runs.setdefault(fold, {})["dev"] = Searcher.load_trec_run(dev_path)
+                reranker_runfiles.setdefault(fold, {})["dev"] = dev_path
 
-        return searcher_runs, reranker_runs
+        return searcher_runfiles, reranker_runfiles
