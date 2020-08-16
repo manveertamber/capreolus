@@ -104,7 +104,9 @@ class Runs:
 
     def evaluate(self, eval_runs_fn, qids=None):
         """
-        :param evaluator: pytrec Evaluator
+        :param eval_runs_fn: a function take `trec runs` as parameter and return {qid: {metric: score}}
+        :param qids: an iterator, containing qids expected to return. Optional
+            all qids of current run are returned if None
         :return: evaluated runs
         """
         scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
@@ -136,7 +138,7 @@ def run_test():
         for i, qids in enumerate([test]):
             json_fn = f"rob04.{i}.json"
             eval_fn = get_runs_evaluator(qrels, metrics, dev_qids=qids, relevance_level=1)
-            final_result = runs.evaluate(eval_fn, qids)
+            final_result = runs.evaluate(eval_fn)
             json.dump(final_result, open(json_fn, "w"))
 
             scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in final_result.values()]
