@@ -90,6 +90,10 @@ def aggregate_score_list(metric2score_lst):
     """
     if not isinstance(metric2score_lst, list):
         metric2score_lst = list(metric2score_lst)
+    if len(metric2score_lst) == 0:
+        logger.warning(f"Score list is empty")
+        return {}
+
     metrics = sorted(list(metric2score_lst[0].keys()))
     scores = [[metric2score[m] for m in metrics] for metric2score in metric2score_lst]
     scores = np.array(scores).mean(axis=0).tolist()
@@ -163,14 +167,23 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         for fold, qids in folds.items():
             eval_run_fn = eval_run_fns[fold]
             qid2score = runs.evaluate(eval_run_fn, qids=set(qids["predict"]["dev"]))
-            score = aggregate_score_list(qid2score.values())[primary_metric]
+            score = aggregate_score_list(qid2score.values()).get(primary_metric, -1)
+            if score == -1:
+                logger.warning(f"{primary_metric} cannot be not found. Skip")
+                continue
+
             if score > best_scores[fold][primary_metric]:
                 best_scores[fold] = {primary_metric: score, "path": runfile}
 
     scores = {}
     for fold, score_dict in best_scores.items():
         test_qids = folds[fold]["predict"]["test"]
-        runs = Runs(score_dict["path"], buffer=benchmark.collection.is_large_collection)
+        test_path = score_dict["path"]
+        if not test_path:
+            logger.warning(f"Best path for fold {fold} cannot be find, skip")
+            continue
+
+        runs = Runs(test_path, buffer=benchmark.collection.is_large_collection)
         test_eval_fn = get_runs_evaluator(
             benchmark.qrels, metrics,
             dev_qids=test_qids,
@@ -179,6 +192,8 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         scores.update(runs.evaluate(test_eval_fn, qids=test_qids))
 
     scores = aggregate_score_list(scores.values())
+    if not scores:
+        logger.warning(f"No score can be calculated for test folds. Check if the test qrels are properly prepared.")
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
 
 
