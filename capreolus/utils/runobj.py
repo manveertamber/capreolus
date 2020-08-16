@@ -107,12 +107,8 @@ class Runs:
         :param evaluator: pytrec Evaluator
         :return: evaluated runs
         """
-        # total = 273633501 if not qids else len(qids)
-        scores = {
-            qid: eval_runs_fn({qid: doc2score})[qid]
-            for qid, doc2score in self.items()
-            if not qids or qid in qids
-        }
+        scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
+        scores = {qid: score for qid, score in scores.items() if score}
         return scores
 
 
@@ -136,7 +132,6 @@ def run_test():
     for f in folds:
         fold = folds[f]
         dev, test = fold["predict"]["dev"], fold["predict"]["test"]
-        dev, test = list(set(dev) & set(qrels)), list(set(test) & set(qrels))
 
         for i, qids in enumerate([test]):
             json_fn = f"rob04.{i}.json"
