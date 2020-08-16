@@ -109,7 +109,7 @@ class Runs:
         """
         if self.buffer:
             scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
-            scores = {qid: score for qid, score in scores.items() if score}
+            scores = {qid: score for qid, score in scores.items() if score}  # filter unevaluated qids
         else:
             scores = eval_runs_fn(self.load_trec_run(self.runfile))
         return scores
