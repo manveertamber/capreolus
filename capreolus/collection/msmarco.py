@@ -47,6 +47,7 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
     module_name = "msmarcopsg"
     collection_type = "TrecCollection"
     generator_type = "DefaultLuceneDocumentGenerator"
+    is_large_collection = True
 
     def download_raw(self):
         url = "https://msmarco.blob.core.windows.net/msmarcoranking/collectionandqueries.tar.gz"
