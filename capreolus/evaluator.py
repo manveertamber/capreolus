@@ -6,7 +6,7 @@ import pytrec_eval
 
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
-# from capreolus.utils.runobj import Runs
+from capreolus.utils.runobj import Runs
 
 logger = get_logger(__name__)
 
@@ -83,25 +83,17 @@ def mrr(qrels, runs, qids=None, aggregate=True):
     return sum(ranks) / len(ranks)
 
 
-def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
-    assert isinstance(metrics, list)
-    notrec_metrics = [metric for metric in metrics if metric.startswith("judged_") or metric in ["mrr"]]
-    for m in notrec_metrics:
-        metrics.remove(m)
-
-    dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
-    evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=int(relevance_level))
-    scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in evaluator.evaluate(runs).values()]
+def aggregate_score_list(metric2score_lst):
+    """
+    :param metric2score_lst: a list of {metric: score, ...}
+    :return: a dict {metric: score} by average each metric's score along the list
+    """
+    if not isinstance(metric2score_lst, list):
+        metric2score_lst = list(metric2score_lst)
+    metrics = sorted(list(metric2score_lst[0].keys()))
+    scores = [[metric2score[m] for m in metrics] for metric2score in metric2score_lst]
     scores = np.array(scores).mean(axis=0).tolist()
     scores = dict(zip(metrics, scores))
-
-    for metric in notrec_metrics:
-        if metric.startswith('judged_'):
-            n = int(metric.split("_")[1])
-            scores[f"judged_{n}"] = judged(qrels, runs, n)
-        if metric == "mrr":
-            scores["mrr"] = mrr(dev_qrels, runs)
-
     return scores
 
 
@@ -128,40 +120,6 @@ def get_runs_evaluator(qrels, metrics, dev_qids, relevance_level):
         return scores
 
     return _eval_runs_fn
-
-
-def eval_runs(runs, qrels, metrics, relevance_level=1):
-    """
-    Evaluate runs produced by a ranker (or loaded with Searcher.load_trec_run)
-
-    Args:
-        runs: dict in the format ``{qid: {docid: score}}``
-        qrels: dict containing relevance judgements (e.g., ``benchmark.qrels``)
-        metrics (str or list): metrics to calculate (e.g., ``evaluator.DEFAULT_METRICS``)
-        relevance_level (int): relevance label threshold to use with non-graded metrics (equivalent to trec_eval's --level_for_rel)
-
-    Returns:
-           dict: a dict in the format ``{metric: score}`` containing the average score for each metric
-    """
-    metrics = [metrics] if isinstance(metrics, str) else list(metrics)
-    return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
-
-
-def eval_runfile(runfile, qrels, metrics, relevance_level):
-    """
-    Evaluate a single runfile produced by ranker or reranker
-
-    Args:
-        runfile: str, path to runfile
-        qrels: dict, containing the judgements provided by benchmark
-        metrics: str or list, metrics expected to calculate, e.g. ndcg_cut_20, etc
-
-    Returns:
-        a dict with format {metric: score}, containing the evaluation score of specified metrics
-    """
-    metrics = [metrics] if isinstance(metrics, str) else list(metrics)
-    runs = Searcher.load_trec_run(runfile)
-    return _eval_runs(runs, qrels, metrics, list(qrels.keys()), relevance_level)
 
 
 def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None):
@@ -194,28 +152,33 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         if (f != "done" and not os.path.isdir(os.path.join(runfile_dir, f)))
     ]
 
-    best_scores = {s: {primary_metric: 0, "path": None} for s in folds}
+    best_scores = {fold: {primary_metric: 0, "path": None} for fold in folds}
+    eval_run_fns = {fold: get_runs_evaluator(
+        benchmark.qrels, [primary_metric],
+        dev_qids=(set(qids["train_qids"]) | set(qids["predict"]["dev"])),
+        relevance_level=benchmark.relevance_level
+    ) for fold, qids in folds.items()}
     for runfile in runfiles:
-        runs = Searcher.load_trec_run(runfile)
-        for s, v in folds.items():
-            score = _eval_runs(
-                runs,
-                benchmark.qrels,
-                [primary_metric],
-                (set(v["train_qids"]) | set(v["predict"]["dev"])),
-                benchmark.relevance_level,
-            )[primary_metric]
-            if score > best_scores[s][primary_metric]:
-                best_scores[s] = {primary_metric: score, "path": runfile}
+        runs = Runs(runfile, buffer=benchmark.collection.is_large_collection)
+        for fold in folds:
+            eval_run_fn = eval_run_fns[fold]
+            qid2score = runs.evaluate(eval_run_fn)
+            score = aggregate_score_list(qid2score.values())[primary_metric]
+            if score > best_scores[fold][primary_metric]:
+                best_scores[fold] = {primary_metric: score, "path": runfile}
 
-    test_runs = {}
-    for s, score_dict in best_scores.items():
-        test_qids = folds[s]["predict"]["test"]
-        # any empty (no results) queries need to be added so they contribute zeros to the average
-        test_runs.update({qid: {} for qid in test_qids})
-        test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
+    scores = {}
+    for fold, score_dict in best_scores.items():
+        test_qids = folds[fold]["predict"]["test"]
+        runs = Runs(score_dict["path"], buffer=benchmark.collection.is_large_collection)
+        test_eval_fn = get_runs_evaluator(
+            benchmark.qrels, metrics,
+            dev_qids=test_qids,
+            relevance_level=benchmark.relevance_level
+        )
+        scores.update(runs.evaluate(test_eval_fn))
 
-    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    scores = aggregate_score_list(scores.values())
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
 
 
