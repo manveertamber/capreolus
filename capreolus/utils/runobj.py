@@ -102,14 +102,14 @@ class Runs:
     def __iter__(self):
         return iter(self.keys())
 
-    def evaluate(self, eval_fn, qids=None):
+    def evaluate(self, eval_runs_fn, qids=None):
         """
         :param evaluator: pytrec Evaluator
         :return: evaluated runs
         """
         # total = 273633501 if not qids else len(qids)
         scores = {
-            qid: eval_fn({qid: doc2score})[qid]
+            qid: eval_runs_fn({qid: doc2score})[qid]
             for qid, doc2score in self.items()
             if not qids or qid in qids
         }
@@ -117,21 +117,18 @@ class Runs:
 
 
 def run_test():
-    # runfile = "/home/xinyu1zhang/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/collection-msmarcopsg/benchmark-msmarcopsg_qrelsize-small/searcher-msmarcopsg_searcher/task-rank_filter-False/searcher"
     runfile = "/home/xinyu1zhang/.capreolus/results/collection-robust04/benchmark-robust04/collection-robust04/index-anserini_indexstops-False_stemmer-porter/searcher-BM25_b-0.4_fields-title_hits-1000_k1-0.9/task-rank_filter-False/searcher"
     runs = Runs(runfile)
-    # qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/qrels.msmarcodoc.txt"
     qrelfile = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/qrels.robust2004.txt"
 
     from nirtools.ir import load_qrels
     import json
-    from capreolus.evaluator import get_eval_runs
+    from capreolus.evaluator import get_runs_evaluator
     from capreolus.evaluator import DEFAULT_METRICS
     import numpy as np
 
     metrics = DEFAULT_METRICS
     qrels = load_qrels(qrelfile)
-    # fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/msmarcopsg/small/msmarcodoc.folds.json"
     fold_file = "/home/xinyu1zhang/2021aaai/capreolus/capreolus/data/rob04_yang19_folds.json"
     folds = json.load(open(fold_file))
 
@@ -143,7 +140,7 @@ def run_test():
 
         for i, qids in enumerate([test]):
             json_fn = f"rob04.{i}.json"
-            eval_fn = get_eval_runs(qrels, metrics, dev_qids=qids, relevance_level=1)
+            eval_fn = get_runs_evaluator(qrels, metrics, dev_qids=qids, relevance_level=1)
             final_result = runs.evaluate(eval_fn, qids)
             json.dump(final_result, open(json_fn, "w"))
 
