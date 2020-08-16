@@ -109,15 +109,13 @@ def get_runs_evaluator(qrels, metrics, dev_qids, relevance_level):
     assert isinstance(metrics, list)
     notrec_metrics = [m for m in metrics if m.startswith("judged_") or m in ["mrr"]]
     trec_metrics = [m for m in metrics if m not in notrec_metrics]
-
     dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
-    # evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
-    # ^ uncomment the above line (and remove line 124 would delete some of the trec_metrics)
 
-    def _eval_runs(runs):
-        assert len(runs) == 1
+    def _eval_runs_fn(runs):
         evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
-        qids = list(set(runs) & set(qrels))
+        # ^ move this line outside of _eval_run would cause some of the trec_metrics to be deleted after
+        # the first time of evaluation
+        runs = {qid: runs[qid] for qid in runs if qid in dev_qids}
         scores = evaluator.evaluate(runs)
         for metric in notrec_metrics:
             if metric.startswith('judged_'):
@@ -125,11 +123,11 @@ def get_runs_evaluator(qrels, metrics, dev_qids, relevance_level):
                 cur_scores = judged(dev_qrels, runs, n, aggregate=False)
             if metric == "mrr":
                 cur_scores = mrr(dev_qrels, runs, aggregate=False)
-            scores = {qid: {metric: cur_scores[qid], **scores.get(qid, {})} for qid in qids}
+            scores = {qid: {metric: cur_scores[qid], **scores[qid]} for qid in scores}
 
         return scores
 
-    return _eval_runs
+    return _eval_runs_fn
 
 
 def eval_runs(runs, qrels, metrics, relevance_level=1):
