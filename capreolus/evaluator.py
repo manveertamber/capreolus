@@ -83,7 +83,7 @@ def mrr(qrels, runs, qids=None, aggregate=True):
     return sum(ranks) / len(ranks)
 
 
-def aggregate_score_list(metric2score_lst):
+def _aggregate_score_list(metric2score_lst):
     """
     :param metric2score_lst: a list of {metric: score, ...}
     :return: a dict {metric: score} by average each metric's score along the list
@@ -124,6 +124,37 @@ def get_runs_evaluator(qrels, metrics, dev_qids, relevance_level):
         return scores
 
     return _eval_runs_fn
+
+
+def eval_runfile(runfile, qrels, metrics, relevance_level):
+    runs = Runs(runfile, buffer=True)
+    qids = list(qrels.keys())
+    eval_run_fn = get_runs_evaluator(qrels, metrics, dev_qids=qids, relevance_level=relevance_level)
+    qid2score = runs.evaluate(eval_run_fn, qids=qids)
+    scores = _aggregate_score_list(qid2score.values())
+    return scores
+
+
+def merge_test_runs(fold2testrunfile, benchmark, metrics):
+    scores = {}
+    folds = benchmark.folds
+    for fold, test_path in fold2testrunfile.items():
+        test_qids = folds[fold]["predict"]["test"]
+        if not test_path:
+            logger.warning(f"Best path for fold {fold} cannot be find, skip")
+            continue
+
+        runs = Runs(test_path, buffer=benchmark.collection.is_large_collection)
+        test_eval_fn = get_runs_evaluator(
+            benchmark.qrels,
+            metrics,
+            dev_qids=test_qids,
+            relevance_level=benchmark.relevance_level
+        )
+        scores.update(runs.evaluate(test_eval_fn, qids=test_qids))
+
+    scores = _aggregate_score_list(scores.values())
+    return scores
 
 
 def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None):
@@ -167,7 +198,7 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         for fold, qids in folds.items():
             eval_run_fn = eval_run_fns[fold]
             qid2score = runs.evaluate(eval_run_fn, qids=set(qids["predict"]["dev"]))
-            score = aggregate_score_list(qid2score.values()).get(primary_metric, -1)
+            score = _aggregate_score_list(qid2score.values()).get(primary_metric, -1)
             if score == -1:
                 logger.warning(f"{primary_metric} cannot be not found. Skip")
                 continue
@@ -175,23 +206,8 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
             if score > best_scores[fold][primary_metric]:
                 best_scores[fold] = {primary_metric: score, "path": runfile}
 
-    scores = {}
-    for fold, score_dict in best_scores.items():
-        test_qids = folds[fold]["predict"]["test"]
-        test_path = score_dict["path"]
-        if not test_path:
-            logger.warning(f"Best path for fold {fold} cannot be find, skip")
-            continue
-
-        runs = Runs(test_path, buffer=benchmark.collection.is_large_collection)
-        test_eval_fn = get_runs_evaluator(
-            benchmark.qrels, metrics,
-            dev_qids=test_qids,
-            relevance_level=benchmark.relevance_level
-        )
-        scores.update(runs.evaluate(test_eval_fn, qids=test_qids))
-
-    scores = aggregate_score_list(scores.values())
+    fold2testrunfile = {fold: score_dict["path"] for fold, score_dict in best_scores.items()}
+    scores = merge_test_runs(fold2testrunfile, benchmark, metrics)
     if not scores:
         logger.warning(f"No score can be calculated for test folds. Check if the test qrels are properly prepared.")
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
