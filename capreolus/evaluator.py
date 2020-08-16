@@ -1,10 +1,12 @@
 import os
+from collections import defaultdict
 
 import numpy as np
 import pytrec_eval
 
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
+# from capreolus.utils.runobj import Runs
 
 logger = get_logger(__name__)
 
@@ -27,12 +29,13 @@ DEFAULT_METRICS = [
 ]
 
 
-def judged(qrels, runs, n):
-    scores = []
+def judged(qrels, runs, n, aggregate=True):
+    qids, scores = [], []
     for q, rundocs in runs.items():
         if q not in qrels:
             logger.error(f"{q} in run files cannot be found in qrels")
             continue
+        qids.append(q)
 
         if len(rundocs) == 0:
             scores.append(0)
@@ -42,10 +45,10 @@ def judged(qrels, runs, n):
         score = sum(docid in qrels[q] for docid in topn) / len(topn)
         scores.append(score)
 
-    if len(scores) == 0:
-        return 0
+    if not aggregate:
+        return dict(zip(qids, scores))
 
-    return sum(scores) / len(scores)
+    return sum(scores) / len(scores) if len(scores) != 0 else 0
 
 
 def _mrr(qrel, rundoc):
@@ -74,10 +77,10 @@ def mrr(qrels, runs, qids=None, aggregate=True):
     qrel_rundoc = [(qrels.get(q, {}), runs.get(q, {})) for q in qids]
     ranks = [_mrr(*qr) for qr in qrel_rundoc]
 
-    if aggregate:
-        return sum(ranks) / len(ranks)
-    else:
+    if not aggregate:
         return dict(zip(qids, ranks))
+
+    return sum(ranks) / len(ranks)
 
 
 def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
@@ -102,7 +105,7 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     return scores
 
 
-def get_eval_runs(qrels, metrics, dev_qids, relevance_level):
+def get_runs_evaluator(qrels, metrics, dev_qids, relevance_level):
     assert isinstance(metrics, list)
     notrec_metrics = [m for m in metrics if m.startswith("judged_") or m in ["mrr"]]
     trec_metrics = [m for m in metrics if m not in notrec_metrics]
@@ -110,21 +113,21 @@ def get_eval_runs(qrels, metrics, dev_qids, relevance_level):
     dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
     # evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
     # ^ uncomment the above line (and remove line 124 would delete some of the trec_metrics)
-    default_trec = {m: 0 for m in trec_metrics}
 
     def _eval_runs(runs):
         assert len(runs) == 1
-        qid = list(runs.keys())[0]
         evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, trec_metrics, relevance_level=int(relevance_level))
-        score = evaluator.evaluate(runs).get(qid, default_trec)
+        qids = list(set(runs) & set(qrels))
+        scores = evaluator.evaluate(runs)
         for metric in notrec_metrics:
             if metric.startswith('judged_'):
                 n = int(metric.split("_")[1])
-                score[f"judged_{n}"] = judged(qrels, runs, n)
+                cur_scores = judged(dev_qrels, runs, n, aggregate=False)
             if metric == "mrr":
-                score["mrr"] = mrr(dev_qrels, runs, aggregate=False).get(qid, 0)
+                cur_scores = mrr(dev_qrels, runs, aggregate=False)
+            scores = {qid: {metric: cur_scores[qid], **scores.get(qid, {})} for qid in qids}
 
-        return {qid: score}
+        return scores
 
     return _eval_runs
 
