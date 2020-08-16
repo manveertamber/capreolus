@@ -111,7 +111,7 @@ class Runs:
         scores = {
             qid: eval_fn({qid: doc2score})[qid]
             for qid, doc2score in self.items()
-            if not qid or qid in qids
+            if not qids or qid in qids
         }
         return scores
 
@@ -139,6 +139,7 @@ def run_test():
     for f in folds:
         fold = folds[f]
         dev, test = fold["predict"]["dev"], fold["predict"]["test"]
+        dev, test = list(set(dev) & set(qrels)), list(set(test) & set(qrels))
 
         for i, qids in enumerate([test]):
             json_fn = f"rob04.{i}.json"
