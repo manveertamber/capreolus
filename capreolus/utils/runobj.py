@@ -18,7 +18,14 @@ class Runs:
         self.runfile = runfile
         self.format = format
         self.buffer = buffer
-        self.qids = set()
+        self.qid2position = {}
+
+        self.bytef = open(self.runfile, "rb")
+        self.prepare_qid2pos()
+
+
+    def __del__(self):
+        self.bytef.close()
 
     @staticmethod
     def load_trec_run(fn):
@@ -57,31 +64,65 @@ class Runs:
     def _open_runfile(self):
         return open(self.runfile) if self.format == "trec" else tarfile.open(self.runfile)
 
-    def keys(self):
-        if not self.qids:  # the first time
-            f = self._open_runfile()
-            for line in f:
-                qid = line.split()[0]
-                if qid in self.qids:
-                    continue
+    def prepare_qid2pos(self):
+        last_end = 0  # the cursor position after last read()
+        assert not self.qid2position
+        f = self._open_runfile()
+        while True:
+            line = f.readline()
+            if not line:
+                break
 
-                self.qids.add(qid)
-                yield qid
-        else:
-            for qid in sorted(list(self.qids), key=lambda x: int(x)):
-                yield qid
+            qid = line.split()[0]
+            if qid in self.qid2position:
+                start = self.qid2position[qid][0]
+                self.qid2position[qid][1] = f.tell() - start
+            else:  # new qid
+                self.qid2position[qid] = [last_end, f.tell()]
+
+            last_end = f.tell()
+
+    def keys(self):
+        for qid in self.qid2position:
+            yield qid
 
     def values(self):
-        # assume
-        pass
+        """
+        now it behaves differently with dic.values: instead of
+        returning all doc2score, it return all docids
+        TODO:
+        1. don't count documents from deleted qid
+        2. rename this function as docids or getdocids
+        """
+        assert self.qid2position
+        docids = set()
+        # don't maintain this in obj attribute since
+        # (1) it might change after some qid is deleted
+        # (2) reduce the deepcopy overhead
+        f = self._open_runfile()
+        for line in f:
+            line = line.split()
+            qid, docid = line[0], line[2]  # qid, Q0, docid, ...
+            if qid not in self.qid2position:
+                continue
+
+            if docid in docids:
+                continue
+
+            docids.add(docid)
+            yield docid
 
     def items(self):
+        assert self.qid2position  # must be called after qid2position is fully prepared
+
         # assume records with same qid is same
         f = self._open_runfile()
         last_qid = -1
         doc2score = {}
         for line in f:
             qid, _, docid, rank, score, _ = line.strip().split()
+            if qid not in self.qid2position:  # ignore deleted terms
+                continue
 
             if last_qid == -1:
                 last_qid = qid
@@ -99,6 +140,20 @@ class Runs:
 
     def __iter__(self):
         return iter(self.keys())
+
+    def __getitem__(self, qid):
+        if qid not in self.qid2position:
+            raise KeyError(f"Cannot find {qid} in current run")
+        start, offset = self.qid2position[qid]
+        self.bytef.seek(start, 0)  # set cursor to position `start`, counting from the beginning of the file
+        lines = self.bytef.read(offset).decode("utf-8").rstrip("\n").split("\n")
+        docids = [l.split()[2] for l in lines]
+        return docids
+
+    def __delitem__(self, qid):
+        if qid not in self.qid2position:
+            raise KeyError(f"Cannot find {qid} in current run")
+        del self.qid2position[qid] # TODO: delete corresponding doc terms
 
     def evaluate(self, eval_runs_fn, qids=None):
         """
