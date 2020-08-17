@@ -166,5 +166,8 @@ class Runs:
             scores = {qid: eval_runs_fn({qid: doc2score}).get(qid, {}) for qid, doc2score in self.items() if not qids or qid in qids}
             scores = {qid: score for qid, score in scores.items() if score}  # filter unevaluated qids
         else:
-            scores = eval_runs_fn(self.load_trec_run(self.runfile))
+            runs = self.load_trec_run(self.runfile)
+            if qids:
+                runs = {qid: runs[qid] for qid in runs if qid in qids}
+            scores = eval_runs_fn(runs)
         return scores
