@@ -86,19 +86,11 @@ class Runs:
         for qid in self.qid2position:
             yield qid
 
-    def values(self):
-        """
-        now it behaves differently with dic.values: instead of
-        returning all doc2score, it return all docids
-        TODO:
-        1. don't count documents from deleted qid
-        2. rename this function as docids or getdocids
-        """
+    def docids(self):
         assert self.qid2position
         docids = set()
         # don't maintain this in obj attribute since
-        # (1) it might change after some qid is deleted
-        # (2) reduce the deepcopy overhead
+        # (1) it might change after some qid is deleted (2) reduce the deepcopy overhead
         f = self._open_runfile()
         for line in f:
             line = line.split()
