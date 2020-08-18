@@ -1,8 +1,9 @@
 import sys
 import tensorflow as tf
 from tensorflow.python.keras.engine import data_adapter
-from transformers import TFBertModel, TFBertForSequenceClassification
+from transformers import TFAutoModel
 from transformers.modeling_tf_bert import TFBertLayer
+from transformers.modeling_tf_albert import TFAlbertLayer
 
 from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
@@ -15,19 +16,24 @@ pretrained2clsid = {
     "albert-base-v2": 2,
 }
 
+
 class TFParade_Class(tf.keras.layers.Layer):
     def __init__(self, extractor, config, *args, **kwargs):
         super(TFParade_Class, self).__init__(*args, **kwargs)
         pretrained = config["pretrained"]
         self.extractor = extractor
         self.config = config
-        self.bert = TFBertModel.from_pretrained(pretrained)
+        self.bert = TFAutoModel.from_pretrained(pretrained)
+        # self.bert = TFBertModel.from_pretrained(pretrained)
         self.transformer_layer_1 = TFBertLayer(self.bert.config)
         self.transformer_layer_2 = TFBertLayer(self.bert.config)
+        # self.transformer_layer_1 = TFBertLayer(BertConfig.from_pretrained("bert-base-uncased"))
+        # self.transformer_layer_2 = TFBertLayer(BertConfig.from_pretrained("bert-base-uncased"))
         # self.num_passages = (self.extractor.cfg["maxdoclen"] - config["passagelen"]) // self.config["stride"]
         self.num_passages = extractor.config["numpassages"]
         self.maxseqlen = extractor.config["maxseqlen"]
         self.linear = tf.keras.layers.Dense(1, input_shape=(self.bert.config.hidden_size,))
+
         if config["aggregation"] == "maxp":
             self.aggregation = self.aggregate_using_maxp
         elif config["aggregation"] == "transformer":
@@ -35,8 +41,11 @@ class TFParade_Class(tf.keras.layers.Layer):
             input_embeddings = self.bert.get_input_embeddings()
             cls_token_id = tf.convert_to_tensor([pretrained2clsid[pretrained]])
             cls_token_id = tf.reshape(cls_token_id, [1, 1])
+            # print(">>> hidden_size: ", [self.num_passages + 1, self.bert.config.hidden_size])
             self.initial_cls_embedding = input_embeddings([cls_token_id, None, None, None])
+            # print(">>> initial_cls_embedding: ", self.initial_cls_embedding.shape)
             self.initial_cls_embedding = tf.reshape(self.initial_cls_embedding, [1, self.bert.config.hidden_size])
+            # print(">>> initial_cls_embedding: (after) ", self.initial_cls_embedding.shape)
             initializer = tf.random_normal_initializer(stddev=0.02)
             full_position_embeddings = tf.Variable(initial_value=initializer(shape=[self.num_passages+1, self.bert.config.hidden_size]), name="passage_position_embedding")
             self.full_position_embeddings = tf.expand_dims(full_position_embeddings, axis=0)

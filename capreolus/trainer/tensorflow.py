@@ -134,13 +134,14 @@ class TensorflowTrainer(Trainer):
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
 
             def is_bert_parameters(name):
-                if "bert" in name:
+                name = name.lower()
+                if "/bert/" in name:
                     return True
-                if "electra" in name:
+                if "/electra/" in name:
                     return True
-                if "roberta" in name:
+                if "/roberta/" in name:
                     return True
-                if "albert" in name:
+                if "/albert/" in name:
                     return True
                 return False
 

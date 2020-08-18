@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine import data_adapter
-from transformers import TFBertModel
+from transformers import TFAutoModel, TFBertModel
 
 from profane import ConfigOption, Dependency
 from capreolus.reranker import Reranker
@@ -70,10 +70,10 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
         self.extractor = extractor
         self.config = config
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
-        self.bert = TFBertModel.from_pretrained(
+        self.bert = TFAutoModel.from_pretrained(
             config["pretrained"],
-            output_hidden_states=True,
-            hidden_dropout_prob=dropout_rate,
+            # output_hidden_states=True,
+            # hidden_dropout_prob=dropout_rate,
         )
         self.classifier = tf.keras.layers.Dense(
             2,
@@ -127,9 +127,11 @@ class TFBERTCedr_Class(tf.keras.layers.Layer):
 
         outputs = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg, output_hidden_states=True)
         sequence_output, pooled_output = outputs[0], outputs[1]  # (B * num_passage, H)
-        _, n_hidden = pooled_output.shape
+        print("*"*20, type(pooled_output), len(pooled_output), pooled_output.shape)
+        _, n_hidden = pooled_output.shape[0], pooled_output.shape[1]
 
         if self.config["modeltype"] == "vbert":
+            # TODO: since ELECTRA dont really have pooled output, add a pooler layer for it
             pooled_output = tf.reshape(pooled_output, (-1, self.extractor.config["numpassages"], n_hidden))
             cedr_output = tf.reduce_mean(pooled_output, axis=1)  # (B, H)
         else:

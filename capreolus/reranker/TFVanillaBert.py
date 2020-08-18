@@ -1,7 +1,5 @@
 import tensorflow as tf
-from profane import ConfigOption, Dependency
-from tensorflow.python.keras.engine import data_adapter
-from transformers import TFBertForSequenceClassification
+from transformers import TFAutoModelForSequenceClassification, TFElectraModel
 
 from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
@@ -16,7 +14,15 @@ class TFVanillaBert_Class(tf.keras.layers.Layer):
         self.extractor = extractor
 
         # TFBertForSequenceClassification contains both the BERT and the linear classifier layers
-        self.bert = TFBertForSequenceClassification.from_pretrained(config["pretrained"], hidden_dropout_prob=0.1)
+        if "electra" in config["pretrained"]:
+            self.bert = TFElectraModel.from_pretrained(config["pretrained"])
+            self.classifier = tf.keras.layers.Dense(
+                2,
+                kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=0.02),
+                name="classifier",
+            )
+        else:
+            self.bert = TFAutoModelForSequenceClassification.from_pretrained(config["pretrained"])  #, hidden_dropout_prob=0.1)
 
         assert extractor.config["numpassages"] == 1, "numpassages should be 1 for TFVanillaBERT"
         self.config = config
@@ -26,7 +32,20 @@ class TFVanillaBert_Class(tf.keras.layers.Layer):
         Returns logits of shape [2]
         """
         doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
-        doc_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+
+        batch_size = tf.shape(doc_bert_input)[0]
+        maxseqlen = self.extractor.config["maxseqlen"]
+
+        doc_bert_input = tf.reshape(doc_bert_input, [batch_size, maxseqlen])
+        doc_mask = tf.reshape(doc_mask, [batch_size, maxseqlen])
+        doc_seg = tf.reshape(doc_seg, [batch_size, maxseqlen])
+
+        if "electra" in self.config["pretrained"]:
+            last_hidden_states = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+            pooled_output = last_hidden_states[:, 0]   # (B, 512, H) -> (B, H)
+            doc_scores = self.classifier(pooled_output)  # (B, 2)
+        else:
+            doc_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
 
         return doc_scores
 
@@ -37,9 +56,9 @@ class TFVanillaBert_Class(tf.keras.layers.Layer):
         tf.debugging.assert_equal(num_passages, 1)
         maxseqlen = self.extractor.config["maxseqlen"]
 
-        posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size * num_passages, maxseqlen])
-        posdoc_mask = tf.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
-        posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
+        posdoc_bert_input = tf.reshape(posdoc_bert_input, [batch_size, maxseqlen])
+        posdoc_mask = tf.reshape(posdoc_mask, [batch_size, maxseqlen])
+        posdoc_seg = tf.reshape(posdoc_seg, [batch_size, maxseqlen])
 
         doc_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 1]
         tf.debugging.assert_equal(tf.shape(doc_scores), [batch_size])
