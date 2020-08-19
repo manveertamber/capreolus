@@ -41,11 +41,8 @@ class TFParade_Class(tf.keras.layers.Layer):
             input_embeddings = self.bert.get_input_embeddings()
             cls_token_id = tf.convert_to_tensor([pretrained2clsid[pretrained]])
             cls_token_id = tf.reshape(cls_token_id, [1, 1])
-            # print(">>> hidden_size: ", [self.num_passages + 1, self.bert.config.hidden_size])
             self.initial_cls_embedding = input_embeddings([cls_token_id, None, None, None])
-            # print(">>> initial_cls_embedding: ", self.initial_cls_embedding.shape)
             self.initial_cls_embedding = tf.reshape(self.initial_cls_embedding, [1, self.bert.config.hidden_size])
-            # print(">>> initial_cls_embedding: (after) ", self.initial_cls_embedding.shape)
             initializer = tf.random_normal_initializer(stddev=0.02)
             full_position_embeddings = tf.Variable(initial_value=initializer(shape=[self.num_passages+1, self.bert.config.hidden_size]), name="passage_position_embedding")
             self.full_position_embeddings = tf.expand_dims(full_position_embeddings, axis=0)
@@ -96,7 +93,6 @@ class TFParade_Class(tf.keras.layers.Layer):
         # print("transformer_out_2 shape is {}".format(tf.shape(transformer_out_2)))
         # transformer_out_2 = tf.reshape(transformer_out_2, [batch_size, self.num_passages, self.bert.config.hidden_size])
         # scores = self.linear(transformer_out_2)
-
         return self.linear(aggregated)
 
     def predict_step(self, data):
