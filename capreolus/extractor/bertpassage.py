@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 from collections import defaultdict
 
@@ -316,6 +317,7 @@ class BertPassage(Extractor):
             self.docid2passages[docid] = sorted(passages, key=len)
 
     def _build_vocab(self, qids, docids, topics):
+        print("inside _build_vocab")
         if self.is_state_cached(qids, docids) and self.config["usecache"]:
             self.load_state(qids, docids)
             logger.info("Vocabulary loaded from cache")
@@ -328,13 +330,25 @@ class BertPassage(Extractor):
             logger.info("Building bertpassage vocabulary")
             self.docid2passages = {}
 
+            """
+            print("qid: ", qids)
+            for qid in qids:
+                print(qid)
+                print(self.tokenizer.tokenize(topics[qid]))
+            """
+            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            print("total number of q: ", len(self.qid2toks), sys.getsizeof(self.qid2toks)/(1024**1024), "MB")
+            n_docs = 0
             for docid in tqdm(docids, "extract passages"):
+                if n_docs % 2000 == 0:
+                    print(f"{n_docs} are processed")
                 # Naive tokenization based on white space
                 doc = self.index.get_doc(docid).split()
                 passages = self.get_passages_for_doc(doc)
                 self.docid2passages[docid] = passages
+                n_docs += 1
 
-            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            print("total number of q: ", len(self.qid2toks), len(self.docid2passages), sys.getsizeof(self.docid2passages)/(1024**3), "GB")
             self.cache_state(qids, docids)
 
     def exist(self):
@@ -350,6 +364,7 @@ class BertPassage(Extractor):
         self.qid2toks = defaultdict(list)
         self.docid2passages = None
 
+        print("inside extractor.preprocessing: ", type(qids), type(docids))
         self._build_vocab(qids, docids, topics)
 
     def id2vec(self, qid, posid, negid=None, label=None):

@@ -27,7 +27,8 @@ class AnseriniIndex(Index):
         collection_path, document_type, generator_type = self.collection.get_path_and_types()
 
         anserini_fat_jar = Anserini.get_fat_jar()
-        if self.collection.is_large_collection:
+        # if self.collection.is_large_collection:
+        if False:
             cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx31G -Dapp.name='IndexCollection' io.anserini.index.IndexCollection -collection {document_type} -generator {generator_type} -threads {MAX_THREADS} -input {collection_path} -index {outdir} -stemmer {stemmer} {stops}"
         else:
             cmd = f"java -classpath {anserini_fat_jar} -Xms512M -Xmx31G -Dapp.name='IndexCollection' io.anserini.index.IndexCollection -collection {document_type} -generator {generator_type} -threads {MAX_THREADS} -input {collection_path} -index {outdir} -storePositions -storeDocvectors -storeContents -stemmer {stemmer} {stops}"

@@ -49,8 +49,10 @@ class Extractor(ModuleBase):
         """
         Returns the path to the cache file used to store the extractor state, regardless of whether it exists or not
         """
-        sorted_qids = sorted(qids)
-        sorted_docids = sorted(docids)
+        # sorted_qids = sorted(qids)
+        # sorted_docids = sorted(docids)
+        sorted_qids = list(range(10))
+        sorted_docids = list(range(20))
         return self.get_cache_path() / hashlib.md5(str(sorted_qids + sorted_docids).encode("utf-8")).hexdigest()
 
     def is_state_cached(self, qids, docids):
