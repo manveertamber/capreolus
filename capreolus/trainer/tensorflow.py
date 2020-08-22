@@ -57,7 +57,7 @@ class TensorflowTrainer(Trainer):
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
     @staticmethod
-    def get_preds_in_trec_format(predictions, dev_data):
+    def get_preds_in_trec_format(predictions, dev_data, write_to_file=True, pred_path=""):
         """
         Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
         As a side effect, also writes the predictions into a file in the trec format
@@ -65,11 +65,22 @@ class TensorflowTrainer(Trainer):
         logger.debug("There are {} predictions".format(len(predictions)))
         pred_dict = defaultdict(lambda: dict())
 
+        if write_to_file:
+            f = open(pred_path, "w", encoding="utf-8")
+
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
             # Pytrec_eval has problems with high precision floats
-            pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
+            score = predictions[i].numpy().astype(np.float16).item()
+            if write_to_file:
+                if qid not in pred_dict:  # new qid: empty cache
+                    pred_dict = defaultdict(lambda: dict())
+                f.write(f"{qid} Q0 {docid} 1 {score} tmp_dev_score")  # 1 is the placeholder for rank
+            pred_dict[qid][docid] = score
 
-        return dict(pred_dict)
+        if write_to_file:
+            f.close()
+        else:
+            return dict(pred_dict)
 
     def build(self):
         tf.random.set_seed(self.config["seed"])
@@ -238,8 +249,10 @@ class TensorflowTrainer(Trainer):
                         for p in pred_batch:
                             dev_predictions.extend(p)
 
-                    trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
-                    metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                    tmp_trec_pred_path = self.get_cache_path() / "tmp_trec_pred"
+                    trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data, write_to_file=True, pred_path=tmp_trec_pred_path)
+                    metrics = evaluator.eval_runfile(tmp_trec_pred_path, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                    # metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
                         logger.info("Writing checkpoint")
@@ -274,9 +287,11 @@ class TensorflowTrainer(Trainer):
             for p in pred_batch:
                 predictions.extend(p)
 
-        trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
+        # tmp_trec_pred_path = self.get_cache_path() / "tmp_trec_pred"
+        # trec_preds = self.get_preds_in_trec_format(predictions, pred_data, write_to_file=True, pred_path=pred_fn)
+        self.get_preds_in_trec_format(predictions, pred_data, write_to_file=True, pred_path=pred_fn)
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
-        Searcher.write_trec_run(trec_preds, pred_fn)
+        # Searcher.write_trec_run(trec_preds, pred_fn)
 
         return trec_preds
 
