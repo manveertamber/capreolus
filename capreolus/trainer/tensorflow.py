@@ -51,6 +51,8 @@ class TensorflowTrainer(Trainer):
         ConfigOption("decaystep", 3),
         ConfigOption("decay", 0.96),
         ConfigOption("decaytype", None),
+        ConfigOption("warmupbert", True, "whether to apply warmup on bert variables"),
+        ConfigOption("warmupnonbert", True, "whether to apply warmup on nonbert variables"),
     ]
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
@@ -132,13 +134,14 @@ class TensorflowTrainer(Trainer):
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
 
             def is_bert_parameters(name):
-                if "bert" in name:
+                name = name.lower()
+                if "/bert/" in name:
                     return True
-                if "electra" in name:
+                if "/electra/" in name:
                     return True
-                if "roberta" in name:
+                if "/roberta/" in name:
                     return True
-                if "albert" in name:
+                if "/albert/" in name:
                     return True
                 return False
 
@@ -192,9 +195,9 @@ class TensorflowTrainer(Trainer):
         total_loss = 0
         iter_bar = tqdm(total=self.config["itersize"])
 
-        initial_lr = self.change_lr(epoch, self.config["bertlr"])
+        initial_lr = self.change_lr(epoch, self.config["bertlr"], do_warmup=self.config["warmupbert"])
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
-        initial_lr = self.change_lr(epoch, self.config["lr"])
+        initial_lr = self.change_lr(epoch, self.config["lr"], do_warmup=self.config["warmupnonbert"])
         K.set_value(optimizer_1.lr, K.get_value(initial_lr))
 
         train_records = train_records.shuffle(100000)
@@ -213,9 +216,9 @@ class TensorflowTrainer(Trainer):
                 epoch += 1
 
                 # Do warmup and decay
-                new_lr = self.change_lr(epoch, self.config["bertlr"])
+                new_lr = self.change_lr(epoch, self.config["bertlr"], do_warmup=self.config["warmupbert"])
                 K.set_value(optimizer_2.lr, K.get_value(new_lr))
-                new_lr = self.change_lr(epoch, self.config["lr"])
+                new_lr = self.change_lr(epoch, self.config["lr"], do_warmup=self.config["warmupnonbert"])
                 K.set_value(optimizer_1.lr, K.get_value(new_lr))
 
                 iter_bar.close()
@@ -314,7 +317,11 @@ class TensorflowTrainer(Trainer):
 
                 # TODO: Add checks to make sure that the child dir is not empty
                 if prefix == required_prefix and sample_count >= required_sample_count:
-                    return "{0}{1}".format(parent_dir, child_dir)
+                    if self.tpu:
+                        return "{0}{1}".format(parent_dir, child_dir)
+                    else:
+                        return "{0}/{1}".format(parent_dir, child_dir)
+
 
             return None
 
@@ -328,7 +335,10 @@ class TensorflowTrainer(Trainer):
 
         if self.config["usecache"] and cached_tf_record_dir is not None:
             filenames = tf.io.gfile.listdir(cached_tf_record_dir)
-            filenames = ["{0}{1}".format(cached_tf_record_dir, name) for name in filenames]
+            if self.tpu:
+                filenames = ["{0}{1}".format(cached_tf_record_dir, name) for name in filenames]
+            else:
+                filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
 
             return self.load_tf_train_records_from_file(reranker, filenames, self.config["batch"])
         else:
@@ -362,7 +372,7 @@ class TensorflowTrainer(Trainer):
     def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
         tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
-            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
+            reranker.extractor.parse_tf_dev_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         return tf_records_dataset
 
@@ -447,13 +457,13 @@ class TensorflowTrainer(Trainer):
 
         return str(filename)
 
-    def change_lr(self, epoch, lr):
+    def change_lr(self, epoch, lr, do_warmup):
         """
         Apply warm up or decay depending on the current epoch
         """
         warmup_steps = self.config["warmupsteps"]
         if warmup_steps and epoch <= warmup_steps:
-            return min(lr * ((epoch + 1) / warmup_steps), lr)
+            return min(lr * ((epoch + 1) / warmup_steps), lr) if do_warmup else lr
         elif self.config["decaytype"] == "exponential":
             return lr * self.config["decay"] ** ((epoch - warmup_steps) / self.config["decaystep"])
         elif self.config["decaytype"] == "linear":
@@ -505,4 +515,5 @@ class TensorflowTrainer(Trainer):
         wrapped_model = self.get_wrapped_model(reranker.model)
         wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
 
+        logger.info(f"Weights loaded from path {train_output_path}")
         return wrapped_model.model
