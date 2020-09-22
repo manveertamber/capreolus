@@ -32,13 +32,18 @@ class TRECCAR(Benchmark):
         return topic_str.replace("enwiki:", "").replace("%20", " ").replace("/", " ").strip()
 
     def download_if_missing(self):
+        if all([f.exists() for f in [self.fold_file, self.qrel_file, self.topic_file]]):
+            return
+
+        self.file_dir.mkdir(exist_ok=True, parents=True)
         """use the ones provided by monobert first """
         monobert_dir = self.get_cache_path() / "tmp" / "monobert_treccar"
+        monobert_dir.mkdir(exist_ok=True, parents=True)
         print("benchmark", monobert_dir)
-        exit(0)
+        # exit(0)
 
-        id2topic = self.file_dir / "id2topic.treccar.txt"
-        id2topic_f, qrel_f, topic_f = open(id2topic), open(self.qrel_file), open(self.topic_file)
+        topic2id_file = self.file_dir / "topic2id_file.treccar.json"
+        qrel_f, topic_f = open(self.qrel_file, "w"), open(self.topic_file, "w")
 
         topic2ori, folds = {}, {setname: [] for setname in ["train", "dev", "test"]}
         for setname in folds:
@@ -54,9 +59,9 @@ class TRECCAR(Benchmark):
                 for line in f:
                     query, _, docid, label = line.strip().split()
                     qid = topic2ori[query]
-                    self.qrel_file.write(f"{qid} 0 {docid} {label}\n")
+                    qrel_f.write(f"{qid} 0 {docid} {label}\n")
 
         json.dump(
             {"s1": {"train_qids": folds["train"], "predict": {"dev": folds["dev"], "test":folds["test"]}}},
-            open(self.fold_file),
-        )
+            open(self.fold_file, "w"))
+        json.dump(topic2ori, open(topic2id_file, "w"))
