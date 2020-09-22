@@ -57,13 +57,14 @@ class TRECCAR(Collection):
         # how much bytes to read for each passage (unless we re-implement the content of cbor.load()
         path, _, _ = self.get_path_and_types()
         splitpath = path.parent / "split"
+        splitpath.mkdir(exist_ok=True, parents=True)
         for subdir in os.listdir(splitpath):
             shutil.rmtree(splitpath / subdir)
             logger.info(f"Existing folder {path / subdir} has been removed before preparing new collections")
 
-        t = time()
+        t0, t = time(), time()
         for i, (tag, pid, psgs) in enumerate(self.itercbor(path / "paragraphcorpus" / "paragraphcorpus.cbor")):
-            if i and i % 30000 == 0:
+            if i and i % 100000 == 0:
                 logger.info(f"{i} documents prepared in {time() - t} sec.")
                 t = time()
 
@@ -71,6 +72,7 @@ class TRECCAR(Collection):
             # mode = "ab" if fn.exist() else "wb"
             fn.parent.mkdir(exist_ok=True, parents=True)
             cbor.dump([tag, pid, psgs], open(fn, "ab"))  # mode
+        logger.info(f"Total: {i} documents is prepared in %.3f min." % ((time() - t0) / 60))
 
     def get_doc(self, doc_id):
         path, _, _ = self.get_path_and_types()
