@@ -56,12 +56,13 @@ class TRECCAR(Collection):
         # while cbor cannot be read using "readline()" etc. so we do not know dircectly
         # how much bytes to read for each passage (unless we re-implement the content of cbor.load()
         path, _, _ = self.get_path_and_types()
-        for subdir in os.listdir(path):
+        splitpath = path / "split"
+        for subdir in os.listdir(splitpath):
             shutil.rmtree(path / subdir)
             logger.info(f"Existing folder {path / subdir} has been removed before preparing new collections")
 
         t = time()
-        for i, (tag, pid, psgs) in enumerate(self.itercbor(path)):
+        for i, (tag, pid, psgs) in enumerate(self.itercbor(path / "paragraphcorpus" / "paragraphcorpus.cbor")):
             if i and i % 30000 == 0:
                 len_info = [len(vv) for k, v in hierachy.items() for kk, vv in v.items()]
                 logger.info(
@@ -70,14 +71,14 @@ class TRECCAR(Collection):
                     f"max #doc per file: {max(len_info)} "
                     f"min #doc per file: {min(len_info)}")
 
-            fn = path / self.get_page_subpath(pid)
+            fn = splitpath / self.get_page_subpath(pid)
             # mode = "ab" if fn.exist() else "wb"
             fn.parent.mkdir(exist_ok=True, parents=True)
             cbor.dump([tag, pid, psgs], open(fn, "ab"))  # mode
 
     def get_doc(self, doc_id):
         path, _, _ = self.get_path_and_types()
-        fn = path / self.get_page_file(doc_id)
+        fn = path / "split" / self.get_page_file(doc_id)
         for tag, pid, psgs in self.itercbor(fn):
             if pid != doc_id:
                 continue
