@@ -60,6 +60,8 @@ class TRECCAR(Collection):
         splitpath.mkdir(exist_ok=True, parents=True)
         for subdir in os.listdir(splitpath):
             shutil.rmtree(splitpath / subdir)
+        for subdir in os.listdir(splitpath):
+            shutil.rmtree(subdir / subdir)
             logger.info(f"Existing folder {path / subdir} has been removed before preparing new collections")
 
         t0, t = time(), time()
