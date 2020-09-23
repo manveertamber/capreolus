@@ -10,12 +10,17 @@ from multiprocessing import Pool
 
 class Runobj:
     def __init__(self, filename):
+        """if the filename does not exist, a new file would be created"""
         self.filename = filename
         self.docids = []
         self.qid2pos = OrderedDict()  # (startpos, offset)
 
         self.fully_loaded = False
-        self.opened_file = open(filename)
+        if not self.filename.exists():  # create the file
+            self.filename.parent.mkdir(exist_ok=True, parents=True)
+            f = open(self.filename, "w")
+            f.close()
+        self.opened_file = open(self.filename)
         self.qidinfo_iterator = self.next_qidinfo()  # used in __getitem__ to find unfetched qids
 
     @staticmethod
@@ -89,6 +94,10 @@ class Runobj:
                     self.docids.append(docid)
                     yield docid
 
+    def items(self):
+        for qid in self.keys():
+            yield qid, self[qid]
+
     def __getitem__(self, qid):
         if qid in self.qid2pos:
             lines = self._get_qidlines(qid)
@@ -109,21 +118,34 @@ class Runobj:
         # with Pool(10) as p:
         for i in tqdm(range(0, len(qids), 1000)):
             cur_qids = qids[i:i+1000]
-            run_evaluator = [({qid: self[qid]}, get_evaluator_fn({qid: qrels[qid]})) for qid in cur_qids]
-            # qid_score_list = p.starmap(single_qrel_run_eval, run_evaluator)  # [(qid, score), ...]
-            qid_score_list = [single_qrel_run_eval(run, ev) for run, ev in run_evaluator]
+            qid_score_list = [
+                get_evaluator_fn({qid: qrels[qid]}).evaluate({qid: self[qid]}) for qid in cur_qids]
             qid_score_list = [
                 (qid, {m: metric2score.get(m, -1) for m in metrics})
                 for qid2metric2score in qid_score_list for qid, metric2score in qid2metric2score.items()]
             qid2scores.update(dict(qid_score_list))
+        return qid2scores
+
+    def reset(self):
+        self.opened_file.close()  # will need to be closed elsewhere
+        self.docids = []
+        self.qid2pos = OrderedDict()  # (startpos, offset)
+
+        self.fully_loaded = False
+        self.qidinfo_iterator = self.next_qidinfo()  # used in __getitem__ to find unfetched qids
+
+    def add(self, source_path, qids):
+        self.reset()
+        with open(self.filename, "a") as f, open(source_path) as fin:
+            for line in fin:
+                qid = line.split()[0]
+                if qid in qids:
+                    f.write(line)
+        self.opened_file = open(self.filename)
 
     @staticmethod
     def interpolate(runobj1, runobj2, outp_fn):
         pass
-
-
-def single_qrel_run_eval(run, evaluator):
-    return evaluator.evaluate(run)
 
 
 if __name__ == "__main__":
@@ -142,4 +164,5 @@ if __name__ == "__main__":
     def get_evaluator_fn(qrel):
         return pytrec_eval.RelevanceEvaluator(qrel, {"map"}, relevance_level=1)
 
-    runobj.evaluate(qrels=qrels, get_evaluator_fn=get_evaluator_fn, metrics=["map"])
+    scores = runobj.evaluate(qrels=qrels, get_evaluator_fn=get_evaluator_fn, metrics=["map"])
+    print(scores)
