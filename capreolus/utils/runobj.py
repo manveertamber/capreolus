@@ -1,12 +1,18 @@
+import pytrec_eval
 from pathlib import Path
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+
+from tqdm import tqdm
+import numpy as np
+
+from multiprocessing import Pool
 
 
 class Runobj:
     def __init__(self, filename):
         self.filename = filename
         self.docids = []
-        self.qid2pos = {}  # (startpos, offset)
+        self.qid2pos = OrderedDict()  # (startpos, offset)
 
         self.fully_loaded = False
         self.opened_file = open(filename)
@@ -86,23 +92,54 @@ class Runobj:
     def __getitem__(self, qid):
         if qid in self.qid2pos:
             lines = self._get_qidlines(qid)
-            return self.lines2rundict(lines)
+            return self.lines2rundict(lines)[qid]
         else:
             for qidinfo in self.qidinfo_iterator:
                 if qid in qidinfo:
-                    return qidinfo
+                    return qidinfo[qid]
             raise KeyError(f"Unfound {qid}")
 
-    def evaluate(self, evaluator):
-        if self.fully_loaded:
-            all_qids = self.keys()
+    def evaluate(self, qrels, get_evaluator_fn, metrics=[]):
+        """ all qids in qrels would be evaluated """
+        qrel_qids, run_qids = list(qrels.keys()), [q for q in self.keys()]
+        if len(qrel_qids) != len(run_qids):  # more accurate one
+            print(f"Mismatch qrels and run qids: {len(qrel_qids)} in qrels and {len(run_qids)} in run file")
+        qids = sorted(list(set(qrel_qids) & set(run_qids)), key=lambda x: int(x))
+        qid2scores = {}
+        # with Pool(10) as p:
+        for i in tqdm(range(0, len(qids), 1000)):
+            cur_qids = qids[i:i+1000]
+            run_evaluator = [({qid: self[qid]}, get_evaluator_fn({qid: qrels[qid]})) for qid in cur_qids]
+            # qid_score_list = p.starmap(single_qrel_run_eval, run_evaluator)  # [(qid, score), ...]
+            qid_score_list = [single_qrel_run_eval(run, ev) for run, ev in run_evaluator]
+            qid_score_list = [
+                (qid, {m: metric2score.get(m, -1) for m in metrics})
+                for qid2metric2score in qid_score_list for qid, metric2score in qid2metric2score.items()]
+            qid2scores.update(dict(qid_score_list))
+
+    @staticmethod
+    def interpolate(runobj1, runobj2, outp_fn):
+        pass
+
+
+def single_qrel_run_eval(run, evaluator):
+    return evaluator.evaluate(run)
 
 
 if __name__ == "__main__":
     runfile = Path(__file__).parent.parent.parent / "test" / "testrun"
     runobj = Runobj(runfile)
-    run30 = runobj["30"]
-    print(run30.keys(), len(run30["30"]))
-    print([q for q in runobj.keys()])
-    run40 = runobj["40"]
-    print(run40.keys(), len(run40["40"]))
+    # run30 = runobj["30"]
+    # print(run30.keys(), len(run30["30"]))
+    # print([q for q in runobj.keys()])
+    # run40 = runobj["40"]
+    # print(run40.keys(), len(run40["40"]))
+
+    qrels = {
+        "1": {"26559195": 1}, "2": {"29061835": 1}, "3": {"28516360": 1}, "4": {"29903896": 1}, "5": {"27388325": 1}
+    }
+
+    def get_evaluator_fn(qrel):
+        return pytrec_eval.RelevanceEvaluator(qrel, {"map"}, relevance_level=1)
+
+    runobj.evaluate(qrels=qrels, get_evaluator_fn=get_evaluator_fn, metrics=["map"])
