@@ -2,10 +2,8 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-from profane import ConfigOption, Dependency
-
-from capreolus import evaluator
-from capreolus.sampler import TrainTripletSampler, PredSampler
+from capreolus import ConfigOption, Dependency, evaluator
+from capreolus.sampler import PredSampler
 from capreolus.searcher import Searcher
 from capreolus.task import Task
 from capreolus.utils.loginit import get_logger
@@ -79,11 +77,11 @@ class RerankTask(Task):
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         train_dataset = self.sampler
         train_dataset.prepare(
-            train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+            train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
         dev_dataset = PredSampler()
         dev_dataset.prepare(
-            dev_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+            dev_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
 
         self.reranker.trainer.train(
@@ -121,7 +119,7 @@ class RerankTask(Task):
 
         if include_train:
             train_dataset = PredSampler(
-                train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level,
+                train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
             )
 
             train_output_path = train_output_path / "pred" / "train" / "best"
@@ -153,7 +151,7 @@ class RerankTask(Task):
                 for idx, (docid, score) in enumerate(docs.items()):
                     if idx >= threshold:
                         break
-                test_run[qid][docid] = score
+                    test_run[qid][docid] = score
 
         test_dataset = PredSampler()
         test_dataset.prepare(
@@ -190,12 +188,14 @@ class RerankTask(Task):
         fold_dev_metrics = evaluator.eval_runs(
             reranker_runs[fold]["dev"], self.benchmark.qrels, self.metrics, self.benchmark.relevance_level
         )
-        logger.info("rerank: fold=%s dev metrics: %s", fold, fold_dev_metrics)
+        pretty_fold_dev_metrics = " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(fold_dev_metrics.items())])
+        logger.info("rerank: fold=%s dev metrics: %s", fold, pretty_fold_dev_metrics)
 
         fold_test_metrics = evaluator.eval_runs(
             reranker_runs[fold]["test"], self.benchmark.qrels, self.metrics, self.benchmark.relevance_level
         )
-        logger.info("rerank: fold=%s test metrics: %s", fold, fold_test_metrics)
+        pretty_fold_test_metrics = " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(fold_test_metrics.items())])
+        logger.info("rerank: fold=%s test metrics: %s", fold, pretty_fold_test_metrics)
 
         if len(reranker_runs) != len(self.benchmark.folds):
             logger.info(

@@ -1,6 +1,4 @@
 import tensorflow as tf
-from profane import ConfigOption, Dependency
-from tensorflow.python.keras.engine import data_adapter
 from transformers import TFBertForSequenceClassification
 
 from capreolus import ConfigOption, Dependency
@@ -63,10 +61,10 @@ class TFVanillaBert_Class(tf.keras.layers.Layer):
 @Reranker.register
 class TFVanillaBERT(Reranker):
     """
-        TensorFlow implementation of Vanilla BERT.
-        Input is of the form [CLS] sentence A [SEP] sentence B [SEP]
-        The "score" of a query (sentence A) - document (sentence B) pair is the probability that the document is relevant
-        to the query. This is achieved through a linear classifier layer attached to BERT's last layer and using the logits[1] as the score.
+    TensorFlow implementation of Vanilla BERT.
+    Input is of the form [CLS] sentence A [SEP] sentence B [SEP]
+    The "score" of a query (sentence A) - document (sentence B) pair is the probability that the document is relevant
+    to the query. This is achieved through a linear classifier layer attached to BERT's last layer and using the logits[1] as the score.
     """
 
     module_name = "TFVanillaBERT"

@@ -1,5 +1,4 @@
 from transformers import AutoTokenizer
-
 from capreolus import ConfigOption
 
 from . import Tokenizer

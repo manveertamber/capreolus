@@ -1,9 +1,8 @@
-import sys
 import tensorflow as tf
 from tensorflow.python.keras.engine import data_adapter
 from transformers import TFAutoModelForSequenceClassification, TFElectraModel  # TFBertForSequenceClassification
 
-from profane import ConfigOption, Dependency
+from capreolus import ConfigOption, Dependency
 from capreolus.reranker import Reranker
 
 
@@ -51,7 +50,6 @@ class TFBERTMaxP_Class(tf.keras.layers.Layer):
         posdoc_seg = tf.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
 
         passage_scores = self.call((posdoc_bert_input, posdoc_mask, posdoc_seg), training=False)[:, 1]
-        tf.debugging.assert_equal(tf.shape(passage_scores), (batch_size * num_passages))
         passage_scores = tf.reshape(passage_scores, [batch_size, num_passages])
         # passage_scores = tf.math.reduce_max(passage_scores, axis=1)
 
@@ -90,9 +88,6 @@ class TFBERTMaxP(Reranker):
     ]
     config_spec = [
         ConfigOption("pretrained", "bert-base-uncased", "Hugging face transformer pretrained model"),
-        ConfigOption("passagelen", 100, "Passage length"),
-        ConfigOption("dropout", 0.1, "Dropout for the linear layers in BERT"),
-        ConfigOption("stride", 20, "Stride"),
         ConfigOption("aggregation", "max"),
     ]
 

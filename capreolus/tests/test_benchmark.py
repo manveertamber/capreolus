@@ -1,5 +1,6 @@
 import os
 import pickle
+from collections import defaultdict
 
 import pytest
 import numpy as np
@@ -8,10 +9,16 @@ from tqdm import tqdm
 from capreolus import Benchmark, module_registry
 
 from capreolus.benchmark.robust04 import SampledRobust04
+from capreolus.utils.common import download_file
+from capreolus.utils.trec import load_qrels
+
 from capreolus.benchmark.codesearchnet import CodeSearchNetChallenge as CodeSearchNetCodeSearchNetChallengeBenchmark
 from capreolus.benchmark.codesearchnet import CodeSearchNetCorpus as CodeSearchNetCodeSearchNetCorpusBenchmark
 
 from capreolus.collection.codesearchnet import CodeSearchNet as CodeSearchNetCollection
+from capreolus.collection.covid import COVID as CovidCollection
+from capreolus.benchmark.covid import COVID as CovidBenchmark
+
 from capreolus.tests.common_fixtures import tmpdir_as_cache
 from capreolus.utils.common import remove_newline
 from capreolus.utils.loginit import get_logger
@@ -81,7 +88,7 @@ def test_csn_coll_benchmark_consistency():
         collection = CodeSearchNetCollection(cfg)
 
         pkl_path = collection.get_cache_path() / "tmp" / f"{lang}_dedupe_definitions_v2.pkl"  # TODO: how to remove this "hack"
-        coll_path = collection.download_if_missing() / f"csn-{lang}-collection.txt"
+        coll_path = os.path.join(collection.download_if_missing(), f"csn-{lang}-collection.txt")
 
         raw_data = pickle.load(open(pkl_path, "rb"))
         doc_coll = _load_trec_doc(coll_path)
@@ -116,3 +123,33 @@ def test_sampled_roubst04():
             benchmark = SampledRobust04(config)
             benchmark.download_if_missing()
             assert benchmark.qrel_file.exists() and benchmark.fold_file.exists()
+
+
+@pytest.mark.download
+def test_covid_round3_qrel_conversion():
+    collection_config = {"name": "covid", "round": 3, "coll_type": "abstract"}
+    benchmark_config = {"name": "covid", "udelqexpand": False, "useprevqrels": False}
+    collection = CovidCollection(collection_config)
+    benchmark = CovidBenchmark(benchmark_config, provide={"collectoin": collection})
+
+    benchmark.download_if_missing()
+
+    docid_map_tmp = "/tmp/docid.map"
+    newdocid_qrels_fn = "/tmp/new.docid.qrels"
+    qrel_url = "https://ir.nist.gov/covidSubmit/data/qrels-covid_d3_j0.5-3.txt"
+    docid_map_url = "https://ir.nist.gov/covidSubmit/data/changedIds-May19.csv"
+
+    download_file(docid_map_url, docid_map_tmp)
+    download_file(qrel_url, newdocid_qrels_fn)
+    with open(docid_map_tmp) as f:
+        old2new = {line.split(",")[0]: line.split(",")[1] for line in f}
+    newdocid_qrels = load_qrels(newdocid_qrels_fn)
+    olddocid_qrels = benchmark.qrels
+
+    # since there are dropped out terms in benchmark.qrels (the ones that appeared in previous judgements)
+    # converted olddocid_qrels will have less entries than newdocid_qrels.
+    # Cannot use assert convert_qrels == newdocid_qrels here
+    for qid in olddocid_qrels:
+        for docid in olddocid_qrels[qid]:
+            newdocid = old2new.get(docid, docid)
+            assert olddocid_qrels[qid][docid] == newdocid_qrels[qid][newdocid]

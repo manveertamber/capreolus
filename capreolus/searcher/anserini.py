@@ -138,7 +138,7 @@ class PostprocessMixin:
 
 @Searcher.register
 class BM25(Searcher, AnseriniSearcherMixIn):
-    """ Anserini BM25. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini BM25. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "BM25"
 
@@ -196,7 +196,7 @@ class BM25Grid(Searcher, AnseriniSearcherMixIn):
 
 @Searcher.register
 class BM25RM3(Searcher, AnseriniSearcherMixIn):
-    """ Anserini BM25 with RM3 expansion. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini BM25 with RM3 expansion. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "BM25RM3"
     dependencies = [Dependency(key="index", module="index", name="anserini")]
@@ -232,10 +232,10 @@ class BM25PostProcess(BM25, PostprocessMixin):
     config_spec = [
         ConfigOption("k1", 0.9, "controls term saturation", value_type="floatlist"),
         ConfigOption("b", 0.4, "controls document length normalization", value_type="floatlist"),
-        ConfigOption("hits", 1000, "number of results to return"),
-        ConfigOption("topn", 1000),
+        ConfigOption("hits", 1000, "number of results expected from the core searcher"),
+        ConfigOption("topn", 1000, "number of results expected after the filtering (if any)"),
         ConfigOption("fields", "title"),
-        ConfigOption("dedep", False),
+        ConfigOption("dedup", False),
     ]
 
     def query_from_file(self, topicsfn, output_path, docs_to_remove=None):
@@ -251,9 +251,9 @@ class BM25PostProcess(BM25, PostprocessMixin):
 
 @Searcher.register
 class StaticBM25RM3Rob04Yang19(Searcher):
-    """ Tuned BM25+RM3 run used by Yang et al. in [1]. This should be used only with a benchmark using the same folds and queries.
+    """Tuned BM25+RM3 run used by Yang et al. in [1]. This should be used only with a benchmark using the same folds and queries.
 
-        [1] Wei Yang, Kuang Lu, Peilin Yang, and Jimmy Lin. Critically Examining the "Neural Hype": Weak Baselines and  the Additivity of Effectiveness Gains from Neural Ranking Models. SIGIR 2019.
+    [1] Wei Yang, Kuang Lu, Peilin Yang, and Jimmy Lin. Critically Examining the "Neural Hype": Weak Baselines and  the Additivity of Effectiveness Gains from Neural Ranking Models. SIGIR 2019.
     """
 
     module_name = "bm25staticrob04yang19"
@@ -274,7 +274,7 @@ class StaticBM25RM3Rob04Yang19(Searcher):
 
 @Searcher.register
 class BM25PRF(Searcher, AnseriniSearcherMixIn):
-    """ Anserini BM25 PRF. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini BM25 PRF. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "BM25PRF"
 
@@ -307,7 +307,7 @@ class BM25PRF(Searcher, AnseriniSearcherMixIn):
 
 @Searcher.register
 class AxiomaticSemanticMatching(Searcher, AnseriniSearcherMixIn):
-    """ Anserini BM25 with Axiomatic query expansion. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini BM25 with Axiomatic query expansion. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "axiomatic"
     dependencies = [Dependency(key="index", module="index", name="anserini")]
@@ -337,7 +337,7 @@ class AxiomaticSemanticMatching(Searcher, AnseriniSearcherMixIn):
 
 @Searcher.register
 class DirichletQL(Searcher, AnseriniSearcherMixIn):
-    """ Anserini QL with Dirichlet smoothing. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini QL with Dirichlet smoothing. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "DirichletQL"
     dependencies = [Dependency(key="index", module="index", name="anserini")]
@@ -368,7 +368,7 @@ class DirichletQL(Searcher, AnseriniSearcherMixIn):
 
 @Searcher.register
 class QLJM(Searcher, AnseriniSearcherMixIn):
-    """ Anserini QL with Jelinek-Mercer smoothing. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8"`` or ``"0.4..1,0.2"``). """
+    """ Anserini QL with Jelinek-Mercer smoothing. This searcher's parameters can also be specified as lists indicating parameters to grid search (e.g., ``"0.4,0.6,0.8,1.0"`` or ``"0.4..1,0.2"``). """
 
     module_name = "QLJM"
     dependencies = [Dependency(key="index", module="index", name="anserini")]
