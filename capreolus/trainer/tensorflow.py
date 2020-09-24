@@ -62,12 +62,31 @@ class TensorflowTrainer(Trainer):
         Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
         As a side effect, also writes the predictions into a file in the trec format
         """
-        logger.debug("There are {} predictions".format(len(predictions)))
+        all_qid_docid_pair = [(qid, docid) for qid, docid in dev_data.get_qid_docid_pairs()]
+        print("There are {} predictions".format(len(predictions)) + f" and {len(all_qid_docid_pair)} pairs from dev_data")
+        qid2ndoc = defaultdict(int)
+        for qid, docid in all_qid_docid_pair:
+            qid2ndoc[qid] += 1
+        for qid, n in qid2ndoc.items():
+            if n < 100:
+                print(qid, n)
         pred_dict = defaultdict(lambda: dict())
 
-        for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
+        # for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
+        i = 0
+        for qid, docid in dev_data.get_qid_docid_pairs():
             # Pytrec_eval has problems with high precision floats
+            '''
+            if qid2ndoc[qid] < 100:
+                print(qid, docid, i)
+                pred_dict[qid][docid] = i
+                continue
+            '''
             pred_dict[qid][docid] = predictions[i].numpy().astype(np.float16).item()
+            i += 1
+            if i >= len(predictions):
+                print("warning", "Exceeding ")
+                break 
 
         return dict(pred_dict)
 
@@ -250,6 +269,7 @@ class TensorflowTrainer(Trainer):
                 break
 
     def predict(self, reranker, pred_data, pred_fn):
+        print("inside predict")
         pred_records = self.get_tf_dev_records(reranker, pred_data)
         pred_dist_dataset = self.strategy.experimental_distribute_dataset(pred_records)
 
@@ -355,10 +375,12 @@ class TensorflowTrainer(Trainer):
             filenames = tf.io.gfile.listdir(cached_tf_record_dir)
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
 
+            print(filenames, "inside use cache")
             return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])
         else:
             tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
             # TODO use actual batch size here. see issue #52
+            print(tf_record_filenames, "inside prep")
             return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
 
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
@@ -420,6 +442,7 @@ class TensorflowTrainer(Trainer):
         for sample in dataset:
             tf_features.extend(reranker.extractor.create_tf_dev_feature(sample))
             if len(tf_features) > 20000:
+                print("dirname", dir_name)
                 tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                 tf_features = []
 
@@ -443,6 +466,7 @@ class TensorflowTrainer(Trainer):
         TODO: Use generators to optimize memory usage
         """
         filename = "{0}/{1}.tfrecord".format(dir_name, str(uuid.uuid4()))
+        print(">>>>> filename in tfrecord ", filename)
         examples = [tf.train.Example(features=tf.train.Features(feature=feature)) for feature in tf_features]
 
         if not os.path.isdir(dir_name):
@@ -450,6 +474,7 @@ class TensorflowTrainer(Trainer):
 
         examples = [example.SerializeToString() for example in examples]
         with tf.io.TFRecordWriter(filename) as writer:
+            print(filename)
             for example in examples:
                 writer.write(example)
 
