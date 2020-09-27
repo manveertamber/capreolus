@@ -48,23 +48,6 @@ class BertPassage(Extractor):
         ),
     ]
 
-    def _build_vocab(self, qids, docids, topics):
-        if self.is_state_cached(qids, docids) and self.config["usecache"]:
-            self.load_state(qids, docids)
-            logger.info("Vocabulary loaded from cache")
-        else:
-            logger.info("Building bertpassage vocabulary")
-            self.docid2passages = {}
-
-            for docid in tqdm(docids, "extract passages"):
-                # Naive tokenization based on white space
-                doc = self.index.get_doc(docid).split()
-                passages = self.get_passages_for_doc(doc)
-                self.docid2passages[docid] = passages
-
-            self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
-            self.cache_state(qids, docids)
-
     def load_state(self, qids, docids):
         cache_fn = self.get_state_cache_file_path(qids, docids)
         with open(cache_fn, "rb") as f:
