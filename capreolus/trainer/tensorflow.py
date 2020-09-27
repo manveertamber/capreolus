@@ -440,7 +440,7 @@ class TensorflowTrainer(Trainer):
 
         for sample in dataset:
             tf_features.extend(reranker.extractor.create_tf_dev_feature(sample))
-            if len(tf_features) > 20000:
+            if len(tf_features) > 800:
                 print("dirname", dir_name)
                 tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features))
                 tf_features = []
