@@ -39,7 +39,7 @@ class Reranker(ModuleBase):
         with open(optimizer_fn, "wb") as outf:
             pickle.dump(optimizer.state_dict(), outf, protocol=-1)
 
-    def load_weights(self, weights_fn, optimizer):
+    def load_weights(self, weights_fn, optimizer=None):
         with open(weights_fn, "rb") as f:
             d = pickle.load(f)
 
@@ -50,9 +50,10 @@ class Reranker(ModuleBase):
 
         self.model.load_state_dict(d, strict=False)
 
-        optimizer_fn = weights_fn.as_posix() + ".optimizer"
-        with open(optimizer_fn, "rb") as f:
-            optimizer.load_state_dict(pickle.load(f))
+        if optimizer:
+            optimizer_fn = weights_fn.as_posix() + ".optimizer"
+            with open(optimizer_fn, "rb") as f:
+                optimizer.load_state_dict(pickle.load(f))
 
 
 from profane import import_all_modules
