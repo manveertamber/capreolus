@@ -1,5 +1,6 @@
 import os
 import pickle
+import torch
 
 from capreolus import Dependency, ModuleBase
 
@@ -41,7 +42,8 @@ class Reranker(ModuleBase):
 
     def load_weights(self, weights_fn, optimizer=None):
         with open(weights_fn, "rb") as f:
-            d = pickle.load(f)
+            # d = pickle.load(f)
+            d = torch.load(f, map_location=self.trainer.device)
 
         cur_keys = set(k for k in self.model.state_dict().keys() if not ("embedding.weight" in k or "_nosave_" in k))
         missing = cur_keys - set(d.keys())
