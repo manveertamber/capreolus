@@ -64,6 +64,11 @@ class Birch_Class(nn.Module):
         pretrain_name = config["pretrained"]
         if pretrain_name in ["mb", "msmarco_mb", "car_mb"]:
             pretrain_name = f"Capreolus/birch-bert-large-{config['pretrained']}"
+        if pretrain_name in ["treccar"]:
+            # pretrain_name = "/home/czhang/aaai2021/tmp/birch_ckpt/treccar"
+            pretrain_name = "/home/czhang/aaai2021/tmp/birch_ckpt/converted_to_cap_py/fromHydra"
+            print("loading from :", pretrain_name)
+
         self.bert = BertForNextSentencePrediction.from_pretrained(pretrain_name)
 
         if not config["finetune"]:
@@ -151,6 +156,7 @@ class Birch(Reranker):
     ]
 
     def build_model(self):
+        print(">>>>>>>>>>>>>>>> building model")
         self.model = Birch_Class(self.extractor, self.config)
         return self.model
 

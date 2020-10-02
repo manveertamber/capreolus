@@ -1,8 +1,11 @@
 import os
 import pickle
+import torch
 
 from capreolus import Dependency, ModuleBase
+from capreolus.utils.loginit import get_logger
 
+logger = get_logger(__name__)
 
 class Reranker(ModuleBase):
     """Base class for Reranker modules. The purpose of a Reranker is to predict relevance scores for input documents. Rerankers are generally supervised methods implemented in PyTorch or TensorFlow.
@@ -45,15 +48,37 @@ class Reranker(ModuleBase):
 
         cur_keys = set(k for k in self.model.state_dict().keys() if not ("embedding.weight" in k or "_nosave_" in k))
         missing = cur_keys - set(d.keys())
+        overlap_keys = cur_keys & set(d.keys())
         if len(missing) > 0:
-            raise RuntimeError("loading state_dict with keys that do not match current model: %s" % missing)
+            # raise RuntimeError("loading state_dict with keys that do not match current model: %s" % missing)
+            logger.warning("loading state_dict with keys that do not match current model: %s" % missing)
+            for k in missing:
+                print(k, self.model.state_dict()[k].size())
 
-        self.model.load_state_dict(d, strict=False)
+            d = {k: d[k] for k in d if k not in missing}
+        if len(overlap_keys) < len(d):
+            d = {k: d[k] for k in d if k in overlap_keys}
+        d["combine.weight"] = torch.ones([1, 3]).to("cuda:0")
+        print("number of overlap_Keys", len(overlap_keys))
+
+        for k in d:
+            if k not in overlap_keys:
+                print(k)
+        print("not overlap but in d: ", len(set(d.keys()) - overlap_keys))
+        old = {k: torch.tensor(v) for k, v in self.model.state_dict().items()}
+
+        # self.model.load_state_dict(d, strict=False)
+        self.model.load_state_dict(d, strict=True)
+        '''
+        for k, v in self.model.state_dict().items():
+            print(k, f"old: ", (v - old[k]).abs().sum(), "new: ", (v - d[k]).abs().sum())
+        '''
 
         if optimizer:
             optimizer_fn = weights_fn.as_posix() + ".optimizer"
-            with open(optimizer_fn, "rb") as f:
-                optimizer.load_state_dict(pickle.load(f))
+            if os.path.exists(optimizer_fn):
+                with open(optimizer_fn, "rb") as f:
+                    optimizer.load_state_dict(pickle.load(f))
 
 
 from profane import import_all_modules

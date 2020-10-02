@@ -33,6 +33,8 @@ class PytorchTrainer(Trainer):
     config_keys_not_in_path = ["fastforward", "boardname"]
 
     def build(self):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         # sanity checks
         if self.config["batch"] < 1:
             raise ValueError("batch must be >= 1")
@@ -174,7 +176,7 @@ class PytorchTrainer(Trainer):
         # TODO why not put this under train_output_path?
         summary_writer = SummaryWriter(RESULTS_BASE_PATH / "runs" / self.config["boardname"], comment=train_output_path)
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model = reranker.model.to(self.device)
         self.optimizer = torch.optim.Adam(filter(lambda param: param.requires_grad, model.parameters()), lr=self.config["lr"])
 
@@ -261,10 +263,10 @@ class PytorchTrainer(Trainer):
 
         # TODO should we write a /done so that training can be skipped if possible when fastforward=False? or in Task?
 
-    def load_best_model(self, reranker, train_output_path):
+    def load_best_model(self, reranker, train_output_path, do_not_hash=False):
         dev_best_weight_fn, weights_output_path, info_output_path, loss_fn = \
             self.get_paths_for_early_stopping(train_output_path)
-        if hasattr(self, "optimizer"):
+        if not hasattr(self, "optimizer"):
             model = reranker.model.to(self.device)
             self.optimizer = torch.optim.Adam(
                 filter(lambda param: param.requires_grad, model.parameters()), lr=self.config["lr"])
@@ -283,7 +285,7 @@ class PytorchTrainer(Trainer):
 
         """
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         # save to pred_fn
         model = reranker.model.to(self.device)
         model.eval()
