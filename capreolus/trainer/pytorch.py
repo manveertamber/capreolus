@@ -34,7 +34,6 @@ class PytorchTrainer(Trainer):
 
     def build(self):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
         # sanity checks
         if self.config["batch"] < 1:
             raise ValueError("batch must be >= 1")
