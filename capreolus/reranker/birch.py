@@ -61,7 +61,16 @@ class Birch_Class(nn.Module):
         # self.bert.load_state_dict(saved_bert.state_dict())
 
         # also /GW/NeuralIR/nobackup/birch-emnlp_bert4ir_v2/models/export/birch-bert-base-kevin
-        self.bert = BertForNextSentencePrediction.from_pretrained(f"Capreolus/birch-bert-large-{config['pretrained']}")
+        # self.bert = BertForNextSentencePrediction.from_pretrained(f"Capreolus/birch-bert-large-{config['pretrained']}")
+        # also /GW/NeuralIR/nobackup/birch-emnlp_bert4ir_v2/models/export/birch-bert-base-kevin
+        pretrain_name = config["pretrained"]
+        if pretrain_name in ["mb", "msmarco_mb", "car_mb"]:
+            # pretrain_name = f"Capreolus/birch-bert-large-{config['pretrained']}"
+            pretrain_name = f"/home/czhang/aaai2021/tmp/birch_ckpt/converted_to_cap_py/fromHydra/birch-bert-large-{pretrain_name}"
+        elif pretrain_name in ["car", "msmarco", ]:
+            pretrain_name = f"/home/czhang/aaai2021/tmp/birch_ckpt/converted_to_cap_py/fromHydra/birch-bert-large-{pretrain_name}"
+            # pretrain_name = f"/home/czhang/aaai2021/tmp/birch_ckpt/pytorch_{pretrain_name}.tar.gz"
+        self.bert = BertForNextSentencePrediction.from_pretrained(pretrain_name)
 
         if not config["finetune"]:
             self.bert.requires_grad = False

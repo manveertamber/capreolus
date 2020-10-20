@@ -86,9 +86,11 @@ class EmbedText(Extractor):
         return [self.idf.get(tok, 0) for tok in toks]
 
     def preprocess(self, qids, docids, topics):
+        import pdb
+        from time import time
         self._load_pretrained_embeddings()
 
-        self.index.create_index()
+        # self.index.create_index()
 
         self.qid2toks = {}
         self.docid2toks = {}

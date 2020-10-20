@@ -10,6 +10,7 @@ from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
 
+import pdb
 
 @Task.register
 class RerankTask(Task):
@@ -39,9 +40,12 @@ class RerankTask(Task):
         fold = self.config["fold"]
 
         self.rank.search()
-        rank_results = self.rank.evaluate()
-        best_search_run_path = rank_results["path"][fold]
+        # rank_results = self.rank.evaluate()
+        best_search_run_path = "/GW/D5data-12/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"  # rank_results["path"][fold]
+        from time import time
+        t1 = time()
         best_search_run = Searcher.load_trec_run(best_search_run_path)
+        print("load best run: ", time() - t1) 
 
         return self.rerank_run(best_search_run, self.get_results_path())
 
@@ -54,14 +58,22 @@ class RerankTask(Task):
         dev_output_path = train_output_path / "pred" / "dev"
         logger.debug("results path: %s", train_output_path)
 
+        from time import time
+        t1 = time()
         docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
+        print("prepared docids: ", time() - t1) 
         self.reranker.extractor.preprocess(
             qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type]
         )
         self.reranker.build_model()
         self.reranker.searcher_scores = best_search_run
 
+        t1 = time()
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
+        print("prepared train_run: ", time() - t1) 
+        pdb.set_trace()
+
+        t1 = time()
         # For each qid, select the top 100 (defined by config["threshold") docs to be used in validation
         dev_run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
@@ -71,9 +83,14 @@ class RerankTask(Task):
                     if idx >= threshold:
                         break
                     dev_run[qid][docid] = score
+        print("prepared train_run: ", time() - t1) 
+        pdb.set_trace()
 
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
+        t1 = time()
         train_dataset = self.sampler
+        print("prepared train_run: ", time() - t1) 
+        pdb.set_trace()
         train_dataset.prepare(
             train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )

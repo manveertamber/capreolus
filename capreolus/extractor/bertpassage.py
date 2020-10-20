@@ -303,15 +303,18 @@ class BertPassage(Extractor):
             self.cache_state(qids, docids)
         else:
             logger.info("Building bertpassage vocabulary")
+            '''
             self.docid2passages = {}
-
             for docid in tqdm(docids, "extract passages"):
-                # Naive tokenization based on white space
                 doc = self.index.get_doc(docid).split()
                 passages = self.get_passages_for_doc(doc)
                 self.docid2passages[docid] = passages
-
+            '''
+            import pdb
+            pdb.set_trace()
+            self.docid2passages = {docid: self.get_passages_for_doc(self.index.get_doc(docid).split()) for docid in tqdm(docids, "extract passages")}
             self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
+            pdb.set_trace()
             self.cache_state(qids, docids)
 
     def exist(self):
