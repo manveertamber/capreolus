@@ -32,7 +32,7 @@ class MSMarcoMixin:
                 with tarfile.open(output_gz, "r:gz") as f:
                     f.extractall(path=tmp_dir)
 
-            if os.path.isdir(tmp_dir): # and set(os.listdir(tmp_dir)) != expected_fns:
+            if os.path.isdir(tmp_dir):  # and set(os.listdir(tmp_dir)) != expected_fns:
                 extract_dir = tmp_dir
             elif (not os.path.isdir(tmp_dir)): # and tmp_dir != list(expected_fns)[0]:
                 extract_dir = tmp_dir.parent
@@ -76,8 +76,7 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
         coll_fn.parent.mkdir(exist_ok=True, parents=True)
 
         # transform the msmarco into gov2 format
-        root, folder  = "000", "000"
-        fn = self.tsv_folder / root / folder
+        fn = self.get_file_path(docid=0)
         fn.parent.mkdir(exist_ok=True, parents=True)
         outp_file = open(fn, "w")
         import pdb
@@ -85,17 +84,12 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
         with open(coll_tsv_fn) as f:
             for line in f:
                 docid, doc = line.split("\t")
-                cur_root, cur_folder = \
-                    self.idx2foldername(int(docid) % (1000**3)), \
-                    self.idx2foldername(int(docid) % (1000**2))
-                cur_root.replace(cur_folder, "")
-
-                if (cur_root != root) or (folder != cur_folder):
+                cur_fn = self.get_file_path(docid=docid)
+                if cur_fn != fn:
                     outp_file.close()
                     pdb.set_trace()
-                    root, folder = cur_root, cur_folder
-                    print("prev file" , fn)
-                    fn = self.tsv_folder / root / folder
+                    print("prev file", fn)
+                    fn = cur_fn
                     print("cur file" , fn)
                     fn.parent.mkdir(exist_ok=True, parents=True)
                     outp_file = open(fn, "w")
@@ -110,19 +104,12 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
     def get_doc(self, docid):
         if not hasattr(self, "tsv_folder") or not os.path.exists(self.tsv_folder):
             self.download_if_missing()
-            # self.tsv_folder = self.get_cache_path() / "subfolders"
 
-        root, folder = \
-            self.idx2foldername(int(docid) % (1000 ** 3)), \
-            self.idx2foldername(int(docid) % (1000 ** 2))
-        root.replace(folder, "")
-        path = self.tsv_folder / root / folder
-        return self.find_doc_in_single_file(path, docid)
-
-    @staticmethod
-    def idx2foldername(idx):
-        idx_str = str(idx)
-        return "0" * (3 - len(idx_str)) + idx_str
+        path = self.get_file_path(docid)
+        doc = self.find_doc_in_single_file(path, docid)
+        if not doc:
+            logger.warning(f"{docid} cannot be found from collection")
+        return doc
 
     @staticmethod
     def find_doc_in_single_file(filename, docid):
@@ -134,4 +121,9 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
                     return doc
         return ""
 
-
+    def get_file_path(self, docid):
+        # assume max digits is 9
+        docid = str(docid)
+        docid = "0" * (9 - len(docid)) + docid
+        path = self.tsv_folder / docid[:3] / docid[3:6]
+        return path
