@@ -68,41 +68,42 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
     def download_if_missing(self):
         self.tsv_folder = self.get_cache_path() / "subfolders"
         coll_fn = self.tsv_folder
-        if coll_fn.exists():
+        if (coll_fn / "done").exists():
             return coll_fn
 
         # convert to trec file
         coll_tsv_fn = self.download_raw() / "collection.tsv"
         coll_fn.parent.mkdir(exist_ok=True, parents=True)
-        '''
-        with open(coll_tsv_fn, "r") as fin, open(coll_fn, "w", encoding="utf-8") as fout:
-            for line in fin:
-                docid, doc = line.strip().split("\t")
-                fout.write(document_to_trectxt(docid, doc))
-        '''
 
         # transform the msmarco into gov2 format
-        root, folder, subfolder = "000", "000", "000"
-        fn = self.tsv_folder / root / folder / subfolder
-        fn.mkdir(exist_ok=True, parents=True)
+        root, folder  = "000", "000"
+        fn = self.tsv_folder / root / folder
+        fn.parent.mkdir(exist_ok=True, parents=True)
         outp_file = open(fn, "w")
+        import pdb
+        pdb.set_trace()
         with open(coll_tsv_fn) as f:
             for line in f:
                 docid, doc = line.split("\t")
-                cur_root, cur_folder, cur_subfolder = \
+                cur_root, cur_folder = \
                     self.idx2foldername(int(docid) % (1000**3)), \
-                    self.idx2foldername(int(docid) % (1000**2)), \
-                    self.idx2foldername(int(docid) % 1000)
+                    self.idx2foldername(int(docid) % (1000**2))
+                cur_root.replace(cur_folder, "")
 
-                if (cur_root != root) or (folder != cur_folder) or (subfolder != subfolder):
-                    print(cur_root, cur_folder, cur_subfolder)
+                if (cur_root != root) or (folder != cur_folder):
                     outp_file.close()
-                    root, folder, subfolder = cur_root, cur_folder, cur_subfolder
-                    fn = self.tsv_folder / root / folder / subfolder
-                    fn.mkdir(exist_ok=True, parents=True)
+                    pdb.set_trace()
+                    root, folder = cur_root, cur_folder
+                    print("prev file" , fn)
+                    fn = self.tsv_folder / root / folder
+                    print("cur file" , fn)
+                    fn.parent.mkdir(exist_ok=True, parents=True)
                     outp_file = open(fn, "w")
 
                 outp_file.write(f"{docid}\t{doc}")
+
+        with open(coll_fn / "done", "w") as f:
+            f.write("done")
 
         return coll_fn
 
@@ -111,11 +112,11 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
             self.download_if_missing()
             # self.tsv_folder = self.get_cache_path() / "subfolders"
 
-        root, folder, subfolder = \
+        root, folder = \
             self.idx2foldername(int(docid) % (1000 ** 3)), \
-            self.idx2foldername(int(docid) % (1000 ** 2)), \
-            self.idx2foldername(int(docid) % 1000)
-        path = self.tsv_folder / root / folder / subfolder
+            self.idx2foldername(int(docid) % (1000 ** 2))
+        root.replace(folder, "")
+        path = self.tsv_folder / root / folder
         return self.find_doc_in_single_file(path, docid)
 
     @staticmethod
@@ -132,4 +133,5 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
                     assert i == docid
                     return doc
         return ""
+
 
