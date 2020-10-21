@@ -3,6 +3,7 @@ import gzip
 import shutil
 import tarfile
 from time import time
+import re
 
 from capreolus.utils.common import download_file
 from capreolus.utils.loginit import get_logger
@@ -57,6 +58,7 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
     collection_type = "TrecCollection"
     generator_type = "DefaultLuceneDocumentGenerator"
     is_large_collection = True
+    regex = re.compile('[^a-zA-Z0-9]')
 
     def download_raw(self):
         url = "https://msmarco.blob.core.windows.net/msmarcoranking/collectionandqueries.tar.gz"
@@ -79,18 +81,13 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
         fn = self.get_file_path(docid=0)
         fn.parent.mkdir(exist_ok=True, parents=True)
         outp_file = open(fn, "w")
-        import pdb
-        pdb.set_trace()
         with open(coll_tsv_fn) as f:
             for line in f:
                 docid, doc = line.split("\t")
                 cur_fn = self.get_file_path(docid=docid)
                 if cur_fn != fn:
                     outp_file.close()
-                    pdb.set_trace()
-                    print("prev file", fn)
                     fn = cur_fn
-                    print("cur file" , fn)
                     fn.parent.mkdir(exist_ok=True, parents=True)
                     outp_file = open(fn, "w")
 
@@ -109,6 +106,7 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
         doc = self.find_doc_in_single_file(path, docid)
         if not doc:
             logger.warning(f"{docid} cannot be found from collection")
+        doc = " ".join(self.regex.sub(" ", doc).split())
         return doc
 
     @staticmethod
