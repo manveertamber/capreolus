@@ -79,7 +79,10 @@ class AnseriniIndex(Index):
         try:
             if not hasattr(self, "index_utils") or self.index_utils is None:
                 self.open()
-            return self.index_reader_utils.documentContents(self.reader, self.JString(docid))
+            doc = self.index_reader_utils.documentContents(self.reader, self.JString(docid))
+            if not doc:
+                doc = ""
+            return doc
         except Exception as e:
             raise
 

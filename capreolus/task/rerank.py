@@ -10,7 +10,6 @@ from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
 
-import pdb
 
 @Task.register
 class RerankTask(Task):
@@ -71,7 +70,6 @@ class RerankTask(Task):
         t1 = time()
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
 
         t1 = time()
         # For each qid, select the top 100 (defined by config["threshold") docs to be used in validation
@@ -84,13 +82,11 @@ class RerankTask(Task):
                         break
                     dev_run[qid][docid] = score
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
 
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         t1 = time()
         train_dataset = self.sampler
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
         train_dataset.prepare(
             train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
