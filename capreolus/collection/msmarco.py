@@ -156,4 +156,4 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
                 docid, doc = line.strip().split("\t")
                 fout.write(document_to_trectxt(docid, doc))
 
-        return coll_dir 
+        return coll_dir
