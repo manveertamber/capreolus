@@ -310,7 +310,10 @@ class BertPassage(Extractor):
                 passages = self.get_passages_for_doc(doc)
                 self.docid2passages[docid] = passages
             '''
-            self.docid2passages = {docid: self.get_passages_for_doc(self.index.get_doc(docid).split()) for docid in tqdm(docids, "extract passages")}
+            self.docid2passages = {
+                docid: self.get_passages_for_doc(self.index.get_doc(docid).split()) 
+                for docid in tqdm(sorted(docids), "extract passages")
+            }
             self.qid2toks = {qid: self.tokenizer.tokenize(topics[qid]) for qid in tqdm(qids, desc="querytoks")}
             self.cache_state(qids, docids)
 

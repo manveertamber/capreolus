@@ -1,7 +1,7 @@
 import os
 from time import time
 from collections import defaultdict
-
+from pathlib import Path
 
 from capreolus import ConfigOption, Dependency, constants
 from capreolus.utils.loginit import get_logger
@@ -42,7 +42,8 @@ class MsmarcoPsg(Searcher):
         urls = [
             "https://msmarco.blob.core.windows.net/msmarcoranking/qidpidtriples.train.full.tsv.gz",
             "https://msmarco.blob.core.windows.net/msmarcoranking/top1000.dev.tar.gz",
-            "https://msmarco.blob.core.windows.net/msmarcoranking/top1000.eval.tar.gz"]
+            # "https://msmarco.blob.core.windows.net/msmarcoranking/top1000.eval.tar.gz"
+        ]
 
         tmp_dir = self.get_cache_path() / "tmp"
         output_path.mkdir(exist_ok=True, parents=True)
@@ -50,10 +51,14 @@ class MsmarcoPsg(Searcher):
         mode = "wt"
         for url in urls:
             extract_file_name = url.split("/")[-1].replace(".gz", "").replace(".tar", "")
-            extract_dir = self.benchmark.collection.download_and_extract(url, tmp_dir, expected_fns=extract_file_name)
-            runs = self.convert_to_trec_runs(extract_dir / extract_file_name, train=(".train." in url))
+            if ".dev" in extract_file_name: 
+                extract_dir = Path("/GW/carpet/nobackup/czhang/anserini/runs")  
+                extract_file_name = "run.msmarco-passage.dev.small.trec"
+                runs = self.load_trec_run(extract_dir / extract_file_name)
+            else:
+                extract_dir = self.benchmark.collection.download_and_extract(url, tmp_dir, expected_fns=extract_file_name)
+                runs = self.convert_to_trec_runs(extract_dir / extract_file_name, train=(".train." in url))
             t = time()
-            # allruns.update(runs)
             left_qids = left_qids - set(runs.keys()) 
             self.write_trec_run(preds=runs , outfn=(output_path / "searcher"), mode=mode)
             logger.info(f"writing runs to file... left {len(left_qids)} takes {time() - t} sec.")

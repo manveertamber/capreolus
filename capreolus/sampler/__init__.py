@@ -39,9 +39,13 @@ class Sampler(ModuleBase):
             qid: [docid for docid in docids if qrels[qid].get(docid, 0) < relevance_level]
             for qid, docids in self.qid_to_docids.items()
         }
+        import pdb
+        pdb.set_trace()
 
         self.total_samples = 0
         self.clean()
+        pdb.set_trace()
+
 
     def clean(self):
         # remove any ids that do not have any relevant docs or any non-relevant docs for training
@@ -164,6 +168,16 @@ class PredSampler(Sampler, torch.utils.data.IterableDataset):
 
     module_name = "pred"
     requires_random_seed = False
+
+    def clean(self):
+        # remove any ids that do not have any relevant docs or any non-relevant docs for training
+        total_samples = 0  # keep tracks of the total possible number of unique training triples for this dataset
+        for qid in list(self.qid_to_docids.keys()):
+            posdocs = len(self.qid_to_reldocs[qid])
+            negdocs = len(self.qid_to_negdocs[qid])
+            total_samples += posdocs * negdocs
+        self.total_samples = total_samples
+
 
     def get_hash(self):
         sorted_rep = sorted([(qid, docids) for qid, docids in self.qid_to_docids.items()])
