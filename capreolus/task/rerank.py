@@ -10,7 +10,6 @@ from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
 
-import pdb
 
 @Task.register
 class RerankTask(Task):
@@ -18,7 +17,7 @@ class RerankTask(Task):
     config_spec = [
         ConfigOption("fold", "s1", "fold to run"),
         ConfigOption("optimize", "map", "metric to maximize on the dev set"),  # affects train() because we check to save weights
-        ConfigOption("threshold", 100, "Number of docids per query to evaluate during prediction"),
+        ConfigOption("threshold", 1000, "Number of docids per query to evaluate during prediction"),
     ]
     dependencies = [
         Dependency(
@@ -41,7 +40,9 @@ class RerankTask(Task):
 
         self.rank.search()
         # rank_results = self.rank.evaluate()
-        best_search_run_path = "/GW/D5data-12/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"  # rank_results["path"][fold]
+        # best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
+        # best_search_run_path = "/GW/D5data-12/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"  # rank_results["path"][fold]
+        best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg_normal/benchmark-msmarcopsg/collection-msmarcopsg_normal/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
         from time import time
         t1 = time()
         best_search_run = Searcher.load_trec_run(best_search_run_path)
@@ -71,7 +72,6 @@ class RerankTask(Task):
         t1 = time()
         train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
 
         t1 = time()
         # For each qid, select the top 100 (defined by config["threshold") docs to be used in validation
@@ -84,13 +84,11 @@ class RerankTask(Task):
                         break
                     dev_run[qid][docid] = score
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
 
         # Depending on the sampler chosen, the dataset may generate triplets or pairs
         t1 = time()
         train_dataset = self.sampler
         print("prepared train_run: ", time() - t1) 
-        pdb.set_trace()
         train_dataset.prepare(
             train_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
@@ -147,9 +145,26 @@ class RerankTask(Task):
         fold = self.config["fold"]
         self.rank.search()
         threshold = self.config["threshold"]
-        rank_results = self.rank.evaluate()
-        best_search_run_path = rank_results["path"][fold]
+        # rank_results = self.rank.evaluate()
+        # best_search_run_path = rank_results["path"][fold]
+        best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
         best_search_run = Searcher.load_trec_run(best_search_run_path)
+        # tmp
+        test_run = defaultdict(dict)
+        # This is possible because best_search_run is an OrderedDict
+        for qid, docs in best_search_run.items():
+            if qid in self.benchmark.folds[fold]["predict"]["dev"]:
+                for idx, (docid, score) in enumerate(docs.items()):
+                    if idx >= threshold:
+                        break
+                    test_run[qid][docid] = score
+
+        test_dataset = PredSampler()
+        test_dataset.prepare(
+            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+        )
+
+        # end of tmp
 
         docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
         self.reranker.extractor.preprocess(
@@ -157,8 +172,7 @@ class RerankTask(Task):
         )
         train_output_path = self.get_results_path()
         self.reranker.build_model()
-        self.reranker.trainer.load_best_model(self.reranker, train_output_path)
-
+        # self.reranker.trainer.load_best_model(self.reranker, train_output_path)
         test_run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
         for qid, docs in best_search_run.items():

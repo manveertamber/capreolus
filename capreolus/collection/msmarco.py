@@ -127,6 +127,7 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
         return path
 
 
+
 @Collection.register
 class MSMarcoPsg(Collection, MSMarcoMixin):
     module_name = "msmarcopsg_normal"
