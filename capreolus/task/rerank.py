@@ -41,7 +41,6 @@ class RerankTask(Task):
         self.rank.search()
         # rank_results = self.rank.evaluate()
         # best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
-        # best_search_run_path = "/GW/D5data-12/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"  # rank_results["path"][fold]
         best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg_normal/benchmark-msmarcopsg/collection-msmarcopsg_normal/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
         from time import time
         t1 = time()
@@ -149,22 +148,6 @@ class RerankTask(Task):
         # best_search_run_path = rank_results["path"][fold]
         best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
         best_search_run = Searcher.load_trec_run(best_search_run_path)
-        # tmp
-        test_run = defaultdict(dict)
-        # This is possible because best_search_run is an OrderedDict
-        for qid, docs in best_search_run.items():
-            if qid in self.benchmark.folds[fold]["predict"]["dev"]:
-                for idx, (docid, score) in enumerate(docs.items()):
-                    if idx >= threshold:
-                        break
-                    test_run[qid][docid] = score
-
-        test_dataset = PredSampler()
-        test_dataset.prepare(
-            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
-        )
-
-        # end of tmp
 
         docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
         self.reranker.extractor.preprocess(
