@@ -27,15 +27,11 @@ class MSMarcoPassage(Benchmark):
     topic_file = data_dir / "topics.msmarcodoc.txt"
     fold_file = data_dir / "msmarcodoc.folds.json"
 
-    @staticmethod
-    def prepare_fold(qids):
-        pass
-
     def build(self):
-        self.data_dir.mkdir(exist_ok=True, parents=True)
         self.download_if_missing()
 
     def download_if_missing(self):
+        self.data_dir.mkdir(exist_ok=True, parents=True)
         if all([f.exists() for f in [self.qrel_file, self.topic_file, self.fold_file]]):
             return
 
@@ -78,6 +74,4 @@ class MSMarcoPassage(Benchmark):
         folds = {k: list(v) for k, v in folds.items()}
         folds = {"s1": {"train_qids": folds["train"], "predict": {"dev": folds["dev"], "test": folds["eval"]}}}
         json.dump(folds, open(self.fold_file, "w"))
-
-
 
