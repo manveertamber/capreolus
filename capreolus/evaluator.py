@@ -10,6 +10,7 @@ from capreolus.utils.loginit import get_logger
 
 logger = get_logger(__name__)
 
+MRR_10 = "mrr_10"
 DEFAULT_METRICS = [
     "P_1",
     "P_5",
@@ -46,71 +47,70 @@ def judged(qrels, runs, n):
     return sum(scores) / len(scores)
 
 
+def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude=[], is_msmarco=False):
+    scores = {}
+    tmp_dir = Path(__file__).parent / "tmp"
+    tmp_dir.mkdir(exist_ok=True, parents=True)
+    tmp_qrels_fn, tmp_run_fn = tmp_dir / "tmp_qrel", tmp_dir / "tmp_run"
+
+    logger.info("preparing tmp run file")
+    with open(tmp_run_fn, "w") as f:
+        for qid, doc2score in runs.items():
+            if qids_to_includes and qid not in qids_to_includes:
+                continue
+            if qid in qids_to_exclude:
+                continue
+
+            doc_score = sorted(doc2score.items(), key=lambda kv: float(kv[1]), reverse=True)
+            for rank, (docid, score) in enumerate(doc_score):
+                if is_msmarco:
+                    f.write(f"{qid}\t{docid}\t{rank+1}\n")
+                else:
+                    f.write(f"{qid} Q0 {docid} {rank+1} {score} tmp\n")
+
+    # Searcher.write_trec_run(runs, tmp_run_fn)
+    logger.info("preparing tmp qrel file")
+    with open(tmp_qrels_fn, "w") as f:
+        for qid, doc2label in qrels.items():
+            # if qid not in dev_qids:
+            if qid not in qids_to_includes or qid in qids_to_exclude:
+                continue
+            for docid, label in doc2label.items():
+                f.write(f"{qid}\tQ0\t{docid}\t{label}\n")
+
+    cmd = ["python", "eval/msmarco_eval.py"] if is_msmarco else ["eval/trec_eval", "-c", "-l", str(relevance_level)]
+    cmd += [tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix()]
+    completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
+    if completed_process.returncode != 0:
+        logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
+        exit(completed_process.returncode)
+
+    stdout_lines = completed_process.stdout.decode().split("\n")
+    for line in stdout_lines:
+        if not line:
+            continue
+
+        if is_msmarco:
+            if "MRR" not in line:
+                continue
+            metric = MRR_10
+            score = float(line.split()[-1])
+        else:
+            metric, _, score = line.split("\t")
+        scores[metric.strip()] = float(score)
+    return scores
+
+
 def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     assert isinstance(metrics, list)
     calc_judged = [int(metric.split("_")[1]) for metric in metrics if metric.startswith("judged_")]
     for n in calc_judged:
         metrics.remove(f"judged_{n}")
-    
-    scores = dict()
-    tmp_dir = Path(__file__).parent / "tmp"
-    tmp_dir.mkdir(exist_ok=True, parents=True)
-    tmp_qrels_fn, tmp_run_fn = tmp_dir / "tmp_qrel", tmp_dir / "tmp_run"
 
-    if "mrr_10" in metrics:
-        print("preparing runfile (mrr)")
-        with open(tmp_run_fn, "w") as f:
-            for qid, doc2score in runs.items():
-                if qid not in dev_qids:
-                    continue
-                doc_score = sorted(doc2score.items(), key=lambda kv: kv[1], reverse=True)
-                for rank, (docid, score) in enumerate(doc_score):
-                    f.write(f"{qid}\t{docid}\t{rank+1}\n")
- 
-        print("preparing qrelfile")
-        with open(tmp_qrels_fn, "w") as f:
-            for qid, doc2score in qrels.items():
-                if qid not in dev_qids:
-                    continue
-                for docid, score in doc2score.items():
-                    f.write(f"{qid}\t0\t{docid}\t{score}\n")
-
-        cmd = ["python", "eval/msmarco_eval.py", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix()]
-        completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
-        if completed_process.returncode != 0:
-            logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
-            exit(completed_process.returncode)
-        stdout = completed_process.stdout.decode().split("\n")
-        print(stdout)
-        mrr_line = [line for line in stdout if "MRR" in line][0]
-        print(mrr_line)
-        scores["mrr_10"] = float(mrr_line.split()[-1])
-    #########################
-    print("preparing runfile")
-    Searcher.write_trec_run(runs, tmp_run_fn)
-    print("preparing qrelfile")
-    with open(tmp_qrels_fn, "w") as f:
-        for qid, doc2score in qrels.items():
-            if qid not in dev_qids:
-                continue
-            for docid, score in doc2score.items():
-                f.write(f"{qid}\tQ0\t{docid}\t{score}\n")
-
-    cmd = ["eval/trec_eval", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix(), "-c", "-l", str(relevance_level)]
-    completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
-    if completed_process.returncode != 0:
-        logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
-        exit(completed_process.returncode)
-    stdout = completed_process.stdout.decode()
-    for line in stdout.split("\n"):
-        if not line:
-            continue
-        metric, _, score = line.split("\t")
-        metric = metric.strip() 
-
-        if metric not in metrics:
-            continue
-        scores[metric] = float(score)
+    scores = trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=False)
+    if MRR_10 in metrics:
+        trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=True)
+    scores = {metric: score for metric, score in scores.items() if metric in metrics}
 
     for n in calc_judged:
         scores[f"judged_{n}"] = judged(qrels, runs, n)
