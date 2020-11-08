@@ -29,6 +29,14 @@ DEFAULT_METRICS = [
 ]
 
 
+def is_float(x):
+    try:
+        float(x)
+        return True
+    except ValueError:
+        return False
+
+
 def judged(qrels, runs, n):
     scores = []
     for q, rundocs in runs.items():
@@ -94,9 +102,15 @@ def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude
             if "MRR" not in line:
                 continue
             metric = MRR_10
-            score = float(line.split()[-1])
+            score = line.split()[-1]
+            if not is_float(score):
+                raise ValueError(f"Fail to parse mrr_10 from line {line}, expect a float number, yet got {score}.")
         else:
             metric, _, score = line.split("\t")
+            if not is_float(score):
+                logger.info(f"Skip line {line} from trec_eval.")
+                continue
+
         scores[metric.strip()] = float(score)
     return scores
 
@@ -107,9 +121,13 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     for n in calc_judged:
         metrics.remove(f"judged_{n}")
 
-    scores = trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=False)
+    scores = {}
     if MRR_10 in metrics:
-        trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=True)
+        scores.update(
+            trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=True))
+    if {MRR_10} != set(metrics):
+        scores.update(
+            trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=False))
     scores = {metric: score for metric, score in scores.items() if metric in metrics}
 
     for n in calc_judged:
