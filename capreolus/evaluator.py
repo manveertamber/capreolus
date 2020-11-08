@@ -51,39 +51,74 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     calc_judged = [int(metric.split("_")[1]) for metric in metrics if metric.startswith("judged_")]
     for n in calc_judged:
         metrics.remove(f"judged_{n}")
+    
 
     # dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
     # evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=int(relevance_level))
     # scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in evaluator.evaluate(runs).values()]
     # scores = np.array(scores).mean(axis=0).tolist()
     # scores = dict(zip(metrics, scores))
+    scores = dict()
     tmp_dir = Path(__file__).parent / "tmp"
     tmp_dir.mkdir(exist_ok=True, parents=True)
     tmp_qrels_fn, tmp_run_fn = tmp_dir / "tmp_qrel", tmp_dir / "tmp_run"
+
+    if "mrr_10" in metrics:
+        print("preparing runfile (mrr)")
+        with open(tmp_run_fn, "w") as f:
+            for qid, doc2score in runs.items():
+                if qid not in dev_qids:
+                    continue
+                doc_score = sorted(doc2score.items(), key=lambda kv: kv[1], reverse=True)
+                for rank, (docid, score) in enumerate(doc_score):
+                    f.write(f"{qid}\t{docid}\t{rank+1}\n")
+ 
+        print("preparing qrelfile")
+        with open(tmp_qrels_fn, "w") as f:
+            for qid, doc2score in qrels.items():
+                if qid not in dev_qids:
+                    continue
+                for docid, score in doc2score.items():
+                    f.write(f"{qid}\t0\t{docid}\t{score}\n")
+
+        cmd = ["python", "eval/msmarco_eval.py", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix()]
+        completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
+        if completed_process.returncode != 0:
+            logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
+            exit(completed_process.returncode)
+        stdout = completed_process.stdout.decode().split("\n")
+        print(stdout)
+        mrr_line = [line for line in stdout if "MRR" in line][0]
+        print(mrr_line)
+        scores["mrr_10"] = float(mrr_line.split()[-1])
+    #########################
+    print("preparing runfile")
     Searcher.write_trec_run(runs, tmp_run_fn)
+    print("preparing qrelfile")
     with open(tmp_qrels_fn, "w") as f:
         for qid, doc2score in qrels.items():
             if qid not in dev_qids:
                 continue
             for docid, score in doc2score.items():
-                f.write(f"{qid}\tQ0\t{docid}\t{score}")
+                f.write(f"{qid}\tQ0\t{docid}\t{score}\n")
     # metrics_args = {
     #     "_".join(metric.split("_")[:-1]) if (metric.startswith("P_") or metric.startswith("ndcg_cut_") or metric.startswith("recall_"))
     #     else metric for metric in metrics}
-    cmd = ["trec_eval", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix(), "-c"]
+    cmd = ["eval/trec_eval", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix(), "-c"]
     completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
     if completed_process.returncode != 0:
         logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
         exit(completed_process.returncode)
     stdout = completed_process.stdout.decode()
-    scores = {}
     for line in stdout.split("\n"):
         if not line:
             continue
         metric, _, score = line.split("\t")
-        if metric.strip() not in metrics:
+        metric = metric.strip() 
+
+        if metric not in metrics:
             continue
-        scores[metrics] = float(score)
+        scores[metric] = float(score)
 
     for n in calc_judged:
         scores[f"judged_{n}"] = judged(qrels, runs, n)
@@ -163,7 +198,8 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
                 runs,
                 benchmark.qrels,
                 [primary_metric],
-                (set(v["train_qids"]) | set(v["predict"]["dev"])),
+                set(v["predict"]["dev"]),
+                # (set(v["train_qids"]) | set(v["predict"]["dev"])),
                 benchmark.relevance_level,
             )[primary_metric]
             if score > best_scores[s][primary_metric]:
