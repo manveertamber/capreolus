@@ -52,12 +52,6 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     for n in calc_judged:
         metrics.remove(f"judged_{n}")
     
-
-    # dev_qrels = {qid: labels for qid, labels in qrels.items() if qid in dev_qids}
-    # evaluator = pytrec_eval.RelevanceEvaluator(dev_qrels, metrics, relevance_level=int(relevance_level))
-    # scores = [[metrics_dict.get(m, -1) for m in metrics] for metrics_dict in evaluator.evaluate(runs).values()]
-    # scores = np.array(scores).mean(axis=0).tolist()
-    # scores = dict(zip(metrics, scores))
     scores = dict()
     tmp_dir = Path(__file__).parent / "tmp"
     tmp_dir.mkdir(exist_ok=True, parents=True)
@@ -101,10 +95,8 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
                 continue
             for docid, score in doc2score.items():
                 f.write(f"{qid}\tQ0\t{docid}\t{score}\n")
-    # metrics_args = {
-    #     "_".join(metric.split("_")[:-1]) if (metric.startswith("P_") or metric.startswith("ndcg_cut_") or metric.startswith("recall_"))
-    #     else metric for metric in metrics}
-    cmd = ["eval/trec_eval", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix(), "-c"]
+
+    cmd = ["eval/trec_eval", tmp_qrels_fn.as_posix(), tmp_run_fn.as_posix(), "-c", "-l", str(relevance_level)]
     completed_process = subprocess.run(cmd, stdout=subprocess.PIPE)
     if completed_process.returncode != 0:
         logger.warning(f"Fail to execute {cmd}, with return code {completed_process.returncode}")
