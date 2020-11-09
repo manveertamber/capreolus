@@ -2,7 +2,7 @@ import os
 import subprocess
 
 import numpy as np
-import pytrec_eval
+from tqdm import tqdm
 from pathlib import Path
 
 from capreolus.searcher import Searcher
@@ -61,9 +61,8 @@ def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude
     tmp_dir.mkdir(exist_ok=True, parents=True)
     tmp_qrels_fn, tmp_run_fn = tmp_dir / "tmp_qrel", tmp_dir / "tmp_run"
 
-    logger.info("preparing tmp run file")
     with open(tmp_run_fn, "w") as f:
-        for qid, doc2score in runs.items():
+        for qid, doc2score in tqdm(runs.items(), desc="preparing tmp run file"):
             if qids_to_includes and qid not in qids_to_includes:
                 continue
             if qid in qids_to_exclude:
@@ -76,11 +75,8 @@ def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude
                 else:
                     f.write(f"{qid} Q0 {docid} {rank+1} {score} tmp\n")
 
-    # Searcher.write_trec_run(runs, tmp_run_fn)
-    logger.info("preparing tmp qrel file")
     with open(tmp_qrels_fn, "w") as f:
-        for qid, doc2label in qrels.items():
-            # if qid not in dev_qids:
+        for qid, doc2label in tqdm(qrels.items(), desc="preparing tmp qrel file"):
             if qid not in qids_to_includes or qid in qids_to_exclude:
                 continue
             for docid, label in doc2label.items():
@@ -222,7 +218,7 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         test_runs.update({qid: {} for qid in test_qids})
         test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
 
-    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    scores = _eval_runs(test_runs, benchmark.qrels, metrics, list(test_runs.keys()), benchmark.relevance_level)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
 
 
