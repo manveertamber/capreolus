@@ -5,6 +5,7 @@ import numpy as np
 import pytrec_eval
 from pathlib import Path
 
+from tqdm import tqdm
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
 
@@ -26,6 +27,7 @@ DEFAULT_METRICS = [
     "recall_100",
     "recall_1000",
     "recip_rank",
+    "mrr_10",
 ]
 
 
@@ -62,13 +64,15 @@ def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude
     tmp_qrels_fn, tmp_run_fn = tmp_dir / "tmp_qrel", tmp_dir / "tmp_run"
 
     logger.info("preparing tmp run file")
+    # import pdb
     with open(tmp_run_fn, "w") as f:
-        for qid, doc2score in runs.items():
-            if qids_to_includes and qid not in qids_to_includes:
+        for qid, doc2score in tqdm(runs.items()):
+            if qids_to_includes and (qid not in qids_to_includes):
                 continue
             if qid in qids_to_exclude:
                 continue
 
+            # pdb.set_trace() 
             doc_score = sorted(doc2score.items(), key=lambda kv: float(kv[1]), reverse=True)
             for rank, (docid, score) in enumerate(doc_score):
                 if is_msmarco:
@@ -81,8 +85,11 @@ def trec_eval(qrels, runs, relevance_level, qids_to_includes=[], qids_to_exclude
     with open(tmp_qrels_fn, "w") as f:
         for qid, doc2label in qrels.items():
             # if qid not in dev_qids:
-            if qid not in qids_to_includes or qid in qids_to_exclude:
+            if qids_to_includes and (qid not in qids_to_includes):
                 continue
+            if qid in qids_to_exclude:
+                continue
+
             for docid, label in doc2label.items():
                 f.write(f"{qid}\tQ0\t{docid}\t{label}\n")
 
@@ -125,10 +132,15 @@ def _eval_runs(runs, qrels, metrics, dev_qids, relevance_level):
     if MRR_10 in metrics:
         scores.update(
             trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=True))
+    # import pdb
+    # pdb.set_trace()
     if {MRR_10} != set(metrics):
         scores.update(
             trec_eval(qrels, runs, relevance_level=relevance_level, qids_to_includes=dev_qids, is_msmarco=False))
+    # import pdb
+    # pdb.set_trace()
     scores = {metric: score for metric, score in scores.items() if metric in metrics}
+    # scores['mrr_10'] = 0.4 
 
     for n in calc_judged:
         scores[f"judged_{n}"] = judged(qrels, runs, n)
@@ -222,7 +234,8 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         test_runs.update({qid: {} for qid in test_qids})
         test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
 
-    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    # scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    scores = _eval_runs(test_runs, benchmark.qrels, metrics, list(test_runs.keys()), benchmark.relevance_level)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
 
 
