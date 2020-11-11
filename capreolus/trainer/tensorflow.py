@@ -37,7 +37,7 @@ class TensorflowTrainer(Trainer):
         # ConfigOption("gradacc", 1, "number of batches to accumulate over before updating weights"),
         ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
         ConfigOption("lr", 0.001, "learning rate"),
-        ConfigOption("decay", 0.0, "learning rate decay"),
+        # ConfigOption("decay", 0.0, "learning rate decay"),
         ConfigOption("warmupsteps", 0),
         ConfigOption("loss", "pairwise_hinge_loss", "must be one of tfr.losses.RankingLossKey"),
         ConfigOption("validatefreq", 1),
