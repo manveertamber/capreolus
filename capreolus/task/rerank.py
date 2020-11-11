@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from pathlib import Path
+from time import time
 
 from capreolus import ConfigOption, Dependency, evaluator
 from capreolus.sampler import PredSampler
@@ -39,10 +40,13 @@ class RerankTask(Task):
         fold = self.config["fold"]
 
         self.rank.search()
-        # rank_results = self.rank.evaluate()
+        print("start evaluating")
+        t = time()
+        rank_results = self.rank.evaluate()
+        print("finish eval", time() - t)
         # best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg/benchmark-msmarcopsg/collection-msmarcopsg/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
-        best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg_normal/benchmark-msmarcopsg/collection-msmarcopsg_normal/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
-        from time import time
+        # best_search_run_path = "/GW/carpet/nobackup/czhang/title/.capreolus/results/collection-msmarcopsg_normal/benchmark-msmarcopsg/collection-msmarcopsg_normal/benchmark-msmarcopsg/searcher-msmarcopsg/task-rank_filter-False/searcher"
+        best_search_run_path = rank_results["path"][fold]
         t1 = time()
         best_search_run = Searcher.load_trec_run(best_search_run_path)
         print("load best run: ", time() - t1) 
