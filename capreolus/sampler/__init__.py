@@ -34,11 +34,6 @@ class Sampler(ModuleBase):
             qid: [docid for docid in docids if qrels[qid].get(docid, 0) >= relevance_level]
             for qid, docids in self.qid_to_docids.items()
         }
-        # TODO option to include only negdocs in a top k
-        self.qid_to_negdocs = {
-            qid: [docid for docid in docids if qrels[qid].get(docid, 0) < relevance_level]
-            for qid, docids in self.qid_to_docids.items()
-        }
 
         self.total_samples = 0
         self.clean()
@@ -59,12 +54,11 @@ class TrainingSamplerMixin:
         total_samples = 0  # keep tracks of the total possible number of unique training triples for this dataset
         for qid in list(self.qid_to_docids.keys()):
             posdocs = len(self.qid_to_reldocs[qid])
-            negdocs = len(self.qid_to_negdocs[qid])
+            negdocs = len(self.qid_to_docids[qid]) - posdocs
             if posdocs == 0 or negdocs == 0:
                 logger.warning("removing training qid=%s with %s positive docs and %s negative docs", qid, posdocs, negdocs)
                 del self.qid_to_reldocs[qid]
                 del self.qid_to_docids[qid]
-                del self.qid_to_negdocs[qid]
             else:
                 total_samples += posdocs * negdocs
 
@@ -100,8 +94,9 @@ class TrainTripletSampler(Sampler, TrainingSamplerMixin, torch.utils.data.Iterab
             self.rng.shuffle(all_qids)
 
             for qid in all_qids:
+                neg_docs = [docid for docid in self.qid_to_docids[qid] if docid not in self.qid_to_reldocs[qid]]
                 posdocid = self.rng.choice(self.qid_to_reldocs[qid])
-                negdocid = self.rng.choice(self.qid_to_negdocs[qid])
+                negdocid = self.rng.choice(neg_docs)
 
                 try:
                     # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
@@ -149,9 +144,10 @@ class TrainPairSampler(Sampler, TrainingSamplerMixin, torch.utils.data.IterableD
             for qid in all_qids:
                 # Convention for label - [1, 0] indicates that doc belongs to class 1 (i.e relevant
                 # ^ This is used with categorical cross entropy loss
+                neg_docs = [docid for docid in self.qid_to_docids[qid] if docid not in self.qid_to_reldocs[qid]]
                 for docid in self.qid_to_reldocs[qid]:
                     yield self.extractor.id2vec(qid, docid, negid=None, label=[0, 1])
-                for docid in self.qid_to_negdocs[qid]:
+                for docid in neg_docs:
                     yield self.extractor.id2vec(qid, docid, negid=None, label=[1, 0])
 
     def __iter__(self):
@@ -191,7 +187,7 @@ class PredSampler(Sampler, torch.utils.data.IterableDataset):
         total_samples = 0  # keep tracks of the total possible number of unique training triples for this dataset
         for qid in list(self.qid_to_docids.keys()):
             posdocs = len(self.qid_to_reldocs[qid])
-            negdocs = len(self.qid_to_negdocs[qid])
+            negdocs = len(self.qid_to_docids[qid]) - posdocs
             total_samples += posdocs * negdocs
 
         self.total_samples = total_samples
