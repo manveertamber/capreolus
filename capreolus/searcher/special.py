@@ -1,4 +1,5 @@
 import os
+import gdown
 from collections import defaultdict
 from tqdm import tqdm
 
@@ -114,3 +115,36 @@ class MsmarcoPsgBm25(BM25, MsmarcoPsgSearcherMixin):
         with open(final_donefn, "w") as f:
             f.write("done")
         return output_path
+
+
+# todo: make this another type of "Module" (e.g. DPR Module)
+@Searcher.register
+class StaticTctColBertDev(Searcher, MsmarcoPsgSearcherMixin):
+    module_name = "static_tct_colbert"
+    dependencies = [Dependency(key="benchmark", module="benchmark", name="msmarcopsg")]
+
+    def _query_from_file(self, topicsfn, output_path, cfg):
+        outfn = output_path / "static.run"
+        if outfn.exists():
+            return outfn
+
+        tmp_dir = self.get_cache_path() / "tmp"
+        output_path.mkdir(exist_ok=True, parents=True)
+
+        # train
+        train_runs = self.download_and_prepare_train_set(tmp_dir=tmp_dir)
+        self.write_trec_run(preds=train_runs, outfn=outfn, mode="wt")
+
+        # dev
+        tmp_dev = tmp_dir / "tct_colbert_v1_wo_neg.tsv"
+        if not tmp_dev.exists():
+            tmp_dir.mkdir(exist_ok=True, parents=True)
+            url = "http://drive.google.com/uc?id=1gYmzfxj-tSxKmDufiQXzRQOm8DHqZKbY"
+            gdown.download(url, tmp_dev, quiet=False)
+
+        assert tmp_dev.exists()
+        with open(tmp_dev, "rt") as f, open(outfn, "at") as fout:
+            for line in f:
+                qid, docid, rank, score = line.strip().split("\t")
+                fout.write(f"{qid} Q0 {docid} {rank} {score} tct_colbert\n")
+        return outfn
