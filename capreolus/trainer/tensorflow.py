@@ -253,7 +253,7 @@ class TensorflowTrainer(Trainer):
             return self.strategy.run(test_step, args=(dataset_inputs,))
 
         predictions = []
-        for x in pred_dist_dataset:
+        for x in tqdm(pred_dist_dataset, desc="validation"):
             pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
             for p in pred_batch:
                 predictions.extend(p)
