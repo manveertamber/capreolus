@@ -88,8 +88,8 @@ class RerankTask(Task):
         dev_run = {
             qid: {docid: docs[docid] for docid in list(docs)[:threshold]} for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]
         }
-        train_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["train_qids"]}
-        dev_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["predict"]["dev"]}
+        train_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["train_qids"]}
+        dev_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["dev"]}
         logger.info(f"train_qrels: {sum(sys.getsizeof(var) for var in train_qrels.values())}")
         logger.info(f"dev_qrels: {sum(sys.getsizeof(var) for var in dev_qrels.values())}")
 
