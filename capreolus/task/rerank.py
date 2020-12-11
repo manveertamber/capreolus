@@ -104,7 +104,7 @@ class RerankTask(Task):
         )
 
         def local_evaluate_runs(runs):
-            dev_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["predict"]["dev"]}
+            dev_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["dev"]}
             return evaluator.eval_runs(runs, dev_qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level)
 
         self.reranker.trainer.train(
