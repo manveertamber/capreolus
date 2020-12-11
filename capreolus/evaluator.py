@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 
 import numpy as np
 import pytrec_eval
@@ -27,6 +28,34 @@ DEFAULT_METRICS = [
     "recip_rank",
     MRR_10,
 ]
+
+
+def runs_generator(runfile):
+    """
+    Given a runfile where the entried are grouped by qid, generate a dictionary of {qid: {docid: score}}
+    where the docid are sorted according to itself (rather than the score)
+    """
+    def sort_runs_docids(runs):
+        return {q: OrderedDict({d: doc_score[d] for d in sorted(doc_score)}) for q, doc_score in runs.items()}
+
+    cur_qid_runs = {}
+    with open(runfile, "rt") as f:
+        for line in f:
+            qid, _, docid, rank, score, tag = line.strip().split()
+            if not cur_qid_runs:  # for the first row
+                cur_qid_runs[qid] = {docid: float(score)}
+                continue
+
+            if qid not in cur_qid_runs:
+                assert len(cur_qid_runs) == 1
+                yield sort_runs_docids(cur_qid_runs)
+                cur_qid_runs = {qid: {docid: float(score)}}
+                continue
+
+            cur_qid_runs[qid][docid] = float(score)
+
+        if len(cur_qid_runs):
+            yield sort_runs_docids(cur_qid_runs)
 
 
 def judged(qrels, runs, n):
