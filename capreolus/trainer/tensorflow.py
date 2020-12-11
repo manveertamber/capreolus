@@ -39,6 +39,7 @@ class TensorflowTrainer(Trainer):
     module_name = "tensorflow"
     config_spec = [
         ConfigOption("batch", 32, "batch size"),
+        ConfigOption("evalbatch", 256, "batch size on evaluation"),
         ConfigOption("niters", 20, "number of iterations to train for"),
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
@@ -374,11 +375,11 @@ class TensorflowTrainer(Trainer):
             filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord", "")))
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
 
-            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])
+            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["evalbatch"])
         else:
             tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
             # TODO use actual batch size here. see issue #52
-            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
+            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["evalbatch"])
 
     def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
@@ -403,7 +404,7 @@ class TensorflowTrainer(Trainer):
         # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
         # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
         element_to_copy = tf_features[-1]
-        for i in range(self.config["batch"]):
+        for i in range(self.config["evalbatch"]):
             tf_features.append(copy(element_to_copy))
         tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features, file_name=str(tf_file_id)))
         return tf_record_filenames
