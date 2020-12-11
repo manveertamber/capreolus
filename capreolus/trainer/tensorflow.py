@@ -204,6 +204,7 @@ class TensorflowTrainer(Trainer):
                 total_loss = 0
 
                 if epoch % self.config["validatefreq"] == 0:
+                    logger.info(f"{self.config['earlystop']}") 
                     if not self.config["earlystop"]:
                         # save the ckpt ahead so don't need to wait for the evaluation to finish to use the ckpt
                         # (eval on large dataset like MS MARCO takes > 1 days)
@@ -252,11 +253,12 @@ class TensorflowTrainer(Trainer):
             return self.strategy.run(test_step, args=(dataset_inputs,))
 
         predictions = []
-        for x in pred_dist_dataset:
+        for x in tqdm(pred_dist_dataset, desc="validation"):
             pred_batch = distributed_test_step(x).values if self.strategy.num_replicas_in_sync > 1 else [distributed_test_step(x)]
             for p in pred_batch:
                 predictions.extend(p)
 
+        logger.info(f"number of pred: len(predictions)") 
         trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
         Searcher.write_trec_run(trec_preds, pred_fn)
@@ -273,7 +275,9 @@ class TensorflowTrainer(Trainer):
             return "{0}/capreolus_tfrecords/{1}_{2}".format(self.config["storage"], dataset.get_hash(), total_samples)
         else:
             base_path = self.get_cache_path()
-            return "{0}/{1}_{2}".format(base_path, dataset.get_hash(), total_samples)
+            path = "{0}/{1}_{2}".format(base_path, dataset.get_hash(), total_samples)
+            logger.info(f"cache path: {path}")
+            return path
 
     def find_cached_tf_records(self, dataset, required_sample_count):
         """
@@ -371,7 +375,7 @@ class TensorflowTrainer(Trainer):
         """
         cached_tf_record_dir = self.form_tf_record_cache_path(dataset)
         if self.config["usecache"] and tf.io.gfile.exists(cached_tf_record_dir):
-            filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord")))
+            filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord", "")))
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
 
             return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])

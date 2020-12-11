@@ -139,6 +139,10 @@ class RerankTask(Task):
         return preds
 
     def predict(self):
+        train_output_path = self.get_results_path()
+        logger.info(f"train output path: {train_output_path}")
+        logger.info(f"trainer cache: {self.reranker.trainer.get_cache_path()}")
+
         fold = self.config["fold"]
         self.rank.search()
         threshold = self.config["threshold"]
@@ -147,30 +151,38 @@ class RerankTask(Task):
         best_search_run = Searcher.load_trec_run(best_search_run_path)
 
         docids = set(docid for querydocs in best_search_run.values() for docid in querydocs)
+        logger.info("prep docid ")
         self.reranker.extractor.preprocess(
             qids=best_search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type]
         )
-        train_output_path = self.get_results_path()
+        logger.info("extractor preprocessed")
         self.reranker.build_model()
+        logger.info("model built")
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
+        logger.info("best model loaded")
 
         test_run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
         for qid, docs in best_search_run.items():
-            if qid in self.benchmark.folds[fold]["predict"]["test"]:
+            # if qid in self.benchmark.folds[fold]["predict"]["test"]:
+            if qid in self.benchmark.folds[fold]["predict"]["dev"]:
                 for idx, (docid, score) in enumerate(docs.items()):
                     if idx >= threshold:
                         break
                     test_run[qid][docid] = score
+        logger.info("prepared test run")
 
         test_dataset = PredSampler()
         test_dataset.prepare(
             test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
-        test_output_path = train_output_path / "pred" / "test" / "best"
+        logger.info("prepared test dataset")
+        # test_output_path = train_output_path / "pred" / "test" / "best"
+        test_output_path = train_output_path / "pred" / "dev" / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
         preds = {"test": test_preds}
+        logger.info("finished")
 
         return preds
 

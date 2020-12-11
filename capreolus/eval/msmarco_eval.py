@@ -115,4 +115,3 @@ def main():
 
     else:
         print("Usage: msmarco_eval_ranking.py <reference ranking> <candidate ranking>")
-        exit()
