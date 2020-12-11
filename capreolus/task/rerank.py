@@ -154,7 +154,10 @@ class RerankTask(Task):
 
         return preds
 
-    def predict(self):
+    def predict(self, set_name="test"):
+        if set_name not in {"dev", "test"}:
+            raise ValueError(f"Unexpected set name: {set_name}. Expect one of train, dev, test, yet got {set_name}.")
+
         fold = self.config["fold"]
         self.rank.search()
         threshold = self.config["threshold"]
@@ -173,7 +176,7 @@ class RerankTask(Task):
         test_run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
         for qid, docs in best_search_run.items():
-            if qid in self.benchmark.folds[fold]["predict"]["test"]:
+            if qid in self.benchmark.folds[fold]["predict"][set_name]:
                 for idx, (docid, score) in enumerate(docs.items()):
                     if idx >= threshold:
                         break
@@ -183,12 +186,15 @@ class RerankTask(Task):
         test_dataset.prepare(
             test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
-        test_output_path = train_output_path / "pred" / "test" / "best"
+        test_output_path = train_output_path / "pred" / set_name / "best"
         test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
 
-        preds = {"test": test_preds}
+        preds = {set_name: test_preds}
 
         return preds
+
+    def predict_on_dev(self):
+        return self.predict(set_name="dev")
 
     def bircheval(self):
         fold = self.config["fold"]
