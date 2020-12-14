@@ -18,6 +18,7 @@ from capreolus.reranker.common import TFPairwiseHingeLoss, TFCategoricalCrossEnt
 logger = get_logger(__name__)
 
 from tensorflow.python.client import device_lib
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 
 def get_available_gpus():
@@ -86,6 +87,10 @@ class TensorflowTrainer(Trainer):
         else:  # default strategy that works on CPU and single GPU
             self.strategy = tf.distribute.get_strategy()
 
+        # use max precision to speed up
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_policy(policy)
+
         # Defining some props that we will later initialize
         self.validate()
 
@@ -113,8 +118,12 @@ class TensorflowTrainer(Trainer):
             reranker.build_model()
             wrapped_model = self.get_wrapped_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
-            optimizer_1 = tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
-            optimizer_2 = tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"])
+            optimizer_1 = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=self.config["lr"]), loss_scale="dynamic"
+            )
+            optimizer_2 = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"]), loss_scale="dynamic"
+            )
 
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
