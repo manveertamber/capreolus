@@ -230,12 +230,15 @@ class TensorflowTrainer(Trainer):
                         for p in pred_batch:
                             dev_predictions.extend(p)
 
-                    metrics = evaluate_fn(self.get_preds_in_trec_format(dev_predictions, dev_data))
+                    metrics = evaluate_fn(trec_preds)
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
                         best_metric = metrics[metric]
                         logger.info("new best dev metric: %0.4f", best_metric)
+
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+                        trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
+                        Searcher.write_trec_run(trec_preds, dev_output_path / "best")
 
                 iter_bar = tqdm(total=self.config["itersize"])
 
