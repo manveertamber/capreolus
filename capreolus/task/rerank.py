@@ -74,17 +74,6 @@ class RerankTask(Task):
         self.reranker.build_model()
         self.reranker.searcher_scores = best_search_run
 
-        '''
-        train_run = {qid: docs for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["train_qids"]}
-        # For each qid, select the top 100 (defined by config["threshold") docs to be used in validation
-        # This is possible because best_search_run is an OrderedDict
-        for qid, docs in best_search_run.items():
-            if qid in self.benchmark.folds[fold]["predict"]["dev"]:
-                for idx, (docid, score) in enumerate(docs.items()):
-                    if idx >= threshold:
-                        break
-                    dev_run[qid][docid] = score
-        '''
         dev_run = {
             qid: {docid: docs[docid] for docid in list(docs)[:threshold]} for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["dev"]
         }
@@ -121,16 +110,6 @@ class RerankTask(Task):
         dev_output_path = train_output_path / "pred" / "dev" / "best"
         dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
 
-        '''
-        test_run = defaultdict(dict)
-        # This is possible because best_search_run is an OrderedDict
-        for qid, docs in best_search_run.items():
-            if qid in self.benchmark.folds[fold]["predict"]["test"]:
-                for idx, (docid, score) in enumerate(docs.items()):
-                    if idx >= threshold:
-                        break
-                    test_run[qid][docid] = score
-        '''
         test_run = {
             qid: {docid: docs[docid] for docid in list(docs)[:threshold]} for qid, docs in best_search_run.items() if qid in self.benchmark.folds[fold]["predict"]["test"]
         }
