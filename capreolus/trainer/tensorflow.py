@@ -18,6 +18,7 @@ from capreolus.reranker.common import TFPairwiseHingeLoss, TFCategoricalCrossEnt
 logger = get_logger(__name__)
 
 from tensorflow.python.client import device_lib
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 
 def get_available_gpus():
@@ -86,6 +87,10 @@ class TensorflowTrainer(Trainer):
         else:  # default strategy that works on CPU and single GPU
             self.strategy = tf.distribute.get_strategy()
 
+        # use max precision to speed up
+        policy = mixed_precision.Policy("mixed_float16")
+        mixed_precision.set_policy(policy)
+
         # Defining some props that we will later initialize
         self.validate()
 
@@ -113,8 +118,12 @@ class TensorflowTrainer(Trainer):
             reranker.build_model()
             wrapped_model = self.get_wrapped_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
-            optimizer_1 = tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
-            optimizer_2 = tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"])
+            optimizer_1 = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=self.config["lr"]), loss_scale="dynamic"
+            )
+            optimizer_2 = mixed_precision.LossScaleOptimizer(
+                tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"]), loss_scale="dynamic"
+            )
 
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
@@ -125,6 +134,9 @@ class TensorflowTrainer(Trainer):
 
             with tf.GradientTape() as tape:
                 train_predictions = wrapped_model(data, training=True)
+                print("labels:", labels.dtype, "train_predictions: ", train_predictions.dtype)
+                for variable in wrapped_model.trainable_variables:
+                    print("\t", variable.name, variable.dtype)
                 loss = compute_loss(labels, train_predictions)
 
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
@@ -371,6 +383,7 @@ class TensorflowTrainer(Trainer):
         2. Else, converts the dataset into tf records, writes them to disk, and returns them
         """
         cached_tf_record_dir = self.form_tf_record_cache_path(dataset)
+        logger.info(f"cached_tf_record_dir: {cached_tf_record_dir}")  
         if self.config["usecache"] and tf.io.gfile.exists(cached_tf_record_dir):
             filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord", "")))
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
@@ -436,7 +449,7 @@ class TensorflowTrainer(Trainer):
         Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
         As a side effect, also writes the predictions into a file in the trec format
         """
-        logger.debug("There are {} predictions".format(len(predictions)))
+        logger.info("{} predictions in total".format(len(predictions)))
         pred_dict = defaultdict(lambda: dict())
 
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
@@ -506,3 +519,4 @@ class TensorflowTrainer(Trainer):
         wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
 
         return wrapped_model.model
+
