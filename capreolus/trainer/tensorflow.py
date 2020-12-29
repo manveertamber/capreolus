@@ -134,38 +134,22 @@ class TensorflowTrainer(Trainer):
 
             with tf.GradientTape() as tape:
                 train_predictions = wrapped_model(data, training=True)
-                print("labels:", labels.dtype, "train_predictions: ", train_predictions.dtype)
-                for variable in wrapped_model.trainable_variables:
-                    print("\t", variable.name, variable.dtype)
                 loss = compute_loss(labels, train_predictions)
-
-            gradients = tape.gradient(loss, wrapped_model.trainable_variables)
+                nonbert_loss = optimizer_1.get_scaled_loss(loss)
+                bert_loss = optimizer_2.get_scaled_loss(loss)
 
             # TODO: Expose the layer names to lookout for as a ConfigOption?
             # TODO: Crystina mentioned that hugging face models have 'bert' in all the layers (including classifiers). Handle this case
-            bert_variables = [
-                (gradients[i], variable)
-                for i, variable in enumerate(wrapped_model.trainable_variables)
-                if "bert" in variable.name and "classifier" not in variable.name
-            ]
-            classifier_vars = [
-                (gradients[i], variable)
-                for i, variable in enumerate(wrapped_model.trainable_variables)
-                if "classifier" in variable.name
-            ]
-            other_vars = [
-                (gradients[i], variable)
-                for i, variable in enumerate(wrapped_model.trainable_variables)
-                if "bert" not in variable.name and "classifier" not in variable.name
-            ]
-
+            bert_variables = [variable for variable in wrapped_model.trainable_variables if "bert" in variable.name and "classifier" not in variable.name]
+            classifier_vars = [variable for variable in wrapped_model.trainable_variables if "classifier" in variable.name]
+            other_vars = [variable for variable in wrapped_model.trainable_variables if "bert" not in variable.name and "classifier" not in variable.name]
             assert len(bert_variables) + len(classifier_vars) + len(other_vars) == len(wrapped_model.trainable_variables)
-            # TODO: Clean this up for general use
-            # Making sure that we did not miss any variables
-            optimizer_1.apply_gradients(classifier_vars)
-            optimizer_2.apply_gradients(bert_variables)
-            if other_vars:
-                optimizer_1.apply_gradients(other_vars)
+
+            # gradients = tape.gradient(loss, wrapped_model.trainable_variables)
+            nonbert_gradients = optimizer_1.get_unscaled_gradients(tape.gradient(nonbert_loss, classifier_vars + other_vars))
+            bert_gradients = optimizer_2.get_unscaled_gradients(tape.gradient(bert_loss, bert_variables))
+            optimizer_1.apply_gradients(zip(nonbert_gradients, classifier_vars + other_vars))
+            optimizer_2.apply_gradients(zip(bert_gradients, bert_variables))
 
             return loss
 
