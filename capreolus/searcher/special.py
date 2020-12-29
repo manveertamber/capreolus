@@ -140,7 +140,7 @@ class StaticTctColBertDev(Searcher, MsmarcoPsgSearcherMixin):
         if not tmp_dev.exists():
             tmp_dir.mkdir(exist_ok=True, parents=True)
             url = "http://drive.google.com/uc?id=1gYmzfxj-tSxKmDufiQXzRQOm8DHqZKbY"
-            gdown.download(url, tmp_dev, quiet=False)
+            gdown.download(url, tmp_dev.as_posix(), quiet=False)
 
         assert tmp_dev.exists()
         with open(tmp_dev, "rt") as f, open(outfn, "at") as fout:

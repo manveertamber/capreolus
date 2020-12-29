@@ -134,6 +134,9 @@ class TensorflowTrainer(Trainer):
 
             with tf.GradientTape() as tape:
                 train_predictions = wrapped_model(data, training=True)
+                print("labels:", labels.dtype, "train_predictions: ", train_predictions.dtype)
+                for variable in wrapped_model.trainable_variables:
+                    print("\t", variable.name, variable.dtype)
                 loss = compute_loss(labels, train_predictions)
 
             gradients = tape.gradient(loss, wrapped_model.trainable_variables)
@@ -383,6 +386,7 @@ class TensorflowTrainer(Trainer):
         2. Else, converts the dataset into tf records, writes them to disk, and returns them
         """
         cached_tf_record_dir = self.form_tf_record_cache_path(dataset)
+        logger.info(f"cached_tf_record_dir: {cached_tf_record_dir}")  
         if self.config["usecache"] and tf.io.gfile.exists(cached_tf_record_dir):
             filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord", "")))
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
@@ -448,7 +452,7 @@ class TensorflowTrainer(Trainer):
         Takes in a list of predictions and returns a dict that can be fed into pytrec_eval
         As a side effect, also writes the predictions into a file in the trec format
         """
-        logger.debug("There are {} predictions".format(len(predictions)))
+        logger.info("{} predictions in total".format(len(predictions)))
         pred_dict = defaultdict(lambda: dict())
 
         for i, (qid, docid) in enumerate(dev_data.get_qid_docid_pairs()):
@@ -518,3 +522,4 @@ class TensorflowTrainer(Trainer):
         wrapped_model.load_weights("{0}/dev.best".format(train_output_path))
 
         return wrapped_model.model
+
