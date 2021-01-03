@@ -118,9 +118,7 @@ class TensorflowTrainer(Trainer):
             reranker.build_model()
             wrapped_model = self.get_wrapped_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
-            optimizer_1 = mixed_precision.LossScaleOptimizer(
-                tf.keras.optimizers.Adam(learning_rate=self.config["lr"]), loss_scale="dynamic"
-            )
+            optimizer_1 = tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
             optimizer_2 = mixed_precision.LossScaleOptimizer(
                 tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"]), loss_scale="dynamic"
             )
@@ -134,22 +132,35 @@ class TensorflowTrainer(Trainer):
 
             with tf.GradientTape() as tape:
                 train_predictions = wrapped_model(data, training=True)
-                loss = compute_loss(labels, train_predictions)
-                nonbert_loss = optimizer_1.get_scaled_loss(loss)
-                bert_loss = optimizer_2.get_scaled_loss(loss)
+                loss = optimizer_2.get_scaled_loss(compute_loss(labels, train_predictions))
+
+            gradients = optimizer_2.get_unscaled_gradients(tape.gradient(loss, wrapped_model.trainable_variables))
 
             # TODO: Expose the layer names to lookout for as a ConfigOption?
             # TODO: Crystina mentioned that hugging face models have 'bert' in all the layers (including classifiers). Handle this case
-            bert_variables = [variable for variable in wrapped_model.trainable_variables if "bert" in variable.name and "classifier" not in variable.name]
-            classifier_vars = [variable for variable in wrapped_model.trainable_variables if "classifier" in variable.name]
-            other_vars = [variable for variable in wrapped_model.trainable_variables if "bert" not in variable.name and "classifier" not in variable.name]
-            assert len(bert_variables) + len(classifier_vars) + len(other_vars) == len(wrapped_model.trainable_variables)
+            bert_variables = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "bert" in variable.name and "classifier" not in variable.name
+            ]
+            classifier_vars = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "classifier" in variable.name
+            ]
+            other_vars = [
+                (gradients[i], variable)
+                for i, variable in enumerate(wrapped_model.trainable_variables)
+                if "bert" not in variable.name and "classifier" not in variable.name
+            ]
 
-            # gradients = tape.gradient(loss, wrapped_model.trainable_variables)
-            nonbert_gradients = optimizer_1.get_unscaled_gradients(tape.gradient(nonbert_loss, classifier_vars + other_vars))
-            bert_gradients = optimizer_2.get_unscaled_gradients(tape.gradient(bert_loss, bert_variables))
-            optimizer_1.apply_gradients(zip(nonbert_gradients, classifier_vars + other_vars))
-            optimizer_2.apply_gradients(zip(bert_gradients, bert_variables))
+            assert len(bert_variables) + len(classifier_vars) + len(other_vars) == len(wrapped_model.trainable_variables)
+            # TODO: Clean this up for general use
+            # Making sure that we did not miss any variables
+            optimizer_1.apply_gradients(classifier_vars)
+            optimizer_2.apply_gradients(bert_variables)
+            if other_vars:
+                optimizer_1.apply_gradients(other_vars)
 
             return loss
 
@@ -217,6 +228,7 @@ class TensorflowTrainer(Trainer):
                         for p in pred_batch:
                             dev_predictions.extend(p)
 
+                    trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
                     metrics = evaluate_fn(trec_preds)
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
@@ -224,7 +236,6 @@ class TensorflowTrainer(Trainer):
                         logger.info("new best dev metric: %0.4f", best_metric)
 
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
-                        trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
                         Searcher.write_trec_run(trec_preds, dev_output_path / "best")
 
                 iter_bar = tqdm(total=self.config["itersize"])
