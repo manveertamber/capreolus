@@ -52,6 +52,7 @@ class TensorflowTrainer(Trainer):
         ConfigOption("decay", 0.0, "learning rate decay"),
         ConfigOption("decayiters", 3),
         ConfigOption("decaytype", None),
+        ConfigOption("amp", None, "Automatic mixed precision mode; one of: None, both"),
     ]
     config_keys_not_in_path = ["fastforward", "boardname", "usecache", "tpuname", "tpuzone", "storage"]
 
@@ -74,8 +75,9 @@ class TensorflowTrainer(Trainer):
         else:  # default strategy that works on CPU and single GPU
             self.strategy = tf.distribute.get_strategy()
 
-        policy = mixed_precision.Policy("mixed_float16")
-        mixed_precision.set_policy(policy)
+        if self.config["amp"]:
+            policy = mixed_precision.Policy("mixed_float16")
+            mixed_precision.set_policy(policy)
 
         # Defining some props that we will later initialize
         self.validate()
@@ -107,9 +109,9 @@ class TensorflowTrainer(Trainer):
             wrapped_model = self.get_wrapped_model(reranker.model)
             loss_object = self.get_loss(self.config["loss"])
             optimizer_1 = tf.keras.optimizers.Adam(learning_rate=self.config["lr"])
-            optimizer_2 = mixed_precision.LossScaleOptimizer(
-                tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"]), loss_scale="dynamic"
-            )
+            optimizer_2 = tf.keras.optimizers.Adam(learning_rate=self.config["bertlr"])
+            if self.config["amp"]:
+                optimizer_2 = mixed_precision.LossScaleOptimizer(optimizer_2, loss_scale="dynamic")
 
             def compute_loss(labels, predictions):
                 per_example_loss = loss_object(labels, predictions)
@@ -127,9 +129,13 @@ class TensorflowTrainer(Trainer):
 
             with tf.GradientTape() as tape:
                 train_predictions = wrapped_model(data, training=True)
-                loss = optimizer_2.get_scaled_loss(compute_loss(labels, train_predictions))
+                loss = compute_loss(labels, train_predictions)
+                if self.config["amp"]:
+                    loss = optimizer_2.get_scaled_loss(loss)
 
-            gradients = optimizer_2.get_unscaled_gradients(tape.gradient(loss, wrapped_model.trainable_variables))
+            gradients = tape.gradient(loss, wrapped_model.trainable_variables)
+            if self.config["amp"]:
+                gradients = optimizer_2.get_unscaled_gradients(gradients)
 
             bert_variables = [
                 (gradients[i], variable)
