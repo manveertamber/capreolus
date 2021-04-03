@@ -92,10 +92,10 @@ class RerankTask(Task):
         )
 
         def local_evaluate_runs(runs):
-            dev_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["predict"]["dev"]}
+            dev_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["dev"]}
             return evaluator.eval_runs(runs, dev_qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level)
 
-        self.reranker.trainer.train(
+        dev_preds = self.reranker.trainer.train(
             reranker=self.reranker,
             train_dataset=train_dataset,
             train_output_path=train_output_path,
@@ -107,7 +107,8 @@ class RerankTask(Task):
 
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
         dev_output_path = train_output_path / "pred" / "dev" / "best"
-        dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
+        if not dev_output_path.exists():
+            dev_preds = self.reranker.trainer.predict(self.reranker, dev_dataset, dev_output_path)
 
         test_run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
@@ -207,14 +208,14 @@ class RerankTask(Task):
             logger.error("could not find predictions; run the train command first")
             raise ValueError("could not find predictions; run the train command first")
 
-        dev_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["predict"]["dev"]}
+        dev_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["dev"]}
         fold_dev_metrics = evaluator.eval_runs(
             reranker_runs[fold]["dev"], dev_qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
         )
         pretty_fold_dev_metrics = " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(fold_dev_metrics.items())])
         logger.info("rerank: fold=%s dev metrics: %s", fold, pretty_fold_dev_metrics)
 
-        test_qrels = {qid: self.benchmark.qrels[qid] for qid in self.benchmark.folds[fold]["predict"]["test"]}
+        test_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["test"]}
         fold_test_metrics = evaluator.eval_runs(
             reranker_runs[fold]["test"], test_qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
         )

@@ -39,6 +39,7 @@ class TensorflowTrainer(Trainer):
     module_name = "tensorflow"
     config_spec = [
         ConfigOption("batch", 32, "batch size"),
+        ConfigOption("evalbatch", 256, "batch size on evaluation"),
         ConfigOption("niters", 20, "number of iterations to train for"),
         ConfigOption("itersize", 512, "number of training instances in one iteration"),
         ConfigOption("bertlr", 2e-5, "learning rate for bert parameters"),
@@ -55,7 +56,7 @@ class TensorflowTrainer(Trainer):
         ConfigOption("decay", 0.0, "learning rate decay"),
         ConfigOption("decaystep", 3),
         ConfigOption("decaytype", None),
-        ConfigOption("endlr", 0, "Learning rate at the end of decay, used for linear decay"),
+        ConfigOption("endlr", 0.0, "Learning rate at the end of decay, used for linear decay"),
         ConfigOption(
             "earlystop",
             True,
@@ -178,6 +179,7 @@ class TensorflowTrainer(Trainer):
         total_loss = 0
         iter_bar = tqdm(total=self.config["itersize"])
 
+        best_trec_preds = {}
         initial_lr = self.change_lr(epoch, self.config["bertlr"])
         K.set_value(optimizer_2.lr, K.get_value(initial_lr))
         train_records = train_records.shuffle(100000)
@@ -221,17 +223,21 @@ class TensorflowTrainer(Trainer):
                         for p in pred_batch:
                             dev_predictions.extend(p)
 
-                    metrics = evaluate_fn(self.get_preds_in_trec_format(dev_predictions, dev_data))
+                    trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
+                    metrics = evaluate_fn(trec_preds)
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > best_metric:
                         best_metric = metrics[metric]
                         logger.info("new best dev metric: %0.4f", best_metric)
                         wrapped_model.save_weights("{0}/dev.best".format(train_output_path))
+                        Searcher.write_trec_run(trec_preds, dev_output_path / "best")
+                        best_trec_preds = trec_preds
 
                 iter_bar = tqdm(total=self.config["itersize"])
 
             if num_batches >= self.config["niters"] * self.config["itersize"]:
                 break
+        return best_trec_preds
 
     def predict(self, reranker, pred_data, pred_fn):
         pred_records = self.get_tf_dev_records(reranker, pred_data)
@@ -378,11 +384,11 @@ class TensorflowTrainer(Trainer):
             filenames = sorted(tf.io.gfile.listdir(cached_tf_record_dir), key=lambda x: int(x.replace(".tfrecord", "")))
             filenames = ["{0}/{1}".format(cached_tf_record_dir, name) for name in filenames]
 
-            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["batch"])
+            return self.load_tf_dev_records_from_file(reranker, filenames, self.config["evalbatch"])
         else:
             tf_record_filenames = self.convert_to_tf_dev_record(reranker, dataset)
             # TODO use actual batch size here. see issue #52
-            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["batch"])
+            return self.load_tf_dev_records_from_file(reranker, tf_record_filenames, self.config["evalbatch"])
 
     def load_tf_dev_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
@@ -406,10 +412,9 @@ class TensorflowTrainer(Trainer):
 
         # TPU's require drop_remainder = True. But we cannot drop things from validation dataset
         # As a workaroud, we pad the dataset with the last sample until it reaches the batch size.
-        if len(tf_features) != 0:
-            logger.info(f"tf_features: {len(tf_features)}")
+        if len(tf_features) > 0:
             element_to_copy = tf_features[-1]
-            for i in range(self.config["batch"]):
+            for i in range(self.config["evalbatch"]):
                 tf_features.append(copy(element_to_copy))
             tf_record_filenames.append(self.write_tf_record_to_file(dir_name, tf_features, file_name=str(tf_file_id)))
         return tf_record_filenames

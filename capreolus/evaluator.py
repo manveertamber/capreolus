@@ -41,14 +41,14 @@ def judged(qrels, runs, n):
             continue
 
         topn = sorted(rundocs.keys(), key=rundocs.get, reverse=True)[:n]
-        score = sum(docid in qrels[q] for docid in topn) / len(topn)
+        score = sum(docid in qrels.get(q, {}) for docid in topn) / len(topn)
         scores.append(score)
 
     return sum(scores) / len(scores)
 
 
 def mrr_10(qrels, runs):
-    qrels = {k: v for k, v in qrels.items() if k in runs}
+    # qrels = {k: v for k, v in qrels.items() if k in runs}
     return list(compute_metrics_from_files(trec_qrels=qrels, trec_runs=runs).values())[0]
 
 
@@ -60,9 +60,9 @@ def _eval_runs(runs, qrels, metrics, relevance_level):
 
     if set(runs) != set(qrels):
         logger.warning(
-            f"Queries mismatch in qrels and runs: \n"
-            + f"Number of queries in qrels: {len(qrels)}; \n"
-            + f"Number of queries in runs: {len(runs)}; \n"
+            f"Queries mismatch in qrels and runs: "
+            + f"Number of queries in qrels: {len(qrels)}; "
+            + f"Number of queries in runs: {len(runs)}; "
             + f"Number of overlap queries: {len(overlap_qids)}."
         )
 
