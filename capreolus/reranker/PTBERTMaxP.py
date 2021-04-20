@@ -39,24 +39,22 @@ class PTBERTMaxP_Class(nn.Module):
 
         self.config = config
 
-    def forward(self,  doc_bert_input, doc_mask, doc_seg):
+    def forward(self, doc_bert_input, doc_mask, doc_seg):
         """ Returns logits of shape [2] """
         # doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
         batch_size = doc_bert_input.size(0)
         maxseqlen = self.extractor.config["maxseqlen"]
 
+        # todo: to change 
+        # when input is of (bs, n_psg, seqlen)
         if len(doc_bert_input.shape) == 3:  # training time
             doc_bert_input = torch.reshape(doc_bert_input[:, 0, :], [batch_size, maxseqlen])
             doc_mask = torch.reshape(doc_mask[:, 0, :], [batch_size, maxseqlen])
             doc_seg = torch.reshape(doc_seg[:, 0, :], [batch_size, maxseqlen])
 
-        # doc_bert_input = torch.reshape(doc_bert_input, [batch_size, maxseqlen])
-        # doc_mask = torch.reshape(doc_mask, [batch_size, maxseqlen])
-        # doc_seg = torch.reshape(doc_seg, [batch_size, maxseqlen])
-
         if "roberta" in self.config["pretrained"]:
             doc_seg = torch.zeros_like(doc_mask)  # since roberta does not have segment input
-        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
+        passage_scores = self.bert(doc_bert_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]  # (batch_size, 2)
         return passage_scores
 
     def predict_step(self, posdoc_bert_input, posdoc_mask, posdoc_seg):
@@ -77,13 +75,14 @@ class PTBERTMaxP_Class(nn.Module):
         posdoc_mask = torch.reshape(posdoc_mask, [batch_size * num_passages, maxseqlen])
         posdoc_seg = torch.reshape(posdoc_seg, [batch_size * num_passages, maxseqlen])
 
+        # (batch_size * num_psg, 2) -> (batch_size * num_psg, ) 
         passage_scores = self(posdoc_bert_input, posdoc_mask, posdoc_seg)[:, 1]
-        import pdb
-        pdb.set_trace()
         passage_scores = torch.reshape(passage_scores, [batch_size, num_passages])
 
         if self.config["aggregation"] == "max":
-            passage_scores = torch.max(passage_scores, dim=1).values
+            import pdb
+            pdb.set_trace()
+            passage_scores = torch.max(passage_scores, dim=1).values # (batch_size)
         elif self.config["aggregation"] == "first":
             passage_scores = passage_scores[:, 0]
         elif self.config["aggregation"] == "sum":
@@ -93,6 +92,8 @@ class PTBERTMaxP_Class(nn.Module):
         else:
             raise ValueError("Unknown aggregation method: {}".format(self.config["aggregation"]))
 
+        # import pdb
+        # pdb.set_trace()
         return passage_scores
 
 
@@ -132,6 +133,6 @@ class PTBERTMaxP(Reranker):
         ]
 
     def test(self, d):
-        return self.model.predict_step(d["pos_bert_input"], d["pos_seg"], d["pos_mask"]).view(-1)
+        return self.model.predict_step(d["pos_bert_input"], d["pos_seg"], d["pos_mask"]) 
 
 
