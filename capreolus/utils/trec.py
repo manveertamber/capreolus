@@ -34,7 +34,7 @@ def load_trec_topics(queryfn):
 
             if line.startswith("<num>"):
                 # <num> Number: 700
-                qid = line.split()[-1]
+                qid = line.split()[-1].strip("<num>").strip("</num>")
                 # no longer an int
                 # assert qid > 0
                 block = None
