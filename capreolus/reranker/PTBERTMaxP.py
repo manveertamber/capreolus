@@ -1,3 +1,4 @@
+import random
 import torch
 from torch import nn
 from transformers import AutoModelForSequenceClassification
@@ -41,16 +42,17 @@ class PTBERTMaxP_Class(nn.Module):
 
     def forward(self, doc_bert_input, doc_mask, doc_seg):
         """ Returns logits of shape [2] """
-        # doc_bert_input, doc_mask, doc_seg = x[0], x[1], x[2]
         batch_size = doc_bert_input.size(0)
+        num_passages = self.extractor.config["numpassages"]
         maxseqlen = self.extractor.config["maxseqlen"]
 
         # todo: to change 
         # when input is of (bs, n_psg, seqlen)
         if len(doc_bert_input.shape) == 3:  # training time
-            doc_bert_input = torch.reshape(doc_bert_input[:, 0, :], [batch_size, maxseqlen])
-            doc_mask = torch.reshape(doc_mask[:, 0, :], [batch_size, maxseqlen])
-            doc_seg = torch.reshape(doc_seg[:, 0, :], [batch_size, maxseqlen])
+            random_i = random.randint(0, num_passages - 1)
+            doc_bert_input = torch.reshape(doc_bert_input[:, random_i, :], [batch_size, maxseqlen])
+            doc_mask = torch.reshape(doc_mask[:, random_i, :], [batch_size, maxseqlen])
+            doc_seg = torch.reshape(doc_seg[:, random_i, :], [batch_size, maxseqlen])
 
         if "roberta" in self.config["pretrained"]:
             doc_seg = torch.zeros_like(doc_mask)  # since roberta does not have segment input
@@ -82,7 +84,7 @@ class PTBERTMaxP_Class(nn.Module):
         if self.config["aggregation"] == "max":
             import pdb
             pdb.set_trace()
-            passage_scores = torch.max(passage_scores, dim=1).values # (batch_size)
+            passage_scores = torch.max(passage_scores, dim=1).values  # (batch_size)
         elif self.config["aggregation"] == "first":
             passage_scores = passage_scores[:, 0]
         elif self.config["aggregation"] == "sum":
