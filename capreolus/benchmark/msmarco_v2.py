@@ -29,6 +29,15 @@ class MSMarcoDoc_V2(Benchmark):
     topic_file = data_dir / "topics.txt"
     fold_file = data_dir / "folds.json"
 
+    @property
+    def topics(self):
+        if not hasattr(self, "_topics"):
+            qid_topic = [line.strip().split("\t") for line in open(self.topic_file)]
+            self._topics = {
+                self.query_type: {qid: topic for qid, topic in qid_topic},
+            }
+        return self._topics
+
     def build(self):
         self.download_if_missing()
 
