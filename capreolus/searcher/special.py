@@ -15,6 +15,7 @@ from .anserini import BM25
 
 logger = get_logger(__name__)
 
+PACKAGE_PATH = constants["PACKAGE_PATH"]
 SUPPORTED_TRIPLE_FILE = ["small", "large.v1", "large.v2"]
 
 
@@ -205,3 +206,59 @@ class StaticTctColBertDev(Searcher, MsmarcoPsgSearcherMixin):
 
         return outfn
 
+
+
+@Searcher.register
+class MsmarcoDocBm25(BM25):
+    module_name = "msmarcodocbm25"
+    dependencies = [
+        Dependency(key="benchmark", module="benchmark", name="msdoc_v2"),
+        Dependency(key="index", module="index", name="anserini"),
+    ]
+    config_spec = BM25.config_spec
+    train_runfile = PACKAGE_PATH / "data" / "msdoc_v2" / "docv2_train_top100.txt"
+
+    def _query_from_file(self, topicsfn, output_path, config):
+        final_runfn = os.path.join(output_path, "searcher")
+        final_donefn = os.path.join(output_path, "done")
+        if os.path.exists(final_donefn):
+            return output_path
+
+        output_path.mkdir(exist_ok=True, parents=True)
+        tmp_dir = self.get_cache_path() / "tmp"
+        tmp_topicsfn = tmp_dir / os.path.basename(topicsfn)
+        tmp_output_dir = tmp_dir / "BM25_results"
+        tmp_output_dir.mkdir(exist_ok=True, parents=True)
+
+        # run bm25 on dev set
+        if not os.path.exists(tmp_topicsfn):
+            with open(tmp_topicsfn, "wt") as f:
+                i, n_expected = 0, 326748
+                # for qid, title in tqdm(load_trec_topics(topicsfn)["title"].items(), desc="write qid to tmp topic file"):
+                for line in tqdm(open(topicsfn), desc="write qid to tmp topic file", total=n_expected):
+                    qid, title = line.strip().split("\t")
+                    if qid not in self.benchmark.folds["s1"]["train_qids"]:
+                        f.write(f"{qid}\t{title}\n")
+                    i += 1
+                assert i == n_expected
+
+        super()._query_from_file(topicsfn=tmp_topicsfn, output_path=tmp_output_dir, config=config)
+        train_runfile = self.train_runfile
+        dev_test_runfile = tmp_output_dir / "searcher"
+        print("dev file", dev_test_runfile)
+        assert os.path.exists(dev_test_runfile)
+
+        # write train and dev, test runs into final searcher file
+        with open(final_runfn, "a") as fout:
+            with open(train_runfile) as fin:
+                for line in fin:
+                    fout.write(line)
+
+            with open(dev_test_runfile) as fin:
+                for line in fin:
+                    fout.write(line)
+
+        with open(final_donefn, "w") as f:
+            f.write("done")
+
+        return output_path
