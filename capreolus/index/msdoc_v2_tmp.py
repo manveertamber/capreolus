@@ -26,11 +26,10 @@ class MSMarcoDoc_V2_Index(Index):
         outdir = self.get_index_path()
 
         # collection_path, document_type, generator_type = self.collection.get_path_and_types()
-        print(self.config)
         if (not self.config["indexstops"]) and (self.config["stemmer"] == "porter"):
             index_name = "msmarco-doc-v2"
         elif (self.config["indexstops"]) and (self.config["stemmer"] is None):
-            index_name = "msmarco-doc-v2-keepstopwords-no-stemmer"
+            index_name = "msmarco-doc-v2-keepstopwords-no-stemmer-storecontents"
         else:
             raise ValueError("Unsupported cofiguration")
 
