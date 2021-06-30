@@ -264,7 +264,7 @@ class TensorflowTrainer(Trainer):
             for p in pred_batch:
                 predictions.extend(p)
 
-        logger.info(f"number of pred: len(predictions)") 
+        logger.info(f"number of pred: {len(predictions)}")
         trec_preds = self.get_preds_in_trec_format(predictions, pred_data)
         os.makedirs(os.path.dirname(pred_fn), exist_ok=True)
         Searcher.write_trec_run(trec_preds, pred_fn)
