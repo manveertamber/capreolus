@@ -27,6 +27,7 @@ jobs:
           # delete conda cache to avoid "No space left on device" Exception
           conda clean --all
           conda install pytorch=1.8.1 torchvision cpuonly -c pytorch
+          pip install --force-reinstall six
           conda list
           # hack to force h5py version. 3.0 is not compatible with TF. 
           pip install h5py==2.10.0
