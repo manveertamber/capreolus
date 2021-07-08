@@ -25,9 +25,11 @@ jobs:
         run: |
           conda activate capreolus
           # delete conda cache to avoid "No space left on device" Exception
+          conda list
           conda clean --all
           conda install pytorch=1.8.1 torchvision cpuonly -c pytorch
-          pip install --force-reinstall six
+          pip uninstall six
+          pip install six==1.16.0
           conda list
           # hack to force h5py version. 3.0 is not compatible with TF. 
           pip install h5py==2.10.0
