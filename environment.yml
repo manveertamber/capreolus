@@ -36,7 +36,7 @@ dependencies:
     - recommonmark
     - google-api-python-client
     - oauth2client
-    - tensorflow>=2.3,<=2.4.1
+    - tensorflow>=2.3,<2.5
     - transformers==4.6.1
     - tensorflow-ranking
     - Pillow
@@ -51,4 +51,3 @@ dependencies:
     - smart_open
     - ir_datasets
     - gdown
-    - six==1.16.0
