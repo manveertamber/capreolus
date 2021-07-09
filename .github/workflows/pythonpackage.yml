@@ -26,6 +26,7 @@ jobs:
           conda activate capreolus
           conda install six==1.16.0
           # delete conda cache to avoid "No space left on device" Exception
+          conda list
           conda clean --all
           conda install pytorch=1.8.1 torchvision cpuonly -c pytorch
           conda list
