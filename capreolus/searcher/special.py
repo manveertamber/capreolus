@@ -207,16 +207,44 @@ class StaticTctColBertDev(Searcher, MsmarcoPsgSearcherMixin):
         return outfn
 
 
+class MsmarcoDocv2SearcherMixin:
+    """ classes which inherite this Mixin share the training runfile """
+
+    # train_runfile = PACKAGE_PATH / "data" / "msdoc_v2" / "docv2_train_top100.txt"
+    # train_runfile_basename = "docv2_train_top100.txt"
+
+    def get_train_runfile(self):
+        raise NotImplementedError
+
+    def combine_train_and_dev_runfile(self, dev_test_runfile, final_runfile, final_donefn):
+        train_runfile = self.train_runfile
+        assert os.path.exists(dev_test_runfile)
+
+        # write train and dev, test runs into final searcher file
+        with open(final_runfile, "w") as fout:
+            with open(train_runfile) as fin:
+                for line in fin:
+                    fout.write(line)
+
+            with open(dev_test_runfile) as fin:
+                for line in fin:
+                    fout.write(line)
+
+        with open(final_donefn, "w") as f:
+            f.write("done")
+
 
 @Searcher.register
-class MsmarcoDocBm25(BM25):
+class MsmarcoDocBm25(BM25, MsmarcoDocv2SearcherMixin):
     module_name = "msmarcodocbm25"
     dependencies = [
         Dependency(key="benchmark", module="benchmark", name="msdoc_v2"),
         Dependency(key="index", module="index", name="anserini"),
     ]
     config_spec = BM25.config_spec
-    train_runfile = PACKAGE_PATH / "data" / "msdoc_v2" / "docv2_train_top100.txt"
+
+    def get_train_runfile(self):
+        return self.benchmark.data_dir / self.train_runfile_basename
 
     def _query_from_file(self, topicsfn, output_path, config):
         final_runfn = os.path.join(output_path, "searcher")
@@ -243,22 +271,53 @@ class MsmarcoDocBm25(BM25):
                 assert i == n_expected
 
         super()._query_from_file(topicsfn=tmp_topicsfn, output_path=tmp_output_dir, config=config)
-        train_runfile = self.train_runfile
-        dev_test_runfile = tmp_output_dir / "searcher"
-        print("dev file", dev_test_runfile)
-        assert os.path.exists(dev_test_runfile)
+        self.combine_train_and_dev_runfile(
+            tmp_output_dir / "searcher",
+            final_runfn,
+            final_donefn,
+        )
 
-        # write train and dev, test runs into final searcher file
-        with open(final_runfn, "a") as fout:
-            with open(train_runfile) as fin:
-                for line in fin:
-                    fout.write(line)
+        return output_path
 
-            with open(dev_test_runfile) as fin:
-                for line in fin:
-                    fout.write(line)
 
-        with open(final_donefn, "w") as f:
-            f.write("done")
+@Searcher.register
+class StaticTctColBertDevDoc(Searcher, MsmarcoDocv2SearcherMixin):
+    module_name = "static_tct_colbert_doc"
+    dependencies = [Dependency(key="benchmark", module="benchmark", name="msdoc_v2")]
+
+    config_spec = [
+        ConfigOption("version", "maxp", "version of runfile"),
+    ]
+
+    def get_train_runfile(self):
+        return self.benchmark.data_dir / self.train_runfile_basename
+
+    def _query_from_file(self, topicsfn, output_path, cfg):
+        # if self.benchmark.config["type"] == "pass":
+        #     raise NotImplementedError(f"{self.module_name} does not support passage search yet.")
+
+        final_runfile = output_path / "static.run"
+        final_donefn = output_path / "done"
+        if final_donefn.exists():
+            return output_path
+ 
+        output_path.mkdir(exist_ok=True, parents=True)
+        version2runfile = {
+            "firstp": "run.dl21-doc.dev.passage.tct_colbert-v2-hnp-firstp.trec",
+            "maxp": "run.dl21-doc.dev.passage.tct_colbert-v2-hnp-maxp.trec",
+            "seg4": "run.dl21-doc.dev.passage.tct_colbert-v2-hnp-maxp-seg4.trec",
+        }
+
+        version = self.config["version"]
+        runfile_name = version2runfile.get(version, None)
+        if not runfile_name:
+            raise ValueError(f"Unexpected version: {version}.")
+        
+        dev_runfile_dir = PACKAGE_PATH / "data" / "msdoc_v2" / "runfiles"
+        self.combine_train_and_dev_runfile(
+            dev_runfile_dir / runfile_name, 
+            final_runfile,
+            final_donefn,
+        )
 
         return output_path
