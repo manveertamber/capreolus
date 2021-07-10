@@ -18,6 +18,7 @@ class MSMarcoDoc_V2_Index(Index):
     config_spec = [
         ConfigOption("indexstops", False, "should stopwords be indexed? (if False, stopwords are removed)"),
         ConfigOption("stemmer", "porter", "stemmer: porter, krovetz, or none"),
+        ConfigOption("presegmented", False, "whether each document has been presegmented into short passage"),
     ]
 
     index_dir = PACKAGE_PATH / "data" / "msdoc_v2" / "indexes"
@@ -25,20 +26,21 @@ class MSMarcoDoc_V2_Index(Index):
     def _create_index(self):
         outdir = self.get_index_path()
 
-        # collection_path, document_type, generator_type = self.collection.get_path_and_types()
         if (not self.config["indexstops"]) and (self.config["stemmer"] == "porter"):
             index_name = "msmarco-doc-v2"
         elif (self.config["indexstops"]) and (self.config["stemmer"] is None):
             index_name = "msmarco-doc-v2-keepstopwords-no-stemmer-storecontents"
         else:
             raise ValueError("Unsupported cofiguration")
+        
+        if self.config["presegmented"]:
+            index_name += "-presegmented" 
 
         src = self.index_dir / index_name
         dst = outdir
         os.makedirs(outdir, exist_ok=True)
         for fn in os.listdir(src):
             os.symlink(src=(src / fn), dst=(dst / fn))
-
 
     def get_docs(self, doc_ids):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
