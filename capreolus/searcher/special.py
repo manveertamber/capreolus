@@ -217,7 +217,7 @@ class MsmarcoDocv2SearcherMixin:
         raise NotImplementedError
 
     def combine_train_and_dev_runfile(self, dev_test_runfile, final_runfile, final_donefn):
-        train_runfile = self.train_runfile
+        train_runfile = self.get_train_runfile()
         assert os.path.exists(dev_test_runfile)
 
         # write train and dev, test runs into final searcher file
@@ -244,7 +244,9 @@ class MsmarcoDocBm25(BM25, MsmarcoDocv2SearcherMixin):
     config_spec = BM25.config_spec
 
     def get_train_runfile(self):
-        return self.benchmark.data_dir / self.train_runfile_basename
+        basename = "docv2_train_top100.txt" if self.benchmark.config["type"] == "doc" \
+            else "passv2_train_top100.txt" 
+        return self.benchmark.data_dir / basename
 
     def _query_from_file(self, topicsfn, output_path, config):
         final_runfn = os.path.join(output_path, "searcher")
@@ -257,11 +259,12 @@ class MsmarcoDocBm25(BM25, MsmarcoDocv2SearcherMixin):
         tmp_topicsfn = tmp_dir / os.path.basename(topicsfn)
         tmp_output_dir = tmp_dir / "BM25_results"
         tmp_output_dir.mkdir(exist_ok=True, parents=True)
+        print(tmp_output_dir)
 
         # run bm25 on dev set
         if not os.path.exists(tmp_topicsfn):
             with open(tmp_topicsfn, "wt") as f:
-                i, n_expected = 0, 326748
+                i, n_expected = 0, 326748 if self.benchmark.config["type"] == "doc" else 281047
                 # for qid, title in tqdm(load_trec_topics(topicsfn)["title"].items(), desc="write qid to tmp topic file"):
                 for line in tqdm(open(topicsfn), desc="write qid to tmp topic file", total=n_expected):
                     qid, title = line.strip().split("\t")
@@ -290,7 +293,9 @@ class StaticTctColBertDevDoc(Searcher, MsmarcoDocv2SearcherMixin):
     ]
 
     def get_train_runfile(self):
-        return self.benchmark.data_dir / self.train_runfile_basename
+        basename = "docv2_train_top100.txt" if self.benchmark.config["type"] == "doc" \
+            else "passv2_train_top100.txt" 
+        return self.benchmark.data_dir / basename
 
     def _query_from_file(self, topicsfn, output_path, cfg):
         # if self.benchmark.config["type"] == "pass":

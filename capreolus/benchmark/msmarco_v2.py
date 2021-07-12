@@ -19,15 +19,9 @@ from . import Benchmark
 class MSMarcoDoc_V2(Benchmark):
     module_name = "msdoc_v2"
     dependencies = [Dependency(key="collection", module="collection", name="msdoc_v2")]
-
     query_type = "title"
-    config_spec = []
+    config_spec = [ConfigOption("type", "doc", "doc or pass")]
     use_train_as_dev = False
-
-    data_dir = PACKAGE_PATH / "data" / "msdoc_v2"
-    qrel_file = data_dir / "qrels.txt"
-    topic_file = data_dir / "topics.txt"
-    fold_file = data_dir / "folds.json"
 
     @property
     def topics(self):
@@ -39,6 +33,12 @@ class MSMarcoDoc_V2(Benchmark):
         return self._topics
 
     def build(self):
+        type = self.config["type"] # type = "doc"
+        data_dir = PACKAGE_PATH / "data" / f"ms{type}_v2"
+        self.data_dir = data_dir
+        self.qrel_file = data_dir / "qrels.txt"
+        self.topic_file = data_dir / "topics.txt"
+        self.fold_file = data_dir / "folds.json"
         self.download_if_missing()
 
     def download_if_missing(self):
@@ -51,8 +51,9 @@ class MSMarcoDoc_V2(Benchmark):
             return [line.strip().split("\t")[0] for line in open(topic_fn)]
 
         print("preparing fold.json")
-        train_qids = load_qid_from_topic_tsv(self.data_dir / "docv2_train_queries.tsv")
-        dev_qids = load_qid_from_topic_tsv(self.data_dir / "docv2_dev_queries.tsv")
+        type = self.config["type"] # type = "doc"
+        train_qids = load_qid_from_topic_tsv(self.data_dir / f"{type}v2_train_queries.tsv")
+        dev_qids = load_qid_from_topic_tsv(self.data_dir / f"{type}v2_dev_queries.tsv")
         assert len(set(train_qids) & set(dev_qids)) == 0
         folds = {
             "s1": {

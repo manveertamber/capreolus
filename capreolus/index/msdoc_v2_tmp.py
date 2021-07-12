@@ -12,36 +12,7 @@ MAX_THREADS = constants["MAX_THREADS"]
 PACKAGE_PATH = constants["PACKAGE_PATH"]
 
 
-@Index.register
-class MSMarcoDoc_V2_Index(Index):
-    module_name = "msdoc_v2"
-    config_spec = [
-        ConfigOption("indexstops", False, "should stopwords be indexed? (if False, stopwords are removed)"),
-        ConfigOption("stemmer", "porter", "stemmer: porter, krovetz, or none"),
-        ConfigOption("presegmented", False, "whether each document has been presegmented into short passage"),
-    ]
-
-    index_dir = PACKAGE_PATH / "data" / "msdoc_v2" / "indexes"
-
-    def _create_index(self):
-        outdir = self.get_index_path()
-
-        if (not self.config["indexstops"]) and (self.config["stemmer"] == "porter"):
-            index_name = "msmarco-doc-v2"
-        elif (self.config["indexstops"]) and (self.config["stemmer"] is None):
-            index_name = "msmarco-doc-v2-keepstopwords-no-stemmer-storecontents"
-        else:
-            raise ValueError("Unsupported cofiguration")
-        
-        if self.config["presegmented"]:
-            index_name += "-presegmented" 
-
-        src = self.index_dir / index_name
-        dst = outdir
-        os.makedirs(outdir, exist_ok=True)
-        for fn in os.listdir(src):
-            os.symlink(src=(src / fn), dst=(dst / fn))
-
+class MSMarco_V2_Mixin():
     def get_docs(self, doc_ids):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
 
@@ -84,3 +55,65 @@ class MSMarcoDoc_V2_Index(Index):
         self.numdocs = self.reader.numDocs()
         self.JTerm = autoclass("org.apache.lucene.index.Term")
         self.JString = autoclass("java.lang.String")
+
+
+@Index.register
+class MSMarcoDoc_V2_Index(MSMarco_V2_Mixin, Index):
+    module_name = "msdoc_v2"
+    config_spec = [
+        ConfigOption("indexstops", False, "should stopwords be indexed? (if False, stopwords are removed)"),
+        ConfigOption("stemmer", "porter", "stemmer: porter, krovetz, or none"),
+        ConfigOption("presegmented", False, "whether each document has been presegmented into short passage"),
+    ]
+
+    index_dir = PACKAGE_PATH / "data" / "msdoc_v2" / "indexes"
+
+    def _create_index(self):
+        outdir = self.get_index_path()
+
+        if (not self.config["indexstops"]) and (self.config["stemmer"] == "porter"):
+            index_name = "msmarco-doc-v2"
+        elif (self.config["indexstops"]) and (self.config["stemmer"] is None):
+            index_name = "msmarco-doc-v2-keepstopwords-no-stemmer-storecontents"
+        else:
+            raise ValueError("Unsupported cofiguration")
+        
+        if self.config["presegmented"]:
+            index_name += "-presegmented" 
+
+        src = self.index_dir / index_name
+        dst = outdir
+        os.makedirs(outdir, exist_ok=True)
+        for fn in os.listdir(src):
+            os.symlink(src=(src / fn), dst=(dst / fn))
+
+
+@Index.register
+class MSMarcoPass_V2_Index(MSMarco_V2_Mixin, Index):
+    module_name = "mspass_v2"
+    config_spec = [
+        ConfigOption("indexstops", False, "should stopwords be indexed? (if False, stopwords are removed)"),
+        ConfigOption("stemmer", "porter", "stemmer: porter, krovetz, or none"),
+        # ConfigOption("presegmented", False, "whether each document has been presegmented into short passage"),
+    ]
+
+    index_dir = PACKAGE_PATH / "data" / "mspass_v2" / "indexes"
+
+    def _create_index(self):
+        outdir = self.get_index_path()
+
+        if (not self.config["indexstops"]) and (self.config["stemmer"] == "porter"):
+            index_name = "msmarco-passage-v2"
+        elif (self.config["indexstops"]) and (self.config["stemmer"] is None):
+            index_name = "msmarco-passage-v2-keepstopwords-no-stemmer-storecontents"
+        else:
+            raise ValueError("Unsupported cofiguration")
+        
+        # if self.config["presegmented"]:
+        #     index_name += "-presegmented" 
+
+        src = self.index_dir / index_name
+        dst = outdir
+        os.makedirs(outdir, exist_ok=True)
+        for fn in os.listdir(src):
+            os.symlink(src=(src / fn), dst=(dst / fn))
