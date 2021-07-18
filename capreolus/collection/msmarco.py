@@ -104,6 +104,16 @@ class MSMARCO_DOC_V2(Collection):
 
 
 @Collection.register
+class MSMARCO_DOC_V2_Presegmented(Collection):
+    """ This colletion share exactly the same qrels, topic and folds with MS MARCO v2 """
+    module_name = "msdoc_v2_preseg"
+    collection_type = "MsMarcoDocV2Collection"
+    generator_type = "DefaultLuceneDocumentGenerator"
+    data_dir = PACKAGE_PATH / "data" / "msdoc_v2"
+    _path = data_dir / "msmarco_v2_doc_segmented"
+
+
+@Collection.register
 class MSMARCO_PSG_V2(Collection):
     module_name = "mspsg_v2"
     collection_type = "MsMarcoPassageV2Collection"

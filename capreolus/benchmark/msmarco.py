@@ -102,9 +102,9 @@ class MSMARCO_V2(Benchmark):
 
     @property
     def dataset_type(self):
-        if self.collection.module_name == "msdoc_v2":
+        if self.collection.module_name in ["msdoc_v2", "msdoc_v2_preseg"]:
             return "doc"
-        elif self.collection.module_name == "mspsg_v2":
+        elif self.collection.module_name in ["mspsg_v2"]:
             return "pass"
         else:
             raise ValueError(f"Unexpected collection dependency: got {type} but expected 'doc' or 'pass'")
