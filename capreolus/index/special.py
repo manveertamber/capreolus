@@ -13,12 +13,11 @@ MAX_THREADS = constants["MAX_THREADS"]
 
 @Index.register
 class MsV2Index(Index):
-    """ This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection """
+    """This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection"""
+
     module_name = "msdoc_v2"
     config_spec = [
-        ConfigOption(
-            "fields", ["url", "title", "headings", "body"], "which fields to include", value_type="strlist"
-        ),
+        ConfigOption("fields", ["url", "title", "headings", "body"], "which fields to include", value_type="strlist"),
     ]
 
     @staticmethod
@@ -35,7 +34,7 @@ class MsV2Index(Index):
                 docid = json.loads(line)["docid"]
                 assert "#" in docid
                 id2pos[docid] = pos
- 
+
     @property
     def id2pos_map(self):
         if hasattr(self, "_id2pos_map"):
@@ -46,7 +45,7 @@ class MsV2Index(Index):
 
         if id2pos_map_path.exists():
             return json.load(open(id2pos_map_path))
-        
+
         collection_path = self.collection.get_path_and_types()[0]
         self._id2pos_map = {
             json_gz_file: self.build_id2pos_map_single(json_gz_file) for json_gz_file in collection_path.iterdir()
@@ -58,13 +57,11 @@ class MsV2Index(Index):
         collection = self.collection.module_name
         supported_collections = ["msdoc_v2", "msdoc_v2_preseg"]
         if collection not in supported_collections:
-            raise ValueError(
-                f"Not supported collection module: {collection}, should be one of {supported_collections}."
-            )
+            raise ValueError(f"Not supported collection module: {collection}, should be one of {supported_collections}.")
 
         if collection == "msdoc_v2":
             return
- 
+
         self.id2pos_map
 
     def get_docs(self, doc_ids):
@@ -80,13 +77,13 @@ class MsV2Index(Index):
     def get_doc_from_msdoc(self, docid):
         collection_path = self.collection.get_path_and_types()[0]
 
-        (string1, string2, bundlenum, position) = docid.split('_')
-        assert string1 == 'msmarco' and string2 == 'doc'
-        with gzip.open(collection_path / f"msmarco_doc_{bundlenum}.gz", 'rt', encoding='utf8') as in_fh:
+        (string1, string2, bundlenum, position) = docid.split("_")
+        assert string1 == "msmarco" and string2 == "doc"
+        with gzip.open(collection_path / f"msmarco_doc_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
             in_fh.seek(int(position))
             json_string = in_fh.readline()
             doc = json.loads(json_string)
-            assert doc['docid'] == docid
+            assert doc["docid"] == docid
             return " ".join([doc.get(field, "") for field in self.config["fields"]])
 
     def get_doc_from_msdoc_presegmented(self, docid):
@@ -102,7 +99,7 @@ class MsV2Index(Index):
                 if "segment" in doc and "body" not in doc:
                     # replace the body in field with segment
                     fields = [field if field != "body" else "segment" for field in self.config["fields"]]
-                return " ".join([doc.get(field, "") for field in fields]) 
+                return " ".join([doc.get(field, "") for field in fields])
 
     def get_df(self, term):
         return None
@@ -113,7 +110,8 @@ class MsV2Index(Index):
 
 @Index.register
 class MsPsgV2Index(Index):
-    """ This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection """
+    """This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection"""
+
     module_name = "mspsg_v2"
     dependencies = [
         Dependency(key="collection", module="collection", name="mspsg_v2"),
@@ -122,9 +120,7 @@ class MsPsgV2Index(Index):
     def _create_index(self):
         collection = self.collection.module_name
         if collection != "msdoc_v2_preseg":
-            raise ValueError(
-                f"Not supported collection module: {collection}, should msdoc_v2_preseg."
-            )
+            raise ValueError(f"Not supported collection module: {collection}, should msdoc_v2_preseg.")
 
     def get_docs(self, doc_ids):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
@@ -132,13 +128,13 @@ class MsPsgV2Index(Index):
     def get_doc(self, docid):
         collection_path = self.collection.get_path_and_types()[0]
 
-        (string1, string2, bundlenum, position) = sys.argv[i].split('_')
-        assert string1 == 'msmarco' and string2 == 'passage'    
-        with gzip.open(collection_path / f'msmarco_passage_{bundlenum}.gz', 'rt', encoding='utf8') as in_fh:
+        (string1, string2, bundlenum, position) = sys.argv[i].split("_")
+        assert string1 == "msmarco" and string2 == "passage"
+        with gzip.open(collection_path / f"msmarco_passage_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
             in_fh.seek(int(position))
             json_string = in_fh.readline()
             doc = json.loads(json_string)
-            assert doc['pid'] == pid
+            assert doc["pid"] == pid
             return doc["passage"]
 
     def get_df(self, term):
