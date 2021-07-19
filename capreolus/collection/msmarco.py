@@ -1,8 +1,10 @@
 import os
 import gzip
+import json
 import shutil
 import tarfile
 from time import time
+from collections import defaultdict
 
 from capreolus import constants
 from capreolus.utils.common import download_file
@@ -102,6 +104,19 @@ class MSMARCO_DOC_V2(Collection):
     _path = data_dir / "msmarco_v2_doc"
     # is_large_collection = True
 
+    def get_doc(self, docid):
+        collection_path = self.get_path_and_types()[0]
+
+        (string1, string2, bundlenum, position) = docid.split("_")
+        assert string1 == "msmarco" and string2 == "doc"
+        with gzip.open(collection_path / f"msmarco_doc_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
+            in_fh.seek(int(position))
+            json_string = in_fh.readline()
+            doc = json.loads(json_string)
+            assert doc["docid"] == docid
+        # return " ".join([doc.get(field, "") for field in self.config["fields"]])
+        return doc
+
 
 @Collection.register
 class MSMARCO_DOC_V2_Presegmented(Collection):
@@ -112,6 +127,79 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
     data_dir = PACKAGE_PATH / "data" / "msdoc_v2"
     _path = data_dir / "msmarco_v2_doc_segmented"
 
+    def build(self):
+        self.id2pos_map
+
+    @staticmethod
+    def build_id2pos_map_single(json_gz_file):
+        # import pdb
+        # pdb.set_trace()
+        # assert json_gz_file.suffix == ".gz" and json_gz_file.suffix.suffix == ".json"
+        assert json_gz_file.suffix == ".jsonl"
+        id2pos = defaultdict(dict)
+        # with gzip.open(json_gz_file) as f:
+        with open(json_gz_file) as f:
+            while True:
+                pos = f.tell()
+                line = f.readline()
+                if line == "":
+                    break
+
+                docid = json.loads(line)["docid"]
+                assert "#" in docid
+                root_docid, suffix = docid.split("#")
+                id2pos[root_docid][suffix] = pos
+        return id2pos
+
+    @property
+    def id2pos_map(self):
+        if hasattr(self, "_id2pos_map"):
+            return self._id2pos_map
+
+        cache_path = self.get_cache_path()
+        id2pos_map_path = cache_path / "id2pos_map.json"
+
+        if id2pos_map_path.exists():
+            return json.load(open(id2pos_map_path))
+
+        collection_path = self.get_path_and_types()[0]
+        self._id2pos_map = {
+            json_gz_file: self.build_id2pos_map_single(json_gz_file) for json_gz_file in collection_path.iterdir()
+        }
+        json.dump(self._id2pos_map, open(id2pos_map_path, "w"))
+        return self._id2pos_map
+
+    def get_doc(self, docid):
+        collection_path = self.get_path_and_types()[0]
+
+        for psg_fn in self.id2pos_map:
+            root_docid, suffix = docid.split("#")
+            if root_docid in self.id2pos_map[psg_fn]:
+                position = self.id2pos_map[psg_fn][root_docid][suffix]
+                in_fh = gzip.open(collection_path / psg_fn, "rt", encoding="utf-8")
+                in_fh.seek(position)
+                doc = json.loads(in_fh.readline())
+                assert doc["docid"] == docid
+                return doc
+
+    def get_passages(self, docid):
+        collection_path = self.get_path_and_types()[0]
+        passages = []
+
+        for psg_fn in self.id2pos_map:
+            root_docid, suffix = docid.split("#")
+            if root_docid in self.id2pos_map[psg_fn]:
+                for suffix in self.id2pos_map[psg_fn][root_docid]:
+                    position = self.id2pos_map[psg_fn][root_docid][suffix]
+                    in_fh = gzip.open(collection_path / psg_fn, "rt", encoding="utf-8")
+                    in_fh.seek(position)
+                    doc = json.loads(in_fh.readline())
+                    assert doc["docid"] == f"{docid}#{suffix}"
+                    passages.append(doc)
+
+        return passages
+
+
 
 @Collection.register
 class MSMARCO_PSG_V2(Collection):
@@ -121,3 +209,16 @@ class MSMARCO_PSG_V2(Collection):
     data_dir = PACKAGE_PATH / "data" / "mspass_v2"
     _path = data_dir / "msmarco_v2_passage"
     # is_large_collection = True
+
+    def get_doc(self, docid):
+        collection_path = self.get_path_and_types()[0]
+
+        (string1, string2, bundlenum, position) = docid.split("_")
+        assert string1 == "msmarco" and string2 == "passage"
+        with gzip.open(collection_path / f"msmarco_passage_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
+            in_fh.seek(int(position))
+            json_string = in_fh.readline()
+            doc = json.loads(json_string)
+            assert doc["pid"] == docid
+
+        return doc["passage"]
