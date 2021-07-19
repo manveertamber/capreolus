@@ -6,6 +6,7 @@ import tarfile
 from time import time
 from collections import defaultdict
 
+from tqdm import tqdm
 from capreolus import constants
 from capreolus.utils.common import download_file
 from capreolus.utils.loginit import get_logger
@@ -131,15 +132,17 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
         self.id2pos_map
 
     @staticmethod
-    def build_id2pos_map_single(json_gz_file):
-        # import pdb
-        # pdb.set_trace()
-        # assert json_gz_file.suffix == ".gz" and json_gz_file.suffix.suffix == ".json"
+    def build_id2pos_map(json_gz_file):
         assert json_gz_file.suffix == ".jsonl"
         id2pos = defaultdict(dict)
-        # with gzip.open(json_gz_file) as f:
+        idx, interval = 0, 1_000_000
         with open(json_gz_file) as f:
             while True:
+                if idx % interval == 0 and idx > 0:
+                    logger.info(
+                        f"[%.2f M] lines processed in file {os.path.basename(json_gz_file)}" % (idx / 1_000_000)
+                    )
+
                 pos = f.tell()
                 line = f.readline()
                 if line == "":
@@ -149,6 +152,7 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
                 assert "#" in docid
                 root_docid, suffix = docid.split("#")
                 id2pos[root_docid][suffix] = pos
+                idx += 1
         return id2pos
 
     @property
@@ -164,7 +168,7 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
 
         collection_path = self.get_path_and_types()[0]
         self._id2pos_map = {
-            json_gz_file: self.build_id2pos_map_single(json_gz_file) for json_gz_file in collection_path.iterdir()
+            json_gz_file.name: self.build_id2pos_map(json_gz_file) for json_gz_file in collection_path.iterdir()
         }
         json.dump(self._id2pos_map, open(id2pos_map_path, "w"))
         return self._id2pos_map
@@ -179,21 +183,25 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
                 in_fh = gzip.open(collection_path / psg_fn, "rt", encoding="utf-8")
                 in_fh.seek(position)
                 doc = json.loads(in_fh.readline())
+                doc["body"] = " ".join(doc["body"].split())
                 assert doc["docid"] == docid
                 return doc
 
     def get_passages(self, docid):
+        assert "#" not in docid
         collection_path = self.get_path_and_types()[0]
         passages = []
 
         for psg_fn in self.id2pos_map:
-            root_docid, suffix = docid.split("#")
-            if root_docid in self.id2pos_map[psg_fn]:
-                for suffix in self.id2pos_map[psg_fn][root_docid]:
-                    position = self.id2pos_map[psg_fn][root_docid][suffix]
-                    in_fh = gzip.open(collection_path / psg_fn, "rt", encoding="utf-8")
+            if docid in self.id2pos_map[psg_fn]:
+                for suffix in self.id2pos_map[psg_fn][docid]:
+                    fopen = gzip.open if psg_fn.endswith(".gz") else open
+
+                    position = self.id2pos_map[psg_fn][docid][suffix]
+                    in_fh = fopen(collection_path / psg_fn, "rt", encoding="utf-8")
                     in_fh.seek(position)
                     doc = json.loads(in_fh.readline())
+                    doc["body"] = " ".join(doc["body"].split())
                     assert doc["docid"] == f"{docid}#{suffix}"
                     passages.append(doc)
 
@@ -221,4 +229,4 @@ class MSMARCO_PSG_V2(Collection):
             doc = json.loads(json_string)
             assert doc["pid"] == docid
 
-        return doc["passage"]
+        return " ".join(doc["passage"].split())

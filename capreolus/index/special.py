@@ -13,7 +13,7 @@ MAX_THREADS = constants["MAX_THREADS"]
 
 @Index.register
 class MsV2Index(Index):
-    """This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection"""
+    """This index read documents from msmarco doc v2 collection or presegmented doc v2 collection"""
 
     module_name = "msdoc_v2"
     config_spec = [
@@ -25,6 +25,8 @@ class MsV2Index(Index):
         supported_collections = ["msdoc_v2", "msdoc_v2_preseg"]
         if collection not in supported_collections:
             raise ValueError(f"Not supported collection module: {collection}, should be one of {supported_collections}.")
+        outdir = self.get_index_path()
+        os.makedirs(outdir, exist_ok=True)
 
     def get_docs(self, doc_ids):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
@@ -36,7 +38,7 @@ class MsV2Index(Index):
     def get_passages(self, docid):
         # todo: allow msdoc_v2 also able to call this function 
         assert "#" not in docid
-        assert self.colleciton.module_name == "msdoc_v2_preseg"
+        assert self.collection.module_name == "msdoc_v2_preseg"
         passages = self.collection.get_passages(docid)  # dictionary format
         return [" ".join([passage.get(field, "") for field in self.config["fields"]]) for passage in passages]
 
@@ -49,7 +51,7 @@ class MsV2Index(Index):
 
 @Index.register
 class MsPsgV2Index(Index):
-    """This index read documents from msmarco doc v2 colleciton or presegmented doc v2 collection"""
+    """This index read documents from msmarco doc v2 collection or presegmented doc v2 collection"""
 
     module_name = "mspsg_v2"
     dependencies = [
@@ -58,14 +60,16 @@ class MsPsgV2Index(Index):
 
     def _create_index(self):
         collection = self.collection.module_name
-        if collection != "msdoc_v2_preseg":
-            raise ValueError(f"Not supported collection module: {collection}, should msdoc_v2_preseg.")
+        if collection != "mspsg_v2":
+            raise ValueError(f"Not supported collection module: {collection}, should mspsg_v2.")
+        outdir = self.get_index_path()
+        os.makedirs(outdir, exist_ok=True)
 
     def get_docs(self, doc_ids):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
 
     def get_doc(self, docid):
-        self.colleciton.get_doc(docid)
+        self.collection.get_doc(docid)
 
     def get_df(self, term):
         return None
