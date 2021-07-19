@@ -32,7 +32,6 @@ class BertPassage(Extractor):
         Dependency(key="benchmark", module="benchmark", name=None),
         Dependency(
             key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}
-            # key="index", module="index", name="anserini"
         ),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
@@ -398,7 +397,7 @@ class BertPassagePrebuilt(BertPassage):
     {docid: [passage_1, passage_2, ..., passage_n]}, where the first self.config["numpassages"] will be kept. 
     """
 
-    module_name = "bertpassage"
+    module_name = "bertpassageprebuilt"
     dependencies = [
         Dependency(key="benchmark", module="benchmark", name=None),
         Dependency(key="index", module="index", name="msdoc_v2"),
