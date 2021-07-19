@@ -1,7 +1,9 @@
-import pickle
 import os
-import tensorflow as tf
+import pickle
+from collections import defaultdict
+
 import numpy as np
+import tensorflow as tf
 from tqdm import tqdm
 
 
@@ -30,6 +32,7 @@ class BertPassage(Extractor):
         Dependency(key="benchmark", module="benchmark", name=None),
         Dependency(
             key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}
+            # key="index", module="index", name="anserini"
         ),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
@@ -384,3 +387,34 @@ class BertPassage(Extractor):
         data["neg_mask"] = np.array(neg_bert_masks, dtype=np.long)
         data["neg_seg"] = np.array(neg_bert_segs, dtype=np.long)
         return data
+
+
+@Extractor.register
+class BertPassagePrebuilt(BertPassage):
+    """
+    Inherite the topic and document tokenization logic from Module BertPassage,
+    but the passage is prebuit, with specified docid2passage path or directory.
+    Each line in the .jsonl file should be of format: 
+    {docid: [passage_1, passage_2, ..., passage_n]}, where the first self.config["numpassages"] will be kept. 
+    """
+
+    module_name = "bertpassage"
+    dependencies = [
+        Dependency(key="benchmark", module="benchmark", name=None),
+        Dependency(key="index", module="index", name="msdoc_v2"),
+        Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
+    ]
+
+    config_spec = [
+        ConfigOption("maxseqlen", 256, "Maximum input length (query+document)"),
+        ConfigOption("maxqlen", 20, "Maximum query length"),
+        ConfigOption("passagelen", 150, "Length of the extracted passage"),
+        ConfigOption("usecache", False, "Should the extracted features be cached?"),
+        ConfigOption("numpassages", 16, "Number of passages per document"),
+    ]
+    config_keys_not_in_path = ["usecache"]
+
+    def _get_passages(self, docid):
+        # get the passage from index
+        passages = [self.tokenizer.tokenize(passage) for passage in self.index.get_passages(docid)[:self.config["passagelen"]]]
+        return passages[:self.config["numpassages"]]
