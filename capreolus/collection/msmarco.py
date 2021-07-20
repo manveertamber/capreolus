@@ -115,13 +115,13 @@ class MSMARCO_DOC_V2(Collection):
             json_string = in_fh.readline()
             doc = json.loads(json_string)
             assert doc["docid"] == docid
-        # return " ".join([doc.get(field, "") for field in self.config["fields"]])
         return doc
 
 
 @Collection.register
 class MSMARCO_DOC_V2_Presegmented(Collection):
-    """ This colletion share exactly the same qrels, topic and folds with MS MARCO v2 """
+    """This colletion share exactly the same qrels, topic and folds with MS MARCO v2"""
+
     module_name = "msdoc_v2_preseg"
     collection_type = "MsMarcoDocV2Collection"
     generator_type = "DefaultLuceneDocumentGenerator"
@@ -129,7 +129,16 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
     _path = data_dir / "msmarco_v2_doc_segmented"
 
     def build(self):
+        collection_path = self.get_path_and_types()[0]
+
         self.id2pos_map
+        self.cache = {}  # docid to doc
+        self.name2filehandle = {psg_fn: open(collection_path / psg_fn, "rt", encoding="utf-8") for psg_fn in self.id2pos_map}
+
+    def __del__(self):
+        if hasattr(self, "name2filehandle"):
+            for file_handler in self.name2filehandle.values():
+                file_handler.close()
 
     @staticmethod
     def build_id2pos_map(json_gz_file):
@@ -139,9 +148,7 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
         with open(json_gz_file) as f:
             while True:
                 if idx % interval == 0 and idx > 0:
-                    logger.info(
-                        f"[%.2f M] lines processed in file {os.path.basename(json_gz_file)}" % (idx / 1_000_000)
-                    )
+                    logger.info(f"[%.2f M] lines processed in file {os.path.basename(json_gz_file)}" % (idx / 1_000_000))
 
                 pos = f.tell()
                 line = f.readline()
@@ -164,49 +171,59 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
         id2pos_map_path = cache_path / "id2pos_map.json"
 
         if id2pos_map_path.exists():
-            return json.load(open(id2pos_map_path))
+            self._id2pos_map = json.load(open(id2pos_map_path))
+            return self._id2pos_map
 
         collection_path = self.get_path_and_types()[0]
         self._id2pos_map = {
-            json_gz_file.name: self.build_id2pos_map(json_gz_file) for json_gz_file in collection_path.iterdir()
+            json_gz_file.name: self.build_id2pos_map(json_gz_file)
+            for json_gz_file in collection_path.iterdir()
+            if json_gz_file.suffix == ".jsonl"
         }
         json.dump(self._id2pos_map, open(id2pos_map_path, "w"))
         return self._id2pos_map
 
     def get_doc(self, docid):
-        collection_path = self.get_path_and_types()[0]
+        if docid in self.cache:
+            return self.cache[docid]
 
         for psg_fn in self.id2pos_map:
             root_docid, suffix = docid.split("#")
             if root_docid in self.id2pos_map[psg_fn]:
+
                 position = self.id2pos_map[psg_fn][root_docid][suffix]
-                in_fh = gzip.open(collection_path / psg_fn, "rt", encoding="utf-8")
+                in_fh = self.name2filehandle[psg_fn]
                 in_fh.seek(position)
+
                 doc = json.loads(in_fh.readline())
                 doc["body"] = " ".join(doc["body"].split())
+
                 assert doc["docid"] == docid
+                self.cache[docid] = doc
                 return doc
 
     def get_passages(self, docid):
+        if "#" in docid:
+            return [self.get_doc(docid)]
+
         assert "#" not in docid
         collection_path = self.get_path_and_types()[0]
         passages = []
 
         for psg_fn in self.id2pos_map:
             if docid in self.id2pos_map[psg_fn]:
-                for suffix in self.id2pos_map[psg_fn][docid]:
-                    fopen = gzip.open if psg_fn.endswith(".gz") else open
 
-                    position = self.id2pos_map[psg_fn][docid][suffix]
-                    in_fh = fopen(collection_path / psg_fn, "rt", encoding="utf-8")
-                    in_fh.seek(position)
+                position = self.id2pos_map[psg_fn][docid]["0"]
+                in_fh = self.name2filehandle[psg_fn]
+                in_fh.seek(position)
+
+                for suffix in self.id2pos_map[psg_fn][docid]:
                     doc = json.loads(in_fh.readline())
                     doc["body"] = " ".join(doc["body"].split())
                     assert doc["docid"] == f"{docid}#{suffix}"
                     passages.append(doc)
 
         return passages
-
 
 
 @Collection.register
@@ -218,15 +235,53 @@ class MSMARCO_PSG_V2(Collection):
     _path = data_dir / "msmarco_v2_passage"
     # is_large_collection = True
 
-    def get_doc(self, docid):
+    def build(self):
         collection_path = self.get_path_and_types()[0]
+        self.cache = {}  # docid to doc
+        self.name2filehandle = {
+            psg_fn.name: open(psg_fn, "rt", encoding="utf-8") for psg_fn in collection_path.iterdir()
+        }  # the files under input folder must be uncompressed to support fast f.seek
 
+    def __del__(self):
+        for file_handler in self.name2filehandle.values():
+            file_handler.close()
+
+    @staticmethod
+    def read_all_before_pos(in_fh, pos, cache):
+        cur_passage = None
+        in_fh.seek(0)
+        while True:
+            cur_pos = in_fh.tell()
+            if cur_pos > pos:
+                break
+
+            line = json.loads(in_fh.readline())
+            pid, passage = line["pid"], " ".join(line["passage"].split())
+
+            if pid not in cache:
+                cache[pid] = passage
+
+            if cur_pos == pos:
+                cur_passage = passage
+
+        return cur_passage
+
+    def get_doc(self, docid):
+        if docid in self.cache:
+            return self.cache[docid]
+
+        collection_path = self.get_path_and_types()[0]
         (string1, string2, bundlenum, position) = docid.split("_")
+        position = int(position)
         assert string1 == "msmarco" and string2 == "passage"
-        with gzip.open(collection_path / f"msmarco_passage_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
-            in_fh.seek(int(position))
-            json_string = in_fh.readline()
-            doc = json.loads(json_string)
-            assert doc["pid"] == docid
 
-        return " ".join(doc["passage"].split())
+        psg_fn = f"msmarco_passage_{bundlenum}"
+        in_fh = self.name2filehandle[psg_fn]
+        in_fh.seek(position)
+        doc = json.loads(in_fh.readline())
+        assert doc["pid"] == docid
+
+        passage = " ".join(doc["passage"].split())
+        self.cache[docid] = passage
+
+        return passage
