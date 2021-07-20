@@ -32,12 +32,10 @@ class MsV2Index(Index):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
 
     def get_doc(self, docid):
-        doc = self.collection.get_doc()  # dictionary format
+        doc = self.collection.get_doc(docid)  # dictionary format
         return " ".join([doc.get(field, "") for field in self.config["fields"]])
 
     def get_passages(self, docid):
-        # todo: allow msdoc_v2 also able to call this function 
-        assert "#" not in docid
         assert self.collection.module_name == "msdoc_v2_preseg"
         passages = self.collection.get_passages(docid)  # dictionary format
         return [" ".join([passage.get(field, "") for field in self.config["fields"]]) for passage in passages]
@@ -69,7 +67,10 @@ class MsPsgV2Index(Index):
         return [self.get_doc(doc_id) for doc_id in doc_ids]
 
     def get_doc(self, docid):
-        self.collection.get_doc(docid)
+        return self.collection.get_doc(docid)
+
+    def get_passages(self, docid):
+        return [self.get_doc(docid)]
 
     def get_df(self, term):
         return None
