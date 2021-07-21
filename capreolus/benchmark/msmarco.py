@@ -86,9 +86,7 @@ class MSMARCO_V2(Benchmark):
     query_type = "title"
 
     dependencies = [Dependency(key="collection", module="collection")]
-    # could depends on
-    # dependencies = [Dependency(key="collection", module="collection", name="ms_v2"),]
-    # config_spec = [ConfigOption("datasettype", "doc", "doc or pass, indicating which")]
+    # could depends on one of msdoc_v2, msdoc_v2_preseg, or mspsg_v2
     use_train_as_dev = False
 
     @property
@@ -127,23 +125,27 @@ class MSMARCO_V2(Benchmark):
             return
 
         assert all([f.exists() for f in [self.qrel_file, self.topic_file]])
+        assert all(
+            [f.exists() for f in [f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]]]
+        )
 
         def load_qid_from_topic_tsv(topic_fn):
             return [line.strip().split("\t")[0] for line in open(topic_fn)]
 
-        logger.info("preparing fold.json")
-
+        logger.info("Preparing fold.json")
         self.data_dir.mkdir(exist_ok=True, parents=True)
 
         train_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_train_queries.tsv")
         dev_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_dev_queries.tsv")
+        test_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_dev2_queries.tsv")
+
         assert len(set(train_qids) & set(dev_qids)) == 0
         folds = {
             "s1": {
                 "train_qids": train_qids,
                 "predict": {
                     "dev": dev_qids,
-                    "test": dev_qids,
+                    "test": test_qids,
                 },
             }
         }
