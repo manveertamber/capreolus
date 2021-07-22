@@ -125,9 +125,9 @@ class MSMARCO_V2(Benchmark):
             return
 
         assert all([f.exists() for f in [self.qrel_file, self.topic_file]])
-        assert all(
-            [f.exists() for f in [f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]]]
-        )
+        assert all([f.exists() for f in [
+            self.data_dir / f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]
+        ]])
 
         def load_qid_from_topic_tsv(topic_fn):
             return [line.strip().split("\t")[0] for line in open(topic_fn)]
