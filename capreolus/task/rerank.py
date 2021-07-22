@@ -20,6 +20,12 @@ class RerankTask(Task):
         ConfigOption("metrics", "default", "metrics reported for evaluation", value_type="strlist"),
         ConfigOption("threshold", 100, "Number of docids per query to evaluate during prediction"),
         ConfigOption("testthreshold", 1000, "Number of docids per query to evaluate on test data"),
+        # ConfigOption("selectmaxpassage", False, "Number of docids per query to evaluate on test data"),
+        ConfigOption(
+            "delimiter",
+            None,
+            "The delimiter of splitting the segment id from document id. e.g., # for doc00#00. None if no segment id is attached to the doc id",
+        ),
     ]
     dependencies = [
         Dependency(
@@ -170,7 +176,11 @@ class RerankTask(Task):
         searcher_runs, reranker_runs = self.find_birch_crossvalidated_results()
 
         fold_test_metrics = evaluator.eval_runs(
-            reranker_runs[fold]["test"], self.benchmark.qrels, evaluator.DEFAULT_METRICS, self.benchmark.relevance_level
+            reranker_runs[fold]["test"],
+            self.benchmark.qrels,
+            evaluator.DEFAULT_METRICS,
+            self.benchmark.relevance_level,
+            delimiter=self.config["delimiter"],
         )
         logger.info("rerank: fold=%s test metrics: %s", fold, fold_test_metrics)
 
@@ -187,12 +197,16 @@ class RerankTask(Task):
             raise ValueError("could not find predictions; run the train command first")
 
         dev_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["dev"]}
-        fold_dev_metrics = evaluator.eval_runs(reranker_runs[fold]["dev"], dev_qrels, metrics, self.benchmark.relevance_level)
+        fold_dev_metrics = evaluator.eval_runs(
+            reranker_runs[fold]["dev"], dev_qrels, metrics, self.benchmark.relevance_level, delimiter=self.config["delimiter"]
+        )
         pretty_fold_dev_metrics = " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(fold_dev_metrics.items())])
         logger.info("rerank: fold=%s dev metrics: %s", fold, pretty_fold_dev_metrics)
 
         test_qrels = {qid: self.benchmark.qrels.get(qid, {}) for qid in self.benchmark.folds[fold]["predict"]["test"]}
-        fold_test_metrics = evaluator.eval_runs(reranker_runs[fold]["test"], test_qrels, metrics, self.benchmark.relevance_level)
+        fold_test_metrics = evaluator.eval_runs(
+            reranker_runs[fold]["test"], test_qrels, metrics, self.benchmark.relevance_level, delimiter=self.config["delimiter"]
+        )
         pretty_fold_test_metrics = " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(fold_test_metrics.items())])
         logger.info("rerank: fold=%s test metrics: %s", fold, pretty_fold_test_metrics)
 
@@ -217,9 +231,11 @@ class RerankTask(Task):
                 for docid, score in docscores.items():
                     all_preds[qid][docid] = score
 
-        cv_metrics = evaluator.eval_runs(all_preds, self.benchmark.qrels, metrics, self.benchmark.relevance_level)
+        cv_metrics = evaluator.eval_runs(
+            all_preds, self.benchmark.qrels, metrics, self.benchmark.relevance_level, delimiter=self.config["delimiter"]
+        )
         interpolated_results = evaluator.interpolated_eval(
-            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], metrics
+            searcher_runs, reranker_runs, self.benchmark, self.config["optimize"], metrics, delimiter=self.config["delimiter"]
         )
 
         for metric, score in sorted(cv_metrics.items()):

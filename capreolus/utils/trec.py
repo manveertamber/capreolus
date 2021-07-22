@@ -174,3 +174,19 @@ def anserini_index_to_trec_docs(index_dir, output_dir, expected_doc_count):
 
     for handle in output_handles:
         handle.close()
+
+
+def select_passage(runs, delimiter, operation="max"):
+    """for each docid, split it into (docid, segid) according to delimiter. only the largest score for each doc id are kept"""
+    op2fn = {"max": max, "first": lambda lst: lst[0], "average": lambda lst: sum(lst) / len(lst)}
+
+    operation_fn = op2fn[operation]
+    for qid in runs:
+        docid2scores = defaultdict(list)
+        for docid, score in runs[qid].items():
+            root_docid = docid.split(delimiter)[0]
+            docid2scores[root_docid].append(score)
+
+        runs[qid] = {root_docid: operation_fn(docid2scores[root_docid]) for root_docid in docid2scores}
+
+    return runs
