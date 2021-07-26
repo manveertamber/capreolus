@@ -292,7 +292,7 @@ class TensorflowTrainer(Trainer):
                             dev_predictions.extend(p)
 
                     trec_preds = self.get_preds_in_trec_format(dev_predictions, dev_data)
-                    metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level)
+                    metrics = evaluator.eval_runs(trec_preds, dict(qrels), evaluator.DEFAULT_METRICS, relevance_level, delimiter="#")
                     logger.info("dev metrics: %s", " ".join([f"{metric}={v:0.3f}" for metric, v in sorted(metrics.items())]))
                     if metrics[metric] > dev_best_metric:
                         dev_best_metric = metrics[metric]
@@ -397,6 +397,7 @@ class TensorflowTrainer(Trainer):
 
     def load_tf_train_records_from_file(self, reranker, filenames, batch_size):
         raw_dataset = tf.data.TFRecordDataset(filenames)
+        # raw_dataset = tf.data.TFRecordDataset(filenames).shuffle(100_000)
         tf_records_dataset = raw_dataset.batch(batch_size, drop_remainder=True).map(
             reranker.extractor.parse_tf_train_example, num_parallel_calls=tf.data.experimental.AUTOTUNE
         )

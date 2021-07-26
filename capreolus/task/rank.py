@@ -14,11 +14,11 @@ class RankTask(Task):
         ConfigOption("filter", False),
         ConfigOption("optimize", "map", "metric to maximize on the dev set"),
         ConfigOption("metrics", "default", "metrics reported for evaluation", value_type="strlist"),
-        ConfigOption(
-            "delimiter",
-            None,
-            "The delimiter of splitting the segment id from document id. e.g., # for doc00#00. None if no segment id is attached to the doc id",
-        ),
+        # ConfigOption(
+        #     "delimiter",
+        #     None,
+        #     "The delimiter of splitting the segment id from document id. e.g., # for doc00#00. None if no segment id is attached to the doc id",
+        # ),
     ]
     config_keys_not_in_path = ["optimize", "metrics"]  # affect only evaluation but not search()
 
@@ -57,7 +57,8 @@ class RankTask(Task):
         metrics = self.config["metrics"] if list(self.config["metrics"]) != ["default"] else evaluator.DEFAULT_METRICS
 
         best_results = evaluator.search_best_run(
-            self.get_results_path(), self.benchmark, primary_metric=self.config["optimize"], metrics=metrics, delimiter=self.config["delimiter"]
+            # self.get_results_path(), self.benchmark, primary_metric=self.config["optimize"], metrics=metrics, delimiter=self.config["delimiter"]
+            self.get_results_path(), self.benchmark, primary_metric=self.config["optimize"], metrics=metrics, delimiter="#",
         )
 
         for fold, path in best_results["path"].items():

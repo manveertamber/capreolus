@@ -5,6 +5,7 @@ import pytrec_eval
 
 from capreolus.searcher import Searcher
 from capreolus.utils.loginit import get_logger
+from capreolus.utils.trec import select_passage
 from capreolus.eval.msmarco_eval import compute_metrics_from_files
 
 logger = get_logger(__name__)
@@ -52,7 +53,12 @@ def mrr_10(qrels, runs):
     return list(compute_metrics_from_files(trec_qrels=qrels, trec_runs=runs).values())[0]
 
 
-def _eval_runs(runs, qrels, metrics, relevance_level):
+def _eval_runs(runs, qrels, metrics, relevance_level, *args, **kwargs):
+    ori_runs = runs
+    delimiter = kwargs.get("delimiter", None)
+    if delimiter is not None:
+        runs = select_passage(runs, delimiter)
+
     overlap_qids = set(qrels) & set(runs)
     if len(overlap_qids) == 0:
         logger.warning(f"No overlapping qids between qrels and runs. Skip the evaluation")
@@ -85,7 +91,7 @@ def _eval_runs(runs, qrels, metrics, relevance_level):
     return scores
 
 
-def eval_runs(runs, qrels, metrics, relevance_level=1):
+def eval_runs(runs, qrels, metrics, relevance_level=1, *args, **kwargs):
     """
     Evaluate runs produced by a ranker (or loaded with Searcher.load_trec_run)
 
@@ -99,10 +105,10 @@ def eval_runs(runs, qrels, metrics, relevance_level=1):
            dict: a dict in the format ``{metric: score}`` containing the average score for each metric
     """
     metrics = [metrics] if isinstance(metrics, str) else list(metrics)
-    return _eval_runs(runs, qrels, metrics, relevance_level)
+    return _eval_runs(runs, qrels, metrics, relevance_level, *args, **kwargs)
 
 
-def eval_runfile(runfile, qrels, metrics, relevance_level):
+def eval_runfile(runfile, qrels, metrics, relevance_level, *args, **kwargs):
     """
     Evaluate a single runfile produced by ranker or reranker
 
@@ -116,10 +122,10 @@ def eval_runfile(runfile, qrels, metrics, relevance_level):
     """
     metrics = [metrics] if isinstance(metrics, str) else list(metrics)
     runs = Searcher.load_trec_run(runfile)
-    return _eval_runs(runs, qrels, metrics, relevance_level)
+    return _eval_runs(runs, qrels, metrics, relevance_level, *args, **kwargs)
 
 
-def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None):
+def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds=None, *args, **kwargs):
     """
     Select the runfile with respect to the specified metric
 
@@ -148,12 +154,12 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         if (f != "done" and not os.path.isdir(os.path.join(runfile_dir, f)))
     ]
 
-    best_scores = {s: {primary_metric: 0, "path": None} for s in folds}
+    best_scores = {s: {primary_metric: -1, "path": None} for s in folds}
     for runfile in runfiles:
         runs = Searcher.load_trec_run(runfile)
         for fold_name in folds:
             dev_qrels = {qid: benchmark.qrels[qid] for qid in benchmark.non_nn_dev[fold_name] if qid in benchmark.qrels}
-            score = _eval_runs(runs, dev_qrels, [primary_metric], benchmark.relevance_level)[primary_metric]
+            score = _eval_runs(runs, dev_qrels, [primary_metric], benchmark.relevance_level, *args, **kwargs)[primary_metric]
             if score > best_scores[fold_name][primary_metric]:
                 best_scores[fold_name] = {primary_metric: score, "path": runfile}
 
@@ -167,7 +173,7 @@ def search_best_run(runfile_dirs, benchmark, primary_metric, metrics=None, folds
         test_runs.update({qid: {} for qid in test_qids})
         test_runs.update({qid: v for qid, v in Searcher.load_trec_run(score_dict["path"]).items() if qid in test_qids})
 
-    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level, *args, **kwargs)
     return {"score": scores, "path": {s: v["path"] for s, v in best_scores.items()}}
 
 
@@ -203,7 +209,7 @@ def interpolate_runs(run1, run2, qids, alpha):
     return out
 
 
-def interpolated_eval(run1, run2, benchmark, primary_metric, metrics=None):
+def interpolated_eval(run1, run2, benchmark, primary_metric, metrics=None, *args, **kwargs):
     metrics = [] if not metrics else ([metrics] if isinstance(metrics, str) else list(metrics))
     if primary_metric not in metrics:
         metrics = [primary_metric] + metrics
@@ -217,7 +223,7 @@ def interpolated_eval(run1, run2, benchmark, primary_metric, metrics=None):
 
         for alpha in np.arange(0, 1.001, 0.05):
             interpolated_run = interpolate_runs(dev1, dev2, dev_qids, alpha)
-            metrics = eval_runs(interpolated_run, benchmark.qrels, metrics, benchmark.relevance_level)
+            metrics = eval_runs(interpolated_run, benchmark.qrels, metrics, benchmark.relevance_level, *args, **kwargs)
 
             if best_metric is None or metrics[primary_metric] > best_metric:
                 best_metric = metrics[primary_metric]
@@ -230,5 +236,5 @@ def interpolated_eval(run1, run2, benchmark, primary_metric, metrics=None):
             assert qid not in test_runs
             test_runs[qid] = interpolated_test_run[qid].copy()
 
-    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level)
+    scores = eval_runs(test_runs, benchmark.qrels, metrics, benchmark.relevance_level, *args, **kwargs)
     return {"score": scores, "alphas": alphas}
