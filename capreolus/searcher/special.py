@@ -220,3 +220,56 @@ class MSMARCO_V2_Bm25(BM25, MSMARCO_V2_SearcherMixin):
         )
 
         return output_path
+
+
+@Searcher.register
+class MSMARCO_V2_Customize(Searcher, MSMARCO_V2_SearcherMixin):
+    """ This searcher allows to rerank an external runfile """
+    module_name = "msv2cust"
+    dependencies = [
+        Dependency(key="benchmark", module="benchmark", name="ms_v2"),
+    ]
+    # config_spec = BM25.config_spec
+    config_spec = [
+        ConfigOption("path", None, "path to the external trec-format runfile"),
+    ]
+
+    def get_train_runfile(self):
+        basename = f"{self.benchmark.dataset_type}v2_train_top100.txt"
+        return self.benchmark.data_dir / basename
+
+    def _query_from_file(self, topicsfn, output_path, config):
+        final_runfn = os.path.join(output_path, "searcher")
+        final_donefn = os.path.join(output_path, "done")
+        if os.path.exists(final_donefn):
+            return output_path
+
+        output_path.mkdir(exist_ok=True, parents=True)
+        # tmp_dir = self.get_cache_path() / "tmp"
+        # tmp_topicsfn = tmp_dir / os.path.basename(topicsfn)
+        # tmp_output_dir = tmp_dir / "BM25_results"
+        # tmp_output_dir.mkdir(exist_ok=True, parents=True)
+        # print(tmp_output_dir)
+
+        # run bm25 on dev and test set
+        # if not os.path.exists(tmp_topicsfn):
+        #     with open(tmp_topicsfn, "wt") as f:
+        #         logger.info("Preparing tmp topic file for bm25")
+        #         for line in open(topicsfn):
+        #             qid, title = line.strip().split("\t")
+        #             if qid not in self.benchmark.folds["s1"]["train_qids"]:
+        #                 f.write(f"{qid}\t{title}\n")
+        # super()._query_from_file(topicsfn=tmp_topicsfn, output_path=tmp_output_dir, config=config)
+
+        runfile_path = self.config["path"]
+        if not os.path.exists(runfile_path):
+            raise ValueError(f"Cannot find the provided runfile {runfile_path}")
+
+        self.combine_train_and_dev_runfile(
+            # tmp_output_dir / "searcher",
+            runfile_path,
+            final_runfn,
+            final_donefn,
+        )
+
+        return output_path
