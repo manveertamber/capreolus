@@ -36,7 +36,7 @@ class MsV2Index(Index):
         return " ".join([doc.get(field, "") for field in self.config["fields"]])
 
     def get_passages(self, docid):
-        assert self.collection.module_name == "msdoc_v2_preseg"
+        # assert self.collection.module_name == "msdoc_v2_preseg"
         passages = self.collection.get_passages(docid)  # dictionary format
         return [" ".join([passage.get(field, "") for field in self.config["fields"]]) for passage in passages]
 
