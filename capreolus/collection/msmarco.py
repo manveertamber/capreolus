@@ -7,7 +7,7 @@ from time import time
 from collections import defaultdict
 
 from tqdm import tqdm
-from capreolus import constants
+from capreolus import Dependency, constants
 from capreolus.utils.common import download_file
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.trec import document_to_trectxt
@@ -105,6 +105,11 @@ class MSMARCO_DOC_V2(Collection):
     _path = data_dir / "msmarco_v2_doc"
     # is_large_collection = True
 
+    dependencies = [
+        # need msdoc_v2_preseg to prepare passage 
+        Dependency(key="collection", module="collection", name="msdoc_v2_preseg"),
+    ]
+
     def get_doc(self, docid):
         collection_path = self.get_path_and_types()[0]
 
@@ -116,6 +121,9 @@ class MSMARCO_DOC_V2(Collection):
             doc = json.loads(json_string)
             assert doc["docid"] == docid
         return doc
+    
+    def get_passages(self, docid):
+        return self.collection.get_passages(docid)
 
 
 @Collection.register
