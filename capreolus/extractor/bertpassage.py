@@ -31,7 +31,8 @@ class BertPassage(Extractor):
     dependencies = [
         Dependency(key="benchmark", module="benchmark", name=None),
         Dependency(
-            key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}
+            # key="index", module="index", name="anserini", default_config_overrides={"indexstops": True, "stemmer": "none"}
+            key="index", module="index", name="anserini"
         ),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
@@ -410,10 +411,12 @@ class BertPassagePrebuilt(BertPassage):
         ConfigOption("passagelen", 150, "Length of the extracted passage"),
         ConfigOption("usecache", False, "Should the extracted features be cached?"),
         ConfigOption("numpassages", 16, "Number of passages per document"),
+        ConfigOption("prob", 0.1, "The probability that a passage from the document will be used for training " "(the first passage is always used)",),
     ]
     config_keys_not_in_path = ["usecache"]
 
     def _get_passages(self, docid):
         # get the passage from index
+        numpassages = self.config["numpassages"]
         passages = [self.tokenizer.tokenize(passage) for passage in self.index.get_passages(docid)[:self.config["passagelen"]]]
-        return passages[:self.config["numpassages"]]
+        return passages[:numpassages] + [[self.pad_tok] for _ in range(numpassages - len(passages))]
