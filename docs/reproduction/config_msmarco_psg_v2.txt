@@ -1,19 +1,26 @@
 optimize=MRR@10
-threshold=100
+threshold=1000
+
+sampler.name=tripletFile
+# sampler.path=$triplet_path
+
 benchmark.name=ms_v2
+benchmark.collection.name=mspsg_v2
 
 rank.optimize=MRR@10
 # rank.searcher.name=msv2bm25
-# rank.searcher.hits=100
+# rank.searcher.hits=1000
 # rank.searcher.topicreader=TsvInt
 
 reranker.name=TFBERTMaxP
 reranker.pretrained=bert-base-uncased
 
+reranker.extractor.name=bertpassageprebuilt
 reranker.extractor.usecache=True
-# reranker.extractor.numpassages=10
+reranker.extractor.numpassages=1
 reranker.extractor.maxqlen=40
 reranker.extractor.maxseqlen=512
+reranker.extractor.index.name=mspsg_v2
 reranker.extractor.tokenizer.pretrained=bert-base-uncased
 
 reranker.trainer.seed=42
@@ -26,5 +33,7 @@ reranker.trainer.decayiters=10
 reranker.trainer.decaytype=linear
 reranker.trainer.decay=0.1
 reranker.trainer.usecache=True
-reranker.trainer.validatefreq=2
+reranker.trainer.validatefreq=10
 reranker.trainer.loss=pairwise_hinge_loss
+
+
