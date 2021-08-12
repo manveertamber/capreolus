@@ -228,7 +228,7 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
                 for suffix in self.id2pos_map[psg_fn][docid]:
                     doc = json.loads(in_fh.readline())
                     doc["body"] = " ".join(doc["body"].split())
-                    assert doc["docid"] == f"{docid}#{suffix}"
+                    assert doc["docid"] == f"{docid}#{suffix}", f"Expect {docid}#{suffix} but got {doc['docid']}"
                     passages.append(doc)
 
         return passages

@@ -126,7 +126,10 @@ class MSMARCO_V2(Benchmark):
 
         assert all([f.exists() for f in [self.qrel_file, self.topic_file]])
         assert all([f.exists() for f in [
-            self.data_dir / f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]
+            # self.data_dir / f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]
+            self.data_dir / f"{self.dataset_type}v2_train_queries.tsv",
+            self.data_dir / f"{self.dataset_type}v2_dev_queries.tsv",
+            self.data_dir / "2021_queries.tsv", 
         ]])
 
         def load_qid_from_topic_tsv(topic_fn):
@@ -137,7 +140,7 @@ class MSMARCO_V2(Benchmark):
 
         train_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_train_queries.tsv")
         dev_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_dev_queries.tsv")
-        test_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_dev2_queries.tsv")
+        test_qids = load_qid_from_topic_tsv(self.data_dir / "2021_queries.tsv")
 
         assert len(set(train_qids) & set(dev_qids)) == 0
         folds = {
