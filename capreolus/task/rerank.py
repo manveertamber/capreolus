@@ -166,9 +166,76 @@ class RerankTask(Task):
         preds = self.reranker.trainer.predict(self.reranker, dataset, output_path)
         return {set_name: preds}
 
-
     def predict_dev(self):
         self.predict(set_name="dev")
+
+    def predict_external(self, external_checkpoint=None, external_run_path=None, output_path="default", set_name="both"):
+        """
+        This function supports
+        (1) rerank the given run file using the *existing* training checkpoint prepared with current configurations and dependencies;
+        (2) rerank the dev and test set with current configurations and dependencies using the given checkpoint;
+        (3) rerank the given run file using the given checkpoint;
+
+        Note that
+        - for use case 1, need to run train command first.
+        - The inference results would be written into files under the given output_path, if it's specified as ''default'', then they would be stored into the default results path.
+        - If external_checkpoint is given, then it should be a directory that contains the "dev.best" checkpoint, and should be compatible to the given reranker.
+        """
+        if set_name not in {"both", "dev", "test"}:
+            raise ValueError(f"Unexpected set name. Should be one of both, dev, or test, but got {set_name}.")
+
+        if set_name == "both":
+            self._predict_external(external_checkpoint, external_run_path, output_path, set_name="dev")
+            self._predict_external(external_checkpoint, external_run_path, output_path, set_name="test")
+        else:
+            self._predict_external(external_checkpoint, external_run_path, output_path, set_name=set_name)
+
+    def _predict_external(self, external_checkpoint=None, external_run_path=None, output_path="default", set_name="test"):
+        fold = self.config["fold"]
+        train_output_path = self.get_results_path()
+        checkpoint_path, run_path = external_checkpoint, external_run_path
+
+        if checkpoint_path is None:
+            checkpoint_path = train_output_path
+
+        if run_path is None:
+            """ Use the current best runfile if the external one is not given"""
+            self.rank.search()
+            rank_results = self.rank.evaluate()
+            run_path = rank_results["path"][fold]
+
+        if output_path == "default":
+            output_path = train_output_path / "pred" / set_name / "best"
+        else:
+            output_path = output_path / set_name / "best"
+
+        search_run = Searcher.load_trec_run(run_path)
+        docids = set(docid for querydocs in search_run.values() for docid in querydocs)
+
+        self.reranker.extractor.preprocess(
+            # todo: or all topics?
+            qids=search_run.keys(), docids=docids, topics=self.benchmark.topics[self.benchmark.query_type]
+        )
+        self.reranker.build_model()
+        self.reranker.trainer.load_best_model(self.reranker, checkpoint_path)
+
+        threshold = self.config["testthreshold"] if set_name == "test" else self.config["threshold"]
+
+        run = defaultdict(dict)
+        # This is possible because search_run is an OrderedDict
+        for qid, docs in search_run.items():
+            if qid in self.benchmark.folds[fold]["predict"][set_name]:
+                for idx, (docid, score) in enumerate(docs.items()):
+                    if idx >= threshold:
+                        break
+                    run[qid][docid] = score
+
+        dataset = PredSampler()
+        dataset.prepare(
+            run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+        )
+        preds = self.reranker.trainer.predict(self.reranker, dataset, output_path)
+        return {set_name: preds}
 
     def bircheval(self):
         fold = self.config["fold"]
