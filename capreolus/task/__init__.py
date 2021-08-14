@@ -15,6 +15,8 @@ class Task(ModuleBase):
     help_commands = ["describe", "print_config", "print_paths", "print_pipeline"]
     default_command = "describe"
     requires_random_seed = True
+    delimiter = "#"  # In the document id, the parts before the delimiter is considered as the original document id, and the parts after the delimiter is consider as the "segment id"
+    # todo: where shall we examine if delimiter is in the docid, and send a warning to the user, asking if this is necesary?
 
     def print_config(self):
         print("Configuration:")
