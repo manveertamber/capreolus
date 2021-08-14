@@ -50,11 +50,15 @@ class AnseriniIndex(Index):
             cmd += ["-keepStopwords"]
 
         if not self.collection.is_large_collection:
-            cmd += [
-                "-storePositions",
-                "-storeDocvectors",
-                "-storeContents",
-            ]
+            if self.config["indexstops"] and self.config["stemmer"] is None:
+                # this index is probably used for fetch content only
+                cmd += ["-storeContents"]
+            else:
+                # this index is probably used for anserini search only
+                cmd += [
+                    "-storePositions",
+                    "-storeDocvectors",
+                ]
 
         logger.info("building index %s", outdir)
         logger.debug(cmd)
