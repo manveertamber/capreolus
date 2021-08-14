@@ -31,20 +31,14 @@ ln -s /GW/carpet/nobackup/czhang/msdoc_v2 capreolus/data
 
 2. To run BERT-MaxP with 10 passage:
 ```
-collection_name=msdoc_v2
-n_passages=10
-
 python -m capreolus.run rerank.train with \
-    file=docs/reproduction/config_msmarco_v2.txt \
-    reranker.trainer.amp=True \
-    reranker.extractor.numpassages=$n_passages \
-    benchmark.collection.name=$collection_name
+    file=docs/reproduction/MS_MARCO_v2/config_msmarco_v2_doc.txt
 ```
-Expected score:
+<!-- Expected score:
 ```
 MAP     MRR      R@100
 0.2646  0.2677   0.5956
-```
+``` -->
 
 
 ## Passage Retrieval
@@ -77,14 +71,32 @@ collection_name=mspsg_v2
 n_passages=1
 
 python -m capreolus.run rerank.train with \
+    file=docs/reproduction/MS_MARCO_v2/config_msmarco_v2_passage.txt  
+```
+
+<!-- Expected score:
+```
+MAP      MRR     R@100
+0.1503   0.152   0.3397
+``` -->
+
+<!-- ```
+python -m capreolus.run rerank.predict_external with \
     file=docs/reproduction/config_msmarco_v2.txt \
     reranker.trainer.amp=True \
     reranker.extractor.numpassages=$n_passages \
     benchmark.collection.name=$collection_name
-```
+``` -->
 
-Expected score:
-```
-MAP      MRR     R@100
-0.1503   0.152   0.3397
+```python
+from capreolus import parse_config_string
+from capreolus.task import Rerank
+
+task = Rerank(parse_config_string("file=docs/reproduction/config_msmarco_v2.txt"))
+task.predict_external(
+    external_checkpoint=None,   # would use the checkpoint obtained above
+    external_run_path=None, 
+    output_path="default", 
+    set_name="both",            # rerank on both dev and test set
+)
 ```
