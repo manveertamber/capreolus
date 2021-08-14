@@ -148,25 +148,24 @@ class RerankTask(Task):
         self.reranker.trainer.load_best_model(self.reranker, train_output_path)
 
         threshold = self.config["testthreshold"] if set_name == "test" else self.config["threshold"]
-        test_run = defaultdict(dict)
+
+        run = defaultdict(dict)
         # This is possible because best_search_run is an OrderedDict
         for qid, docs in best_search_run.items():
             if qid in self.benchmark.folds[fold]["predict"][set_name]:
                 for idx, (docid, score) in enumerate(docs.items()):
                     if idx >= threshold:
                         break
-                    test_run[qid][docid] = score
+                    run[qid][docid] = score
 
-        test_dataset = PredSampler()
-        test_dataset.prepare(
-            test_run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
+        dataset = PredSampler()
+        dataset.prepare(
+            run, self.benchmark.qrels, self.reranker.extractor, relevance_level=self.benchmark.relevance_level
         )
-        test_output_path = train_output_path / "pred" / set_name / "best"
-        test_preds = self.reranker.trainer.predict(self.reranker, test_dataset, test_output_path)
+        output_path = train_output_path / "pred" / set_name / "best"
+        preds = self.reranker.trainer.predict(self.reranker, dataset, output_path)
+        return {set_name: preds}
 
-        preds = {set_name: test_preds}
-
-        return preds
 
     def predict_dev(self):
         self.predict(set_name="dev")
