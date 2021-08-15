@@ -11,11 +11,15 @@ rank.searcher.topicreader=TsvInt
 reranker.name=TFBERTMaxP
 reranker.pretrained=bert-base-uncased
 
+reranker.extractor.name=bertpassageprebuilt
 reranker.extractor.usecache=True
 reranker.extractor.numpassages=10
 reranker.extractor.maxqlen=40
 reranker.extractor.maxseqlen=512
 reranker.extractor.tokenizer.pretrained=bert-base-uncased
+
+reranker.extractor.index.name=msdoc_v2
+reranker.extractor.index.fields=all
 
 reranker.trainer.amp=True
 reranker.trainer.seed=42
