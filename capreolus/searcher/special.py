@@ -1,10 +1,12 @@
 import os
+import gzip
 import gdown
 from pathlib import Path
 from collections import defaultdict
 
 from capreolus import ConfigOption, Dependency
 from capreolus.utils.loginit import get_logger
+from capreolus.utils.common import download_file
 
 from . import Searcher
 from .anserini import BM25
@@ -163,14 +165,19 @@ class MSMARCO_V2_SearcherMixin:
         train_runfile = self.get_train_runfile()
         assert os.path.exists(dev_test_runfile)
 
+        train_open_handler = gzip.open if train_runfile.suffix == ".gz" else open
+        dev_open_handler = gzip.open if dev_test_runfile.suffix == ".gz" else open
+
         # write train and dev, test runs into final searcher file
         with open(final_runfile, "w") as fout:
-            with open(train_runfile) as fin:
+            with train_open_handler(train_runfile) as fin:
                 for line in fin:
+                    line = line if isinstance(line, str) else line.decode()
                     fout.write(line)
 
-            with open(dev_test_runfile) as fin:
+            with dev_open_handler(dev_test_runfile) as fin:
                 for line in fin:
+                    line = line if isinstance(line, str) else line.decode()
                     fout.write(line)
 
         with open(final_donefn, "w") as f:
@@ -181,14 +188,27 @@ class MSMARCO_V2_SearcherMixin:
 class MSMARCO_V2_Bm25(BM25, MSMARCO_V2_SearcherMixin):
     module_name = "msv2bm25"
     dependencies = [
-        Dependency(key="benchmark", module="benchmark", name="ms_v2"),
+        Dependency(key="benchmark", module="benchmark"),
         Dependency(key="index", module="index", name="anserini"),
     ]
     config_spec = BM25.config_spec
 
     def get_train_runfile(self):
-        basename = f"{self.benchmark.dataset_type}v2_train_top100.txt"
-        return self.benchmark.data_dir / basename
+        cache_path = self.get_cache_path()
+        tmp_path = self.get_cache_path() / "tmp"
+        if self.benchmark.module_name == "mspsg_v2":
+            url = "https://msmarco.blob.core.windows.net/msmarcoranking/passv2_train_top100.txt.gz"
+            md5sum = "7cd731ed984fccb2396f11a284cea800"
+        elif self.benchmark.module_name == "msdoc_v2":
+            url = "https://msmarco.blob.core.windows.net/msmarcoranking/docv2_train_top100.txt.gz"
+            md5sum = "b4d5915172d5f54bd23c31e966c114de"
+        else:
+            raise ValueError(f"Unexpected benchmark, should be either mspsg_v2 or msdoc_v2, but got {self.benchmark.module_name}.")
+
+        gz_name = url.split("/")[-1]
+        gz_file_path = tmp_path / gz_name
+        download_file(url, gz_file_path, expected_hash=md5sum, hash_type="md5")
+        return gz_file_path
 
     def _query_from_file(self, topicsfn, output_path, config):
         final_runfn = os.path.join(output_path, "searcher")
