@@ -15,10 +15,7 @@ MAX_THREADS = constants["MAX_THREADS"]
 class MsV2Index(Index):
     """This index read documents from msmarco doc v2 collection or presegmented doc v2 collection"""
 
-    module_name = "msdoc_v2"
-    config_spec = [
-        ConfigOption("fields", ["url", "title", "headings", "body"], "which fields to include", value_type="strlist"),
-    ]
+    module_name = "msdocv2index"
 
     def _create_index(self):
         collection = self.collection.module_name
@@ -36,9 +33,7 @@ class MsV2Index(Index):
         return " ".join([doc.get(field, "") for field in self.config["fields"]])
 
     def get_passages(self, docid):
-        # assert self.collection.module_name == "msdoc_v2_preseg"
-        passages = self.collection.get_passages(docid)  # dictionary format
-        return [" ".join([passage.get(field, "") for field in self.config["fields"]]) for passage in passages]
+        return self.collection.get_passages(docid)  # dictionary format
 
     def get_df(self, term):
         return None
@@ -51,7 +46,7 @@ class MsV2Index(Index):
 class MsPsgV2Index(Index):
     """This index read documents from msmarco doc v2 collection or presegmented doc v2 collection"""
 
-    module_name = "mspsg_v2"
+    module_name = "mspsgv2index"
     dependencies = [
         Dependency(key="collection", module="collection", name="mspsg_v2"),
     ]
