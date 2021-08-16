@@ -1,6 +1,6 @@
 optimize=MRR@10
 threshold=1000
-benchmark.name=ms_v2
+benchmark.name=mspsg_v2
 benchmark.collection.name=mspsg_v2
 
 rank.optimize=MRR@10
@@ -12,6 +12,7 @@ reranker.name=TFBERTMaxP
 reranker.pretrained=bert-base-uncased
 
 reranker.extractor.name=bertpassageprebuilt
+reranker.extractor.index.name=mspsgv2index
 reranker.extractor.usecache=True
 reranker.extractor.numpassages=1
 reranker.extractor.maxqlen=40

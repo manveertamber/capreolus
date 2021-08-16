@@ -1,6 +1,6 @@
 optimize=MRR@10
 threshold=100
-benchmark.name=ms_v2
+benchmark.name=msdoc_v2
 benchmark.collection.name=msdoc_v2
 
 rank.optimize=MRR@10
@@ -18,8 +18,8 @@ reranker.extractor.maxqlen=40
 reranker.extractor.maxseqlen=512
 reranker.extractor.tokenizer.pretrained=bert-base-uncased
 
-reranker.extractor.index.name=msdoc_v2
-reranker.extractor.index.fields=all
+reranker.extractor.index.name=msdocv2index
+# reranker.extractor.index.fields=all
 
 reranker.trainer.amp=True
 reranker.trainer.seed=42
