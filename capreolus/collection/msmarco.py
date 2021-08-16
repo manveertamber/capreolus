@@ -1,4 +1,5 @@
 import os
+import stat
 import gzip
 import json
 import shutil
@@ -11,7 +12,7 @@ from capreolus import Dependency, constants
 from capreolus.utils.common import download_file
 from capreolus.utils.loginit import get_logger
 from capreolus.utils.trec import document_to_trectxt
-from . import Collection
+from . import Collection, IRDCollection
 
 logger = get_logger(__name__)
 PACKAGE_PATH = constants["PACKAGE_PATH"]
@@ -97,36 +98,6 @@ class MSMarcoPsg(Collection, MSMarcoMixin):
 
 
 @Collection.register
-class MSMARCO_DOC_V2(Collection):
-    module_name = "msdoc_v2"
-    collection_type = "MsMarcoDocV2Collection"
-    generator_type = "DefaultLuceneDocumentGenerator"
-    data_dir = PACKAGE_PATH / "data" / "msdoc_v2"
-    _path = data_dir / "msmarco_v2_doc"
-    # is_large_collection = True
-
-    dependencies = [
-        # need msdoc_v2_preseg to prepare passage 
-        Dependency(key="collection", module="collection", name="msdoc_v2_preseg"),
-    ]
-
-    def get_doc(self, docid):
-        collection_path = self.get_path_and_types()[0]
-
-        (string1, string2, bundlenum, position) = docid.split("_")
-        assert string1 == "msmarco" and string2 == "doc"
-        with gzip.open(collection_path / f"msmarco_doc_{bundlenum}.gz", "rt", encoding="utf8") as in_fh:
-            in_fh.seek(int(position))
-            json_string = in_fh.readline()
-            doc = json.loads(json_string)
-            assert doc["docid"] == docid
-        return doc
-    
-    def get_passages(self, docid):
-        return self.collection.get_passages(docid)
-
-
-@Collection.register
 class MSMARCO_DOC_V2_Presegmented(Collection):
     """This colletion share exactly the same qrels, topic and folds with MS MARCO v2"""
 
@@ -135,10 +106,12 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
     generator_type = "DefaultLuceneDocumentGenerator"
     data_dir = PACKAGE_PATH / "data" / "msdoc_v2"
     _path = data_dir / "msmarco_v2_doc_segmented"
+    url = "https://msmarco.blob.core.windows.net/msmarcoranking/msmarco_v2_doc_segmented.tar"
 
     def build(self):
-        collection_path = self.get_path_and_types()[0]
+        self.download_if_missing()
 
+        collection_path = self.get_path_and_types()[0]
         self.id2pos_map
         self.cache = {}  # docid to doc
         self.name2filehandle = {psg_fn: open(collection_path / psg_fn, "rt", encoding="utf-8") for psg_fn in self.id2pos_map}
@@ -147,6 +120,44 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
         if hasattr(self, "name2filehandle"):
             for file_handler in self.name2filehandle.values():
                 file_handler.close()
+
+    def download_if_missing(self):
+        if self._path.exists() and len(os.listdir(self._path)) == 60:
+            return
+
+        tmp_path = self.get_cache_path() / "tmp"
+        cache_path = self.get_cache_path() / "document"
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        cache_path.mkdir(parents=True, exist_ok=True)
+        extract_dir = cache_path / "msmarco_v2_doc_segmented"
+
+        tarball_name = self.url.split("/")[-1]
+        msmarco_v2_doc_segmented_tarball = tmp_path / tarball_name
+        # todo: this fails a lot
+        download_file(self.url, msmarco_v2_doc_segmented_tarball, expected_hash="f18c3a75eb3426efeb6040dca3e885dc", hash_type="md5")
+
+        def unzip_gz(gz_file):
+            import gzip
+            import shutil
+            ungz_file = gz_file.as_posix()[:-3]
+            with gzip.open(gz_file, "rb") as f_in:
+                with open(ungz_file, "wb") as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            os.remove(f_in)
+
+        if not (extract_dir.exists() and len(os.listdir(extract_dir)) == 60):
+            with tarfile.open(msmarco_v2_doc_segmented_tarball) as f:
+                f.extractall(cache_path)
+
+        extract_dir.chmod(stat.S_IRWXU | stat.S_IRWXG)
+        for gz_file in extract_dir.iterdir():
+            if gz_file.suffix == ".gz":
+                unzip_gz(gz_file)
+
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(extract_dir, self._path)
+        logger.info(f"MS MARCO Pre-segmented collection prepared under {self._path}.")
+
 
     @staticmethod
     def build_id2pos_map(json_gz_file):
@@ -235,61 +246,42 @@ class MSMARCO_DOC_V2_Presegmented(Collection):
 
 
 @Collection.register
-class MSMARCO_PSG_V2(Collection):
-    module_name = "mspsg_v2"
-    collection_type = "MsMarcoPassageV2Collection"
-    generator_type = "DefaultLuceneDocumentGenerator"
-    data_dir = PACKAGE_PATH / "data" / "mspass_v2"
-    _path = data_dir / "msmarco_v2_passage"
-    # is_large_collection = True
+class MSMARCO_DOC_V2(IRDCollection):
+    """ MS MARCO Document v2: https://microsoft.github.io/msmarco/TREC-Deep-Learning.html#document-ranking-dataset """
 
-    def build(self):
-        collection_path = self.get_path_and_types()[0]
-        self.cache = {}  # docid to doc
-        self.name2filehandle = {
-            psg_fn.name: open(psg_fn, "rt", encoding="utf-8") for psg_fn in collection_path.iterdir()
-        }  # the files under input folder must be uncompressed to support fast f.seek
+    module_name = "msdoc_v2"
+    ird_dataset_name = "msmarco-document-v2"
+    collection_type = "JsonCollection"
 
-    def __del__(self):
-        for file_handler in self.name2filehandle.values():
-            file_handler.close()
+    dependencies = [
+        Dependency(key="collection", module="collection", name="msdoc_v2_preseg"),  # need msdoc_v2_preseg to prepare passage
+    ]
 
-    @staticmethod
-    def read_all_before_pos(in_fh, pos, cache):
-        cur_passage = None
-        in_fh.seek(0)
-        while True:
-            cur_pos = in_fh.tell()
-            if cur_pos > pos:
-                break
-
-            line = json.loads(in_fh.readline())
-            pid, passage = line["pid"], " ".join(line["passage"].split())
-
-            if pid not in cache:
-                cache[pid] = passage
-
-            if cur_pos == pos:
-                cur_passage = passage
-
-        return cur_passage
+    def doc_as_json(self, doc):
+        # content = " ".join((doc.headline, doc.body))
+        # todo: able to control the field
+        return json.dumps({"id": doc.doc_id, "contents": doc.body})
 
     def get_doc(self, docid):
-        if docid in self.cache:
-            return self.cache[docid]
+        return self.docs_store.get(docid).text
 
-        collection_path = self.get_path_and_types()[0]
-        (string1, string2, bundlenum, position) = docid.split("_")
-        position = int(position)
-        assert string1 == "msmarco" and string2 == "passage"
+    def get_passages(self, docid):
+        return self.collection.get_passages(docid)
 
-        psg_fn = f"msmarco_passage_{bundlenum}"
-        in_fh = self.name2filehandle[psg_fn]
-        in_fh.seek(position)
-        doc = json.loads(in_fh.readline())
-        assert doc["pid"] == docid
 
-        passage = " ".join(doc["passage"].split())
-        self.cache[docid] = passage
+@Collection.register
+class MSMARCO_PSG_V2(IRDCollection):
+    """ MS MARCO Passage v2: https://microsoft.github.io/msmarco/TREC-Deep-Learning.html#passage-ranking-dataset """
 
-        return passage
+    module_name = "mspsg_v2"
+    ird_dataset_name = "msmarco-passage-v2"
+    collection_type = "JsonCollection"
+
+    def doc_as_json(self, doc):
+        return json.dumps({"id": doc.doc_id, "contents": doc.text})
+
+    def get_doc(self, docid):
+        return self.docs_store.get(docid).text
+
+    def get_passages(self, docid):
+        return [self.get_doc(docid)]

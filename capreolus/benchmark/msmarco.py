@@ -9,7 +9,7 @@ from capreolus.utils.common import download_file, remove_newline
 from capreolus.utils.trec import topic_to_trectxt, load_trec_topics
 from capreolus.utils.loginit import get_logger
 
-from . import Benchmark
+from . import Benchmark, IRDBenchmark
 
 logger = get_logger(__name__)
 PACKAGE_PATH = constants["PACKAGE_PATH"]
@@ -81,75 +81,18 @@ class MSMarcoPassage(Benchmark):
 
 
 @Benchmark.register
-class MSMARCO_V2(Benchmark):
-    module_name = "ms_v2"
-    query_type = "title"
+class MSMARCO_Passage_V2(IRDBenchmark):
+    module_name = "mspsg_v2"
+    query_type = "text"
+    ird_dataset_names = ["msmarco-passage-v2/train", "msmarco-passage-v2/dev1", "msmarco-passage-v2/trec-dl-2021"]
+    dependencies = [Dependency(key="collection", module="collection", name="mspsg_v2")]
+    fold_file = PACKAGE_PATH / "data" / "msmarcov2_passage_title_folds.json"
 
+
+@Benchmark.register
+class MSMARCO_Document_V2(IRDBenchmark):
+    module_name = "msdoc_v2"
+    query_type = "text"
+    ird_dataset_names = ["msmarco-document-v2/train", "msmarco-document-v2/dev1", "msmarco-document-v2/trec-dl-2021"]
     dependencies = [Dependency(key="collection", module="collection")]
-    # could depends on one of msdoc_v2, msdoc_v2_preseg, or mspsg_v2
-    use_train_as_dev = False
-
-    @property
-    def topics(self):
-        if not hasattr(self, "_topics"):
-            qid_topic = [line.strip().split("\t") for line in open(self.topic_file)]
-            self._topics = {
-                self.query_type: {qid: topic for qid, topic in qid_topic},
-            }
-        return self._topics
-
-    @property
-    def dataset_type(self):
-        if self.collection.module_name in ["msdoc_v2", "msdoc_v2_preseg"]:
-            return "doc"
-        elif self.collection.module_name in ["mspsg_v2"]:
-            return "pass"
-        else:
-            raise ValueError(f"Unexpected collection dependency: got {type} but expected 'doc' or 'pass'")
-
-    def build(self):
-        # type = self.config["datasettype"]
-        self.data_dir = self.collection.data_dir
-        self.qrel_file = self.data_dir / "qrels.txt"
-        self.topic_file = self.data_dir / "topics.txt"
-        self.fold_file = self.data_dir / "folds.json"
-        self.download_if_missing()
-
-    def download_if_missing(self):
-        """
-        This function only prepare folds.json from the existing topic files,
-        and assume both topic and qrels file are existing under the self.data_dir;
-
-        """
-        if all([f.exists() for f in [self.qrel_file, self.topic_file, self.fold_file]]):
-            return
-
-        assert all([f.exists() for f in [self.qrel_file, self.topic_file]])
-        assert all([f.exists() for f in [
-            # self.data_dir / f"{self.dataset_type}v2_{set_name}_queries.tsv" for set_name in ["train", "dev", "dev2"]
-            self.data_dir / f"{self.dataset_type}v2_train_queries.tsv",
-            self.data_dir / f"{self.dataset_type}v2_dev_queries.tsv",
-            self.data_dir / "2021_queries.tsv", 
-        ]])
-
-        def load_qid_from_topic_tsv(topic_fn):
-            return [line.strip().split("\t")[0] for line in open(topic_fn)]
-
-        logger.info("Preparing fold.json")
-        self.data_dir.mkdir(exist_ok=True, parents=True)
-
-        train_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_train_queries.tsv")
-        dev_qids = load_qid_from_topic_tsv(self.data_dir / f"{self.dataset_type}v2_dev_queries.tsv")
-        test_qids = load_qid_from_topic_tsv(self.data_dir / "2021_queries.tsv")
-
-        assert len(set(train_qids) & set(dev_qids)) == 0
-        folds = {
-            "s1": {
-                "train_qids": train_qids,
-                "predict": {
-                    "dev": dev_qids,
-                    "test": test_qids,
-                },
-            }
-        }
-        json.dump(folds, open(self.fold_file, "w"))
+    fold_file = PACKAGE_PATH / "data" / "msmarcov2_doc_title_folds.json"
