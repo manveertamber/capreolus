@@ -5,9 +5,11 @@ import os
 import ir_datasets
 
 from capreolus import ModuleBase
+from capreolus.utils.loginit import get_logger
 from capreolus.utils.caching import cached_file, TargetFileExists
 from capreolus.utils.trec import load_qrels, load_trec_topics
 
+logger = get_logger(__name__)
 
 class Benchmark(ModuleBase):
     """Base class for Benchmark modules. The purpose of a Benchmark is to provide the data needed to run an experiment, such as queries, folds, and relevance judgments.
@@ -113,6 +115,11 @@ class IRDBenchmark(Benchmark):
         qrels = {}
         for name in self.ird_dataset_names:
             dataset = ir_datasets.load(name)
+
+            if not hasattr(dataset, "qrels_iter"):
+                logger.warning(f"Dataset {name} has no available qrels.")
+                continue
+
             for qrel in dataset.qrels_iter():
                 qrels.setdefault(qrel.query_id, {})
                 qrels[qrel.query_id][qrel.doc_id] = max(qrel.relevance, qrels[qrel.query_id].get(qrel.doc_id, -1))
