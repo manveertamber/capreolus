@@ -401,7 +401,7 @@ class BertPassagePrebuilt(BertPassage):
     module_name = "bertpassageprebuilt"
     dependencies = [
         Dependency(key="benchmark", module="benchmark", name=None),
-        Dependency(key="index", module="index", name="msdoc_v2"),
+        Dependency(key="index", module="index", name=None),
         Dependency(key="tokenizer", module="tokenizer", name="berttokenizer"),
     ]
 
