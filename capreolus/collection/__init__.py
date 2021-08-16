@@ -119,6 +119,7 @@ class IRDCollection(Collection):
     ird_dataset_name = None
     generator_type = "DefaultLuceneDocumentGenerator"
     _dataset = None
+    _docs_store = None
 
     @property
     def dataset(self):
@@ -128,6 +129,12 @@ class IRDCollection(Collection):
         if not self._dataset:
             self._dataset = ir_datasets.load(self.ird_dataset_name)
         return self._dataset
+
+    @property
+    def docs_store(self):
+        if not self._docs_store:
+            self._docs_store = self.dataset.docs_store()
+        return self._docs_store
 
     def download_if_missing(self):
         if self.collection_type != "JsonCollection":
@@ -154,6 +161,10 @@ class IRDCollection(Collection):
 
         for fn in fns:
             fn.close()
+
+    def get_doc(self, docid):
+        """ This would require implementation specific to each IRD collection """
+        raise NotImplementedError
 
     def doc_as_json(self, doc):
         return json.dumps({"id": doc.doc_id, "contents": doc.body})
