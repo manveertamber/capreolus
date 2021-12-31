@@ -53,43 +53,56 @@ class PTBERTMaxP_Class(nn.Module):
         """
         doc_input: (BS, N_PSG, SEQ_LEN) -> [psg-1, psg-2, ..., [PAD], [PAD]]
         """
-        batch_size = doc_input.shape[0]
+        
+        batch_size = doc_input.shape[-3]
+        num_passages = self.extractor.config["numpassages"]
+        maxseqlen = self.extractor.config["maxseqlen"]
+
         if "roberta" in self.config["pretrained"]:
             doc_seg = torch.zeros_like(doc_mask)  # since roberta does not have segment input
+
+        # for lce loss, doc_input, doc_mask, and doc_seg number of elements will be "nneg" times more 
+        if torch.numel(doc_input) != (maxseqlen * batch_size * num_passages):
+            nneg = self.extractor.config["nneg"]
+            doc_input = doc_input.view([nneg * batch_size * num_passages, maxseqlen])
+            doc_mask = doc_mask.view([nneg * batch_size * num_passages, maxseqlen])
+            doc_seg = doc_seg.view([nneg * batch_size * num_passages, maxseqlen])
+
+        else:            
+            doc_input = doc_input.view([batch_size * num_passages, maxseqlen])
+            doc_mask = doc_mask.view([batch_size * num_passages, maxseqlen])
+            doc_seg = doc_seg.view([batch_size * num_passages, maxseqlen])
+
 
         if self.training:
             passage_scores = self.bert(doc_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0]
         else:
-            passage_scores = self.predict_step(doc_input, doc_mask, doc_seg)
+            passage_scores = self.predict_step(doc_input, doc_mask, doc_seg, batch_size)
 
         return passage_scores
 
-    def predict_step(self, doc_input, doc_mask, doc_seg):
+    def predict_step(self, doc_input, doc_mask, doc_seg, batch_size):
         """
         Scores each passage and applies max pooling over it.
         """
-        batch_size = doc_input.shape[0]
+
         num_passages = self.extractor.config["numpassages"]
-        maxseqlen = self.extractor.config["maxseqlen"]
-
-        passage_position = (doc_mask * doc_seg).sum(dim=-1)  # (B, P)
-        passage_mask = (passage_position > 5).long()  # (B, P)
-
-        doc_input = doc_input.reshape([batch_size * num_passages, maxseqlen])
-        doc_mask = doc_mask.reshape([batch_size * num_passages, maxseqlen])
-        doc_seg = doc_seg.reshape([batch_size * num_passages, maxseqlen])
 
         # passage_scores = self.call((doc_input, doc_mask, doc_seg), training=False)[:, 1]
         passage_scores = self.bert(doc_input, attention_mask=doc_mask, token_type_ids=doc_seg)[0][:, 1]
-        passage_scores = passage_scores.reshape([batch_size, num_passages])
+        passage_scores = passage_scores.view([batch_size, num_passages])
 
         if self.config["aggregation"] == "max":
             passage_scores = passage_scores.max(dim=1)[0] # (batch size, )
         elif self.config["aggregation"] == "first":
             passage_scores = passage_scores[:, 0]
         elif self.config["aggregation"] == "sum":
+            passage_position = (doc_mask * doc_seg).sum(dim=-1)  # (B, P)
+            passage_mask = (passage_position > 5).long()  # (B, P)
             passage_scores = torch.sum(passage_mask * passage_scores, dim=1)
         elif self.config["aggregation"] == "avg":
+            passage_position = (doc_mask * doc_seg).sum(dim=-1)  # (B, P)
+            passage_mask = (passage_position > 5).long()  # (B, P)
             passage_scores = torch.sum(passage_mask * passage_scores, dim=1) / torch.sum(passage_mask)
         else:
             raise ValueError("Unknown aggregation method: {}".format(self.config["aggregation"]))
